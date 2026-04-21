@@ -1,0 +1,41 @@
+{
+  "TelemetryEvent": {
+    "id": "string",
+    "systemId": "string",
+    "modelName": "string",
+    "timestamp": "ISO-8601 string",
+    "promptTokens": "number",
+    "completionTokens": "number",
+    "latencyMs": "number",
+    "riskSignals": ["string"]
+  },
+  "Incident": {
+    "id": "string",
+    "title": "string",
+    "status": "open | in_review | resolved",
+    "severity": "low | medium | high",
+    "systemId": "string",
+    "ruleId": "string",
+    "createdAt": "ISO-8601 string"
+  },
+  "Rule": {
+    "id": "string",
+    "name": "string",
+    "description": "string",
+    "enabled": "boolean"
+  },
+  "System": {
+    "id": "string",
+    "name": "string",
+    "owner": "string",
+    "environment": "staging | production"
+  },
+  "AuditLogEntry": {
+    "id": "string",
+    "actor": "string",
+    "action": "string",
+    "targetType": "string",
+    "targetId": "string",
+    "timestamp": "ISO-8601 string"
+  }
+}
