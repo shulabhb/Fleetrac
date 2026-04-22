@@ -7,12 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { SectionTitle } from "@/components/ui/section-title";
 import {
+  getActions,
   getBobInvestigationForTarget,
   getIncidentDetail,
   getIncidents,
   getTelemetryEvents
 } from "@/lib/api";
 import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
+import { LinkedActionsPanel } from "@/components/actions/linked-actions";
 import { formatInteger, formatMetric, formatRelativeTime } from "@/lib/format";
 import {
   humanizeLabel,
@@ -61,12 +63,14 @@ function metricColor(signal: string): string {
 
 export default async function IncidentDetailPage({ params }: IncidentDetailPageProps) {
   const { id } = await params;
-  const [detail, incidentsRes, bobRes] = await Promise.all([
+  const [detail, incidentsRes, bobRes, actionsRes] = await Promise.all([
     getIncidentDetail(id),
     getIncidents(),
-    getBobInvestigationForTarget("incident", id).catch(() => ({ item: null }))
+    getBobInvestigationForTarget("incident", id).catch(() => ({ item: null })),
+    getActions({ related_incident_id: id }).catch(() => ({ items: [] as any[] }))
   ]);
   const investigation = bobRes?.item ?? null;
+  const incidentActions = actionsRes?.items ?? [];
   const { incident, telemetry_context, audit_entries } = detail;
   const telemetryRes = await getTelemetryEvents(
     `?system_id=${incident.system_id}&limit=80`
@@ -241,6 +245,12 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
           <BobEmptyPanel targetType="incident" targetId={incident.id} />
         )}
       </section>
+
+      <LinkedActionsPanel
+        actions={incidentActions}
+        title="Governed actions from this incident"
+        caption="Remediations Bob drafted for this incident, with their approver, execution eligibility and outcome monitoring state."
+      />
 
       <Card>
         <CardHeader

@@ -1,12 +1,18 @@
 import Link from "next/link";
 import {
+  getActions,
   getAuditLogs,
+  getBobImpactSummary,
   getBobInvestigations,
+  getChanges,
   getIncidents,
   getSystems,
   getTelemetryEvents
 } from "@/lib/api";
 import { BobIcon } from "@/components/bob/bob-icon";
+import { ActionCenterStrip } from "@/components/actions/action-center-strip";
+import { BobImpactStrip } from "@/components/operations/bob-impact-strip";
+import { ChangeImpactMiniRow } from "@/components/operations/change-impact";
 import { ArrowRight } from "lucide-react";
 import { AnalyticsStrip, type AnalyticsView } from "@/components/charts/analytics-strip";
 import { ActivityFeed } from "@/components/activity-feed";
@@ -21,12 +27,24 @@ import { humanizeLabel, postureRank, severityRank } from "@/lib/present";
 import { formatInteger, formatMetric } from "@/lib/format";
 
 export default async function DashboardPage() {
-  const [systemsRes, incidentsRes, telemetryRes, auditRes, bobRes] = await Promise.all([
+  const [
+    systemsRes,
+    incidentsRes,
+    telemetryRes,
+    auditRes,
+    bobRes,
+    actionsRes,
+    impactRes,
+    changesRes
+  ] = await Promise.all([
     getSystems(),
     getIncidents(),
     getTelemetryEvents("?limit=500"),
     getAuditLogs(),
-    getBobInvestigations().catch(() => ({ items: [] as any[] }))
+    getBobInvestigations().catch(() => ({ items: [] as any[] })),
+    getActions().catch(() => ({ items: [] as any[] })),
+    getBobImpactSummary().catch(() => null),
+    getChanges({ limit: 6 }).catch(() => ({ items: [] as any[] }))
   ]);
 
   const systems = systemsRes.items;
@@ -291,6 +309,32 @@ export default async function DashboardPage() {
       </div>
 
       <BobDashboardStrip investigations={bobRes.items} />
+
+      <ActionCenterStrip actions={actionsRes.items} />
+
+      {impactRes?.item && <BobImpactStrip summary={impactRes.item} />}
+
+      {changesRes.items.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Recent Changes & Impact"
+            caption="Latest Bob-prepared changes and the measured outcome on monitored metrics."
+            action={
+              <Link
+                href="/actions?tab=monitoring"
+                className="text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                View all →
+              </Link>
+            }
+          />
+          <div className="mt-3 space-y-2">
+            {changesRes.items.map((c: any) => (
+              <ChangeImpactMiniRow key={c.id} change={c} />
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <AnalyticsStrip views={analyticsViews} defaultViewId="drift" />

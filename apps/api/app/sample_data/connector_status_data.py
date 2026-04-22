@@ -1,0 +1,135 @@
+"""Platform / connector health."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
+from app.schemas.operations import ConnectorStatus
+
+
+def _ts(minutes_ago: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+
+
+CONNECTOR_STATUS: list[ConnectorStatus] = [
+    ConnectorStatus(
+        id="cs_telemetry_ingest",
+        name="Telemetry ingestion",
+        area="telemetry_ingest",
+        health="healthy",
+        last_check_at=_ts(1),
+        latency_ms=142,
+        note="Ingest pipeline nominal across all production systems.",
+        integration_id=None,
+    ),
+    ConnectorStatus(
+        id="cs_cloud_logs_aws",
+        name="Cloud logs — AWS",
+        area="cloud_logs",
+        health="healthy",
+        last_check_at=_ts(2),
+        latency_ms=310,
+        integration_id="int_aws",
+    ),
+    ConnectorStatus(
+        id="cs_cloud_logs_azure",
+        name="Cloud logs — Azure",
+        area="cloud_logs",
+        health="healthy",
+        last_check_at=_ts(3),
+        latency_ms=405,
+        integration_id="int_azure",
+    ),
+    ConnectorStatus(
+        id="cs_cloud_logs_gcp",
+        name="Cloud logs — GCP",
+        area="cloud_logs",
+        health="degraded",
+        last_check_at=_ts(4),
+        latency_ms=None,
+        note="Log export delayed ~3h. Affected telemetry marked partial until recovery.",
+        integration_id="int_gcp",
+    ),
+    ConnectorStatus(
+        id="cs_config_metadata",
+        name="Config metadata",
+        area="config_metadata",
+        health="healthy",
+        last_check_at=_ts(2),
+        latency_ms=88,
+        integration_id="int_internal_model_api",
+    ),
+    ConnectorStatus(
+        id="cs_action_runner",
+        name="Action runner",
+        area="action_runner",
+        health="healthy",
+        last_check_at=_ts(1),
+        latency_ms=54,
+        note="Approval-gated execution runtime available.",
+    ),
+    ConnectorStatus(
+        id="cs_ticketing_jira",
+        name="Ticketing — Jira",
+        area="ticketing",
+        health="healthy",
+        last_check_at=_ts(1),
+        latency_ms=220,
+        integration_id="int_jira",
+    ),
+    ConnectorStatus(
+        id="cs_ticketing_servicenow",
+        name="Ticketing — ServiceNow",
+        area="ticketing",
+        health="down",
+        last_check_at=_ts(180),
+        latency_ms=None,
+        note="Credentials expired. Fleet automatically failed over to Jira.",
+        integration_id="int_servicenow",
+    ),
+    ConnectorStatus(
+        id="cs_workflow_runner_airflow",
+        name="Workflow runner — Airflow",
+        area="workflow_runner",
+        health="healthy",
+        last_check_at=_ts(2),
+        latency_ms=410,
+        integration_id="int_airflow",
+    ),
+    ConnectorStatus(
+        id="cs_workflow_runner_argo",
+        name="Workflow runner — Argo",
+        area="workflow_runner",
+        health="healthy",
+        last_check_at=_ts(2),
+        latency_ms=365,
+        integration_id="int_argo",
+    ),
+    ConnectorStatus(
+        id="cs_bob_investigation",
+        name="Bob investigation service",
+        area="bob_investigation",
+        health="healthy",
+        last_check_at=_ts(1),
+        latency_ms=92,
+        note="Recommendation drafting + rationale surface nominal.",
+    ),
+    ConnectorStatus(
+        id="cs_version_sync",
+        name="Version sync",
+        area="version_sync",
+        health="healthy",
+        last_check_at=_ts(3),
+        latency_ms=201,
+        integration_id="int_mlflow",
+    ),
+    ConnectorStatus(
+        id="cs_model_registry",
+        name="Model registry",
+        area="model_registry",
+        health="healthy",
+        last_check_at=_ts(4),
+        latency_ms=245,
+        integration_id="int_mlflow",
+    ),
+]

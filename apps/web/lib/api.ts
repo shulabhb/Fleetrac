@@ -88,3 +88,108 @@ export async function getBobRecommendations(params?: {
     `/bob/recommendations${qs ? `?${qs}` : ""}`
   );
 }
+
+import type { Action, AccessPolicy } from "./action-types";
+
+export async function getActions(params?: {
+  execution_status?: string;
+  approval_status?: string;
+  risk_level?: string;
+  source_type?: string;
+  source_id?: string;
+  target_system_id?: string;
+  related_incident_id?: string;
+  related_control_id?: string;
+  bob_investigation_id?: string;
+}) {
+  const search = new URLSearchParams();
+  for (const [k, v] of Object.entries(params ?? {})) {
+    if (v) search.set(k, v);
+  }
+  const qs = search.toString();
+  return apiGet<{ items: Action[] }>(`/actions${qs ? `?${qs}` : ""}`);
+}
+
+export async function getAction(id: string) {
+  return apiGet<{ item: Action }>(`/actions/${id}`);
+}
+
+export async function getAccessPolicy(systemId: string) {
+  return apiGet<{ item: AccessPolicy }>(`/access-policies/${systemId}`);
+}
+
+import type {
+  BobImpactSummary,
+  Change,
+  ConnectorStatus,
+  EnvironmentConfig,
+  ExecutionConsoleEntry,
+  Integration,
+  OperationsPolicy,
+  SystemOperations
+} from "./operations-types";
+
+export async function getIntegrations() {
+  return apiGet<{ items: Integration[] }>("/integrations");
+}
+
+export async function getEnvironments() {
+  return apiGet<{ items: EnvironmentConfig[] }>("/environments");
+}
+
+export async function getOperationsPolicies() {
+  return apiGet<{ items: OperationsPolicy[] }>("/operations-policies");
+}
+
+export async function getConnectorStatus() {
+  return apiGet<{ items: ConnectorStatus[] }>("/connector-status");
+}
+
+export async function getExecutionConsole(params?: {
+  target_system_id?: string;
+  action_id?: string;
+  investigation_id?: string;
+  integration_id?: string;
+  limit?: number;
+}) {
+  const search = new URLSearchParams();
+  for (const [k, v] of Object.entries(params ?? {})) {
+    if (v !== undefined && v !== null) search.set(k, String(v));
+  }
+  const qs = search.toString();
+  return apiGet<{ items: ExecutionConsoleEntry[] }>(
+    `/execution-console${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function getSystemOperations(systemId: string) {
+  return apiGet<{ item: SystemOperations }>(`/system-operations/${systemId}`);
+}
+
+export async function getChanges(params?: {
+  target_system_id?: string;
+  source_action_id?: string;
+  source_investigation_id?: string;
+  source_incident_id?: string;
+  impact_status?: string;
+  limit?: number;
+}) {
+  const search = new URLSearchParams();
+  for (const [k, v] of Object.entries(params ?? {})) {
+    if (v !== undefined && v !== null) search.set(k, String(v));
+  }
+  const qs = search.toString();
+  return apiGet<{ items: Change[] }>(`/changes${qs ? `?${qs}` : ""}`);
+}
+
+export async function getChangeForAction(actionId: string) {
+  return apiGet<{ item: Change }>(`/changes/by-action/${actionId}`);
+}
+
+export async function getChange(id: string) {
+  return apiGet<{ item: Change }>(`/changes/${id}`);
+}
+
+export async function getBobImpactSummary() {
+  return apiGet<{ item: BobImpactSummary }>("/bob-impact-summary");
+}

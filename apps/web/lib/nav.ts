@@ -1,7 +1,9 @@
 import {
   AlertTriangle,
   LayoutDashboard,
+  PlayCircle,
   Server,
+  Settings,
   ShieldCheck,
   Sparkles
 } from "lucide-react";
@@ -19,5 +21,7 @@ export const navItems: NavItem[] = [
   { label: "Incident Queue", href: "/incidents", icon: AlertTriangle },
   { label: "Governance Controls", href: "/controls", icon: ShieldCheck },
   { label: "Systems", href: "/systems", icon: Server },
-  { label: "Bob Copilot", href: "/bob", icon: Sparkles }
+  { label: "Action Center", href: "/actions", icon: PlayCircle },
+  { label: "Bob Copilot", href: "/bob", icon: Sparkles },
+  { label: "Settings", href: "/settings", icon: Settings }
 ];

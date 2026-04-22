@@ -2,11 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import {
+  getAccessPolicy,
+  getActions,
   getBobInvestigation,
+  getChanges,
   getIncidentDetail,
   getIncidents,
   getRules
 } from "@/lib/api";
+import { ExecutionEligibilityCard } from "@/components/actions/execution-eligibility";
+import { LinkedActionsPanel } from "@/components/actions/linked-actions";
+import { ChangesTimeline } from "@/components/operations/change-impact";
 import { BobEyebrow, BobIcon } from "@/components/bob/bob-icon";
 import {
   ApprovalBadge,
@@ -101,6 +107,35 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
   const others = investigation.recommendations.filter(
     (r) => r.id !== investigation.top_recommendation_id
   );
+
+  // Pull actions derived from this investigation plus the target system's
+  // access policy so we can render Execution Eligibility without guessing.
+  const [investigationActionsRes, targetSystemPolicyRes] = await Promise.all([
+    getActions({ bob_investigation_id: investigation.id }).catch(() => ({
+      items: [] as any[]
+    })),
+    investigation.target_type === "system"
+      ? getAccessPolicy(investigation.target_id).catch(() => ({ item: null as any }))
+      : (async () => {
+          if (!relatedContext.relatedSystemId) return { item: null as any };
+          try {
+            return await getAccessPolicy(relatedContext.relatedSystemId);
+          } catch {
+            return { item: null as any };
+          }
+        })()
+  ]);
+  const investigationActions = investigationActionsRes?.items ?? [];
+  const topAction = top
+    ? investigationActions.find((a: any) => a.recommendation_id === top.id) ?? null
+    : null;
+  const targetSystemPolicy = targetSystemPolicyRes?.item ?? null;
+
+  const changesRes = await getChanges({
+    source_investigation_id: investigation.id,
+    limit: 20
+  }).catch(() => ({ items: [] as any[] }));
+  const investigationChanges = changesRes.items ?? [];
 
   return (
     <section className="space-y-5">
@@ -241,6 +276,38 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
         </div>
 
         <div className="space-y-5">
+          {topAction ? (
+            <ExecutionEligibilityCard
+              action={topAction}
+              bobOperatingMode={
+                targetSystemPolicy?.bob_operating_mode ?? null
+              }
+            />
+          ) : null}
+
+          {investigationActions.length > 0 ? (
+            <LinkedActionsPanel
+              actions={investigationActions}
+              title="Actions from this investigation"
+              caption="Recommendations that became governed actions in the Action Center."
+            />
+          ) : null}
+
+          {investigationChanges.length > 0 ? (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Changes & Impact
+              </h2>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Measured outcomes of actions derived from this investigation.
+                What Bob expected vs. what actually happened.
+              </p>
+              <div className="mt-3">
+                <ChangesTimeline changes={investigationChanges} />
+              </div>
+            </section>
+          ) : null}
+
           <BobInvestigationWorkflow investigation={investigation} />
 
           <section className="rounded-lg border border-slate-200 bg-white p-4">

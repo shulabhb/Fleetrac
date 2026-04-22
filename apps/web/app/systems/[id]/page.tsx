@@ -1,14 +1,27 @@
 import Link from "next/link";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
 import {
+  getAccessPolicy,
+  getActions,
   getAuditLogs,
   getBobInvestigationForTarget,
+  getChanges,
+  getExecutionConsole,
   getIncidents,
   getRules,
   getSystemDetail,
+  getSystemOperations,
   getTelemetryEvents
 } from "@/lib/api";
 import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
+import { AccessPolicyPanel } from "@/components/actions/access-policy-panel";
+import { LinkedActionsPanel } from "@/components/actions/linked-actions";
+import {
+  OperationsSummaryStrip,
+  SystemOperationsPanel
+} from "@/components/operations/system-operations-panel";
+import { ChangesTimeline } from "@/components/operations/change-impact";
+import { ExecutionConsole } from "@/components/operations/execution-console";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TrendChart } from "@/components/charts/trend-chart";
 import { Badge } from "@/components/ui/badge";
@@ -39,16 +52,39 @@ function postureTone(posture: string): "high" | "medium" | "low" | "neutral" {
 
 export default async function SystemDetailPage({ params }: Props) {
   const { id } = await params;
-  const [{ item: system }, incidentsRes, telemetryRes, auditRes, rulesRes, bobRes] =
-    await Promise.all([
-      getSystemDetail(id),
-      getIncidents(),
-      getTelemetryEvents(`?system_id=${id}&limit=120`),
-      getAuditLogs(),
-      getRules(),
-      getBobInvestigationForTarget("system", id).catch(() => ({ item: null }))
-    ]);
+  const [
+    { item: system },
+    incidentsRes,
+    telemetryRes,
+    auditRes,
+    rulesRes,
+    bobRes,
+    policyRes,
+    actionsRes,
+    opsRes,
+    changesRes,
+    consoleRes
+  ] = await Promise.all([
+    getSystemDetail(id),
+    getIncidents(),
+    getTelemetryEvents(`?system_id=${id}&limit=120`),
+    getAuditLogs(),
+    getRules(),
+    getBobInvestigationForTarget("system", id).catch(() => ({ item: null })),
+    getAccessPolicy(id).catch(() => ({ item: null as any })),
+    getActions({ target_system_id: id }).catch(() => ({ items: [] as any[] })),
+    getSystemOperations(id).catch(() => ({ item: null as any })),
+    getChanges({ target_system_id: id }).catch(() => ({ items: [] as any[] })),
+    getExecutionConsole({ target_system_id: id, limit: 20 }).catch(() => ({
+      items: [] as any[]
+    }))
+  ]);
   const bobInvestigation = bobRes?.item ?? null;
+  const accessPolicy = policyRes?.item ?? null;
+  const systemActions = actionsRes?.items ?? [];
+  const ops = opsRes?.item ?? null;
+  const changes = changesRes?.items ?? [];
+  const consoleEntries = consoleRes?.items ?? [];
 
   const incidents = incidentsRes.items.filter((item: any) => item.system_id === id);
   const openIncidents = incidents.filter((item: any) => item.incident_status !== "closed");
@@ -186,6 +222,11 @@ export default async function SystemDetailPage({ params }: Props) {
             ) : null}
           </div>
         </div>
+        {ops ? (
+          <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-2.5">
+            <OperationsSummaryStrip ops={ops} />
+          </div>
+        ) : null}
         <dl className="grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-200 text-sm md:grid-cols-4">
           {[
             ["Owner", system.owner],
@@ -268,6 +309,49 @@ export default async function SystemDetailPage({ params }: Props) {
           <BobEmptyPanel targetType="system" targetId={system.id} />
         )}
       </section>
+
+      {ops ? <SystemOperationsPanel ops={ops} /> : null}
+
+      {accessPolicy ? (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <AccessPolicyPanel policy={accessPolicy} />
+          <LinkedActionsPanel
+            actions={systemActions}
+            title="Governed actions on this system"
+            caption="Actions routed through the Action Center, scoped to this system."
+            emptyLabel={
+              openIncidents.length === 0
+                ? "This system is healthy. No governed actions are currently open. If recurrence or breach appears, Bob will draft remediations within the policy above."
+                : "No governed actions yet for this system. When Bob drafts a remediation from the open incidents, it will appear here with its approval and execution state."
+            }
+          />
+        </div>
+      ) : null}
+
+      <Card>
+        <CardHeader
+          title="Changes & Impact"
+          caption="Governed changes applied to this system — what Bob expected, what actually changed, whether it improved, regressed, or needs follow-up."
+        />
+        <div className="mt-3">
+          <ChangesTimeline
+            changes={changes}
+            emptyLabel={
+              openIncidents.length === 0
+                ? "No governed changes in this window. The system has been operating within policy; Bob has not needed to prepare a remediation."
+                : "No governed changes yet. When a Bob recommendation is approved and executed on this system, its expected vs actual impact will appear here."
+            }
+          />
+        </div>
+      </Card>
+
+      {consoleEntries.length > 0 && (
+        <ExecutionConsole
+          entries={consoleEntries}
+          title="Execution Console · this system"
+          caption="Governed operational acts Bob has prepared or executed against this system."
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card>
