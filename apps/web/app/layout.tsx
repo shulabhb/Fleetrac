@@ -3,7 +3,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 
 export const metadata: Metadata = {
-  title: "Fleetrac MVP",
+  title: "Fleetrac · Governance Control Plane",
   description: "Observability-driven governance for production AI systems"
 };
 
@@ -17,7 +17,9 @@ export default function RootLayout({
       <body>
         <div className="flex min-h-screen">
           <Sidebar />
-          <main className="flex-1 p-8">{children}</main>
+          <main className="min-w-0 flex-1">
+            <div className="mx-auto max-w-[1400px] px-6 py-6 md:px-8 md:py-8">{children}</div>
+          </main>
         </div>
       </body>
     </html>

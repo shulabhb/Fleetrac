@@ -84,10 +84,37 @@ def _compute_risk_posture(row: dict) -> str:
     return "healthy"
 
 
+_HOSTING_ENVIRONMENTS = (
+    "AWS us-east-1",
+    "AWS us-west-2",
+    "Azure eastus2",
+    "GCP us-central1",
+    "On-prem DC-West",
+)
+_INTEGRATION_MODES = (
+    "SDK",
+    "API gateway",
+    "Direct proxy",
+    "Sidecar agent",
+)
+
+
 def _build_system(row: dict) -> System:
     system_slug = _slugify(f"{row.get('model', 'unknown')}_{row.get('use_case', 'workflow')}")
+    sys_id = f"sys_{system_slug}"
+    h = abs(hash(sys_id))
+    hosting = _HOSTING_ENVIRONMENTS[h % len(_HOSTING_ENVIRONMENTS)]
+    integration = _INTEGRATION_MODES[(h // 7) % len(_INTEGRATION_MODES)]
+    coverage = 72 + ((h // 13) % 28)
+    posture = _compute_risk_posture(row)
+    if posture in ("critical", "at_risk"):
+        connection = "degraded" if (h % 3) == 0 else "connected"
+    elif posture == "watch":
+        connection = "stale" if (h % 5) == 0 else "connected"
+    else:
+        connection = "connected"
     return System(
-        id=f"sys_{system_slug}",
+        id=sys_id,
         name=f"{row.get('model')} - {row.get('use_case')}",
         owner=str(row.get("model_owner", "unknown")),
         environment="production",
@@ -99,7 +126,11 @@ def _build_system(row: dict) -> System:
         deployment_scope=str(row.get("deployment_scope", "unknown")),
         regulatory_sensitivity=str(row.get("regulatory_sensitivity", "unknown")),
         control_owner=str(row.get("control_owner", "unknown")),
-        risk_posture=_compute_risk_posture(row),
+        risk_posture=posture,
+        hosting_environment=hosting,
+        integration_mode=integration,
+        telemetry_coverage=float(coverage),
+        connection_status=connection,
     )
 
 
@@ -340,19 +371,59 @@ def _recalculate_system_posture(systems: list[System], incidents: list[Incident]
 
 
 def _build_audit_logs(incidents: list[Incident], telemetry_events: list[TelemetryEvent]) -> list[AuditLogEntry]:
+    """Build a richer audit timeline.
+
+    Rather than emitting two nearly-identical rows per incident (created /
+    review_required), this generator derives a *realistic mix* of governance
+    events from the incident and telemetry state — escalations, resolutions,
+    false-positive closures, control triggers, audit breaches, Bob activity,
+    and follow-up scheduling. Timestamps are jittered so the feed stops
+    feeling like a repeating template.
+    """
+
     logs: list[AuditLogEntry] = []
+    rng = random.Random("audit_logs_v2")
+
+    def _jittered(ts: datetime, min_minutes: int, max_minutes: int) -> datetime:
+        return ts + timedelta(
+            minutes=rng.randint(min_minutes, max_minutes),
+            seconds=rng.randint(0, 59),
+        )
+
     for idx, incident in enumerate(incidents, start=1):
+        # 1. Incident creation
         logs.append(
             AuditLogEntry(
-                id=f"audit_inc_{idx}",
+                id=f"audit_inc_created_{idx}",
                 actor="rules-engine",
                 action="incident.created",
                 target_type="incident",
                 target_id=incident.id,
-                details=f"Auto-created from rule breach {incident.rule_id} for system {incident.system_id}.",
+                details=(
+                    f"{incident.title} on {incident.system_name}. "
+                    f"{incident.trigger_metric} outside threshold {incident.threshold}."
+                ),
                 timestamp=incident.created_at,
             )
         )
+
+        # 2. Underlying control trigger (separate operational event)
+        logs.append(
+            AuditLogEntry(
+                id=f"audit_ctrl_trigger_{idx}",
+                actor="rules-engine",
+                action="control.triggered",
+                target_type="control",
+                target_id=incident.rule_id,
+                details=(
+                    f"{incident.rule_id.replace('rule_', '').replace('_', ' ').title()} "
+                    f"triggered on {incident.system_name}."
+                ),
+                timestamp=_jittered(incident.created_at, 0, 1),
+            )
+        )
+
+        # 3. Review assignment (only if review is required)
         if incident.review_required:
             logs.append(
                 AuditLogEntry(
@@ -361,12 +432,185 @@ def _build_audit_logs(incidents: list[Incident], telemetry_events: list[Telemetr
                     action="incident.review_required",
                     target_type="incident",
                     target_id=incident.id,
-                    details=f"Assigned to {incident.owner_team} with recommendation: {incident.recommended_action}",
-                    timestamp=incident.created_at + timedelta(minutes=2),
+                    details=(
+                        f"Assigned to {incident.owner_team}. Recommendation: "
+                        f"{incident.recommended_action}"
+                    ),
+                    timestamp=_jittered(incident.created_at, 1, 4),
                 )
             )
 
-    for idx, event in enumerate(telemetry_events[-120:], start=1):
+        # 4. Bob investigation opens shortly after the incident
+        logs.append(
+            AuditLogEntry(
+                id=f"audit_bob_open_{idx}",
+                actor="bob-copilot",
+                action="bob.investigation_opened",
+                target_type="incident",
+                target_id=incident.id,
+                details=(
+                    f"Bob opened an investigation on {incident.title} and began "
+                    "reviewing telemetry context and active controls."
+                ),
+                timestamp=_jittered(incident.created_at, 2, 6),
+            )
+        )
+
+        # 5. Bob drafts a recommendation
+        logs.append(
+            AuditLogEntry(
+                id=f"audit_bob_rec_{idx}",
+                actor="bob-copilot",
+                action="bob.recommendation_drafted",
+                target_type="incident",
+                target_id=incident.id,
+                details=(
+                    f"Bob drafted a remediation recommendation for {incident.owner_team}: "
+                    f"{incident.recommended_action}"
+                ),
+                timestamp=_jittered(incident.created_at, 4, 18),
+            )
+        )
+
+        # 6. Lifecycle-specific events
+        if incident.escalation_status == "escalated" or incident.incident_status == "escalated":
+            logs.append(
+                AuditLogEntry(
+                    id=f"audit_escalated_{idx}",
+                    actor=rng.choice([incident.owner_team, "governance-queue"]),
+                    action="incident.escalated",
+                    target_type="incident",
+                    target_id=incident.id,
+                    details=(
+                        f"Escalated {incident.title} to {incident.owner_team} "
+                        "after review threshold was breached."
+                    ),
+                    timestamp=_jittered(incident.created_at, 30, 360),
+                )
+            )
+            # Bob recommends escalation
+            logs.append(
+                AuditLogEntry(
+                    id=f"audit_bob_escalate_{idx}",
+                    actor="bob-copilot",
+                    action="bob.escalation_suggested",
+                    target_type="incident",
+                    target_id=incident.id,
+                    details=(
+                        "Bob suggested escalation after correlating recurrence and severity signals."
+                    ),
+                    timestamp=_jittered(incident.created_at, 20, 60),
+                )
+            )
+
+        if incident.incident_status == "mitigated":
+            logs.append(
+                AuditLogEntry(
+                    id=f"audit_mitigated_{idx}",
+                    actor=incident.owner_team,
+                    action="incident.mitigated",
+                    target_type="incident",
+                    target_id=incident.id,
+                    details=f"{incident.title} mitigated. Monitoring outcome on next telemetry window.",
+                    timestamp=_jittered(incident.created_at, 120, 1440),
+                )
+            )
+            logs.append(
+                AuditLogEntry(
+                    id=f"audit_rec_approved_{idx}",
+                    actor=incident.owner_team,
+                    action="bob.recommendation_approved",
+                    target_type="incident",
+                    target_id=incident.id,
+                    details="Bob recommendation approved and queued for execution.",
+                    timestamp=_jittered(incident.created_at, 60, 360),
+                )
+            )
+
+        if incident.incident_status == "closed":
+            # Closed incidents: either resolved or closed as false positive
+            if rng.random() < 0.35:
+                logs.append(
+                    AuditLogEntry(
+                        id=f"audit_false_positive_{idx}",
+                        actor=incident.owner_team,
+                        action="incident.false_positive",
+                        target_type="incident",
+                        target_id=incident.id,
+                        details=(
+                            "Closed as false positive after reviewer investigation. "
+                            "Bob control review recommended for threshold calibration."
+                        ),
+                        timestamp=_jittered(incident.created_at, 200, 1800),
+                    )
+                )
+                logs.append(
+                    AuditLogEntry(
+                        id=f"audit_bob_tuning_{idx}",
+                        actor="bob-copilot",
+                        action="bob.control_tuning_suggested",
+                        target_type="control",
+                        target_id=incident.rule_id,
+                        details=(
+                            f"Bob suggested control-tuning review on {incident.rule_id} "
+                            "after false-positive classification."
+                        ),
+                        timestamp=_jittered(incident.created_at, 210, 1900),
+                    )
+                )
+            else:
+                logs.append(
+                    AuditLogEntry(
+                        id=f"audit_resolved_{idx}",
+                        actor=incident.owner_team,
+                        action="incident.resolved",
+                        target_type="incident",
+                        target_id=incident.id,
+                        details=f"{incident.title} resolved after remediation completed.",
+                        timestamp=_jittered(incident.created_at, 240, 1800),
+                    )
+                )
+
+        # 7. Occasional follow-up scheduling — reinforces auditability
+        if rng.random() < 0.25:
+            logs.append(
+                AuditLogEntry(
+                    id=f"audit_followup_{idx}",
+                    actor="governance-queue",
+                    action="followup.scheduled",
+                    target_type="incident",
+                    target_id=incident.id,
+                    details=(
+                        f"Follow-up scheduled with {incident.owner_team} to confirm "
+                        "Bob's remediation held after the next telemetry window."
+                    ),
+                    timestamp=_jittered(incident.created_at, 360, 2880),
+                )
+            )
+
+    # Audit-coverage-breach events from telemetry
+    breach_events = [
+        event for event in telemetry_events
+        if (event.audit_coverage_pct or 100) < 95
+    ]
+    for idx, event in enumerate(breach_events[:16], start=1):
+        logs.append(
+            AuditLogEntry(
+                id=f"audit_floor_breach_{idx}",
+                actor="audit-sampler",
+                action="audit.threshold_breach_detected",
+                target_type="telemetry_event",
+                target_id=event.id,
+                details=(
+                    f"Audit coverage dropped to {event.audit_coverage_pct:.1f}% on "
+                    f"{event.system_id}, below the 95% governance floor."
+                ),
+                timestamp=event.timestamp,
+            )
+        )
+
+    # A handful of raw telemetry-processed events preserved for coverage
+    for idx, event in enumerate(telemetry_events[-40:], start=1):
         logs.append(
             AuditLogEntry(
                 id=f"audit_telem_{idx}",
@@ -374,10 +618,14 @@ def _build_audit_logs(incidents: list[Incident], telemetry_events: list[Telemetr
                 action="telemetry.processed",
                 target_type="telemetry_event",
                 target_id=event.id,
-                details=f"Telemetry processed for {event.system_id} with risk signals: {', '.join(event.risk_signals) or 'none'}.",
+                details=(
+                    f"Telemetry processed for {event.system_id} with risk signals: "
+                    f"{', '.join(event.risk_signals) or 'none'}."
+                ),
                 timestamp=event.timestamp,
             )
         )
+
     logs.sort(key=lambda item: item.timestamp, reverse=True)
     return logs
 

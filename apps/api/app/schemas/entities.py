@@ -83,6 +83,10 @@ class System(BaseModel):
     regulatory_sensitivity: str
     control_owner: str
     risk_posture: Literal["healthy", "watch", "at_risk", "critical"]
+    hosting_environment: str | None = None
+    integration_mode: str | None = None
+    telemetry_coverage: float | None = None
+    connection_status: Literal["connected", "degraded", "stale"] | None = None
 
 
 class AuditLogEntry(BaseModel):
