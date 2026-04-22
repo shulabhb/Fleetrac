@@ -262,6 +262,14 @@ export default async function ActionDetailPage({ params }: Props) {
             eyebrow="Expected vs Actual"
             title="Change & Impact"
             caption="What Bob expected, what actually moved on monitored metrics, and whether this needs follow-up or rollback."
+            actions={
+              <Link
+                href={`/outcomes/${change.id}`}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-slate-300"
+              >
+                Open in Outcomes →
+              </Link>
+            }
           />
           <ChangeImpactCard change={change} />
         </section>

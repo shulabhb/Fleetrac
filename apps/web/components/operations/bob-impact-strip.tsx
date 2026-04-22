@@ -54,7 +54,7 @@ export function BobImpactStrip({ summary }: { summary: BobImpactSummary }) {
           value={summary.reviewer_burden_reduced}
         />
         <Link
-          href="/actions?tab=monitoring"
+          href="/outcomes"
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
         >
           View outcomes

@@ -331,17 +331,37 @@ export default async function SystemDetailPage({ params }: Props) {
       <Card>
         <CardHeader
           title="Changes & Impact"
-          caption="Governed changes applied to this system — what Bob expected, what actually changed, whether it improved, regressed, or needs follow-up."
+          caption="Governed changes on this system. Expected vs. actual on monitored metrics."
+          action={
+            changes.length > 0 ? (
+              <Link
+                href={`/outcomes?system=${id}`}
+                className="text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                View all outcomes →
+              </Link>
+            ) : null
+          }
         />
         <div className="mt-3">
           <ChangesTimeline
-            changes={changes}
+            changes={changes.slice(0, 5)}
             emptyLabel={
               openIncidents.length === 0
                 ? "No governed changes in this window. The system has been operating within policy; Bob has not needed to prepare a remediation."
                 : "No governed changes yet. When a Bob recommendation is approved and executed on this system, its expected vs actual impact will appear here."
             }
           />
+          {changes.length > 5 ? (
+            <div className="mt-3 text-center">
+              <Link
+                href={`/outcomes?system=${id}`}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:border-slate-300"
+              >
+                See all {changes.length} outcomes for this system →
+              </Link>
+            </div>
+          ) : null}
         </div>
       </Card>
 

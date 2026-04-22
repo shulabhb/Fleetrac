@@ -8,13 +8,12 @@ import { Select } from "@/components/ui/select";
 import { KpiCard } from "@/components/kpi-card";
 import { ActionCard } from "./action-card";
 import { actionTypeLabel } from "./index";
-import { ChangeImpactMiniRow } from "@/components/operations/change-impact";
+import { OutcomesStrip } from "@/components/operations/outcomes-strip";
 
 type Segment =
   | "pending"
   | "ready"
   | "executed"
-  | "monitoring"
   | "blocked"
   | "rollback"
   | "closed_rejected";
@@ -35,30 +34,25 @@ const SEGMENTS: { id: Segment; label: string; caption: string }[] = [
     id: "ready",
     label: "Approved · ready to execute",
     caption:
-      "Approved but not yet executed — awaiting owner handoff or allowed execution window."
+      "Approved. Awaiting owner handoff or permitted execution window."
   },
   {
     id: "executed",
     label: "Executed",
-    caption: "Recently executed actions; outcome window may still be open."
-  },
-  {
-    id: "monitoring",
-    label: "Follow-up · monitoring outcome",
     caption:
-      "Executed actions being monitored for post-action improvement, regression, or reviewer sign-off."
+      "Executed within approved scope. Post-execution impact lives in Outcomes."
   },
   {
     id: "blocked",
     label: "Policy-blocked",
     caption:
-      "Actions Bob prepared that were blocked by policy (no config access, dual approval missing, restricted type, maintenance window, etc.). Kept visible so the blocking reason is auditable."
+      "Blocked by policy (missing approval, restricted type, maintenance window, no config access). Kept visible so the blocking reason is auditable."
   },
   {
     id: "rollback",
     label: "Rollback candidates",
     caption:
-      "Executed changes that regressed after monitoring. Bob has flagged these as rollback candidates."
+      "Executed changes that regressed on monitored metrics. Bob has flagged these as rollback candidates."
   },
   {
     id: "closed_rejected",
@@ -82,9 +76,12 @@ function inSegment(
     case "ready":
       return ex === "ready_to_execute" || ex === "approved";
     case "executed":
-      return ex === "executed" || ex === "closed";
-    case "monitoring":
-      return ex === "monitoring_outcome" || ex === "follow_up_required";
+      return (
+        ex === "executed" ||
+        ex === "closed" ||
+        ex === "monitoring_outcome" ||
+        ex === "follow_up_required"
+      );
     case "blocked":
       return action.allowed_by_policy === false;
     case "rollback":
@@ -140,7 +137,6 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
       pending: 0,
       ready: 0,
       executed: 0,
-      monitoring: 0,
       blocked: 0,
       rollback: 0,
       closed_rejected: 0
@@ -157,15 +153,12 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
     const highRiskPending = actions.filter(
       (a) => a.risk_level === "high" && inSegment(a, "pending", rollbackActionIds)
     ).length;
-    const regression = actions.filter(
-      (a) => a.monitoring_status === "regression_detected" || a.monitoring_status === "rollback_recommended"
-    ).length;
     return {
       pending: counts.pending,
       ready: counts.ready,
-      monitoring: counts.monitoring,
-      highRiskPending,
-      regression
+      blocked: counts.blocked,
+      rollback: counts.rollback,
+      highRiskPending
     };
   }, [actions, counts, rollbackActionIds]);
 
@@ -204,28 +197,31 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
         <KpiCard
           label="High-risk pending"
           value={kpis.highRiskPending}
-          caption="High-risk actions requiring dual approval"
+          caption="Requires dual approval before execution"
           tone={kpis.highRiskPending > 0 ? "urgent" : "neutral"}
           highlight={kpis.highRiskPending > 0}
         />
         <KpiCard
           label="Ready to execute"
           value={kpis.ready}
-          caption="Approved; awaiting execution window"
+          caption="Approved; awaiting permitted execution window"
         />
         <KpiCard
-          label="Monitoring outcome"
-          value={kpis.monitoring}
-          caption="Post-action windows still open"
+          label="Policy-blocked"
+          value={kpis.blocked}
+          caption="Blocked by policy; reason retained for audit"
+          tone={kpis.blocked > 0 ? "warning" : "neutral"}
         />
         <KpiCard
-          label="Regression / rollback"
-          value={kpis.regression}
-          caption="Post-action outcomes to review"
-          tone={kpis.regression > 0 ? "urgent" : "ok"}
-          highlight={kpis.regression > 0}
+          label="Rollback candidates"
+          value={kpis.rollback}
+          caption="Executed changes flagged for rollback"
+          tone={kpis.rollback > 0 ? "urgent" : "neutral"}
+          highlight={kpis.rollback > 0}
         />
       </div>
+
+      {changes.length > 0 ? <OutcomesStrip changes={changes} density="compact" /> : null}
 
       <div className="rounded-lg border border-slate-200 bg-white">
         <div className="flex flex-wrap gap-0 border-b border-slate-200 px-1.5 pt-1.5">
@@ -303,13 +299,51 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
           filtered.map((a) => (
             <div key={a.id} className="space-y-1.5">
               <ActionCard action={a} />
-              {changesByActionId.get(a.id) ? (
-                <ChangeImpactMiniRow change={changesByActionId.get(a.id)!} />
+              {segment === "rollback" && changesByActionId.get(a.id) ? (
+                <RollbackContextRow change={changesByActionId.get(a.id)!} />
               ) : null}
             </div>
           ))
         )}
       </div>
     </section>
+  );
+}
+
+function RollbackContextRow({ change }: { change: Change }) {
+  const primary = change.metric_deltas[0];
+  const pct =
+    primary && primary.before != null && primary.after != null && primary.before !== 0
+      ? ((primary.after - primary.before) / primary.before) * 100
+      : null;
+  return (
+    <div className="rounded-md border border-rose-100 bg-rose-50/60 px-3 py-2 text-[12px] text-rose-900">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">
+          Why rollback
+        </span>
+        <span className="text-rose-900">{change.actual_outcome_summary}</span>
+        {primary && pct != null ? (
+          <span className="ml-auto inline-flex items-center gap-1 rounded-md bg-white px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-rose-700 ring-1 ring-rose-200">
+            {primary.label} {pct > 0 ? "+" : ""}
+            {pct.toFixed(1)}%
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+        {change.version_before && change.version_after ? (
+          <span className="text-rose-900/80">
+            Version {change.version_after} → rollback target{" "}
+            <span className="font-mono font-semibold">{change.version_before}</span>
+          </span>
+        ) : null}
+        <a
+          href={`/outcomes/${change.id}`}
+          className="ml-auto font-medium text-rose-700 hover:text-rose-900 hover:underline"
+        >
+          Open outcome →
+        </a>
+      </div>
+    </div>
   );
 }

@@ -295,13 +295,23 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
 
           {investigationChanges.length > 0 ? (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
-              <h2 className="text-sm font-semibold text-slate-900">
-                Changes & Impact
-              </h2>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Measured outcomes of actions derived from this investigation.
-                What Bob expected vs. what actually happened.
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Changes & Impact
+                  </h2>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Measured outcomes of actions derived from this
+                    investigation.
+                  </p>
+                </div>
+                <Link
+                  href="/outcomes"
+                  className="text-xs font-medium text-slate-600 hover:text-slate-900"
+                >
+                  View in Outcomes →
+                </Link>
+              </div>
               <div className="mt-3">
                 <ChangesTimeline changes={investigationChanges} />
               </div>

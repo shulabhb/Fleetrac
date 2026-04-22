@@ -12,7 +12,8 @@ import {
 import { BobIcon } from "@/components/bob/bob-icon";
 import { ActionCenterStrip } from "@/components/actions/action-center-strip";
 import { BobImpactStrip } from "@/components/operations/bob-impact-strip";
-import { ChangeImpactMiniRow } from "@/components/operations/change-impact";
+import { OutcomesStrip } from "@/components/operations/outcomes-strip";
+import { OutcomeMiniRow } from "@/components/operations/outcomes-view";
 import { ArrowRight } from "lucide-react";
 import { AnalyticsStrip, type AnalyticsView } from "@/components/charts/analytics-strip";
 import { ActivityFeed } from "@/components/activity-feed";
@@ -44,8 +45,11 @@ export default async function DashboardPage() {
     getBobInvestigations().catch(() => ({ items: [] as any[] })),
     getActions().catch(() => ({ items: [] as any[] })),
     getBobImpactSummary().catch(() => null),
-    getChanges({ limit: 6 }).catch(() => ({ items: [] as any[] }))
+    getChanges().catch(() => ({ items: [] as any[] }))
   ]);
+
+  const allChanges = changesRes.items;
+  const recentChanges = allChanges.slice(0, 6);
 
   const systems = systemsRes.items;
   const incidents = incidentsRes.items;
@@ -312,16 +316,18 @@ export default async function DashboardPage() {
 
       <ActionCenterStrip actions={actionsRes.items} />
 
+      {allChanges.length > 0 ? <OutcomesStrip changes={allChanges} /> : null}
+
       {impactRes?.item && <BobImpactStrip summary={impactRes.item} />}
 
-      {changesRes.items.length > 0 && (
+      {recentChanges.length > 0 && (
         <Card>
           <CardHeader
             title="Recent Changes & Impact"
-            caption="Latest Bob-prepared changes and the measured outcome on monitored metrics."
+            caption="Measured outcome of the latest governed changes."
             action={
               <Link
-                href="/actions?tab=monitoring"
+                href="/outcomes"
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
                 View all →
@@ -329,8 +335,8 @@ export default async function DashboardPage() {
             }
           />
           <div className="mt-3 space-y-2">
-            {changesRes.items.map((c: any) => (
-              <ChangeImpactMiniRow key={c.id} change={c} />
+            {recentChanges.map((c: any) => (
+              <OutcomeMiniRow key={c.id} change={c} />
             ))}
           </div>
         </Card>

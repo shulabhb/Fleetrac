@@ -14,7 +14,7 @@ export default async function ActionCenterPage() {
       <SectionTitle
         eyebrow="Governed Remediation"
         title="Action Center"
-        caption="Operational surface for governed actions. Every item here has an explicit approver, risk level, execution boundary, and post-approval lifecycle. This is where Bob-prepared changes become approved, executed, and monitored."
+        caption="Decisions and execution for governed actions. Every item has an explicit approver, risk level, and execution boundary. Post-execution impact lives in Outcomes."
       />
       <ActionCenterView actions={items} changes={changesRes.items} />
     </section>

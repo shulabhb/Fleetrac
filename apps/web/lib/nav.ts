@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   LayoutDashboard,
+  LineChart,
   PlayCircle,
   Server,
   Settings,
@@ -22,6 +23,7 @@ export const navItems: NavItem[] = [
   { label: "Governance Controls", href: "/controls", icon: ShieldCheck },
   { label: "Systems", href: "/systems", icon: Server },
   { label: "Action Center", href: "/actions", icon: PlayCircle },
+  { label: "Outcomes", href: "/outcomes", icon: LineChart },
   { label: "Bob Copilot", href: "/bob", icon: Sparkles },
   { label: "Settings", href: "/settings", icon: Settings }
 ];
