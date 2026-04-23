@@ -97,6 +97,7 @@ export function SettingsView(props: Props) {
   }, [effectiveTab]);
 
   const handleTabChange = (next: Tab) => {
+    if (next === tab) return;
     setTab(next);
     const params = new URLSearchParams(searchParams?.toString() ?? "");
     if (next !== "integrations" && next !== "console") {
@@ -108,9 +109,13 @@ export function SettingsView(props: Props) {
       params.set("tab", next);
     }
     const query = params.toString();
-    router.replace(query ? `/settings?${query}` : "/settings", {
-      scroll: false
-    });
+    const nextUrl = query ? `/settings?${query}` : "/settings";
+    const currentUrl = searchParams?.toString()
+      ? `/settings?${searchParams.toString()}`
+      : "/settings";
+    if (nextUrl !== currentUrl) {
+      router.replace(nextUrl, { scroll: false });
+    }
   };
 
   const integrationFilterId = searchParams?.get("integration");

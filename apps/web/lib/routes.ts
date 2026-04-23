@@ -165,6 +165,30 @@ export function routeToIntegrationSettings(integrationId: string): string {
   return `/settings?integration=${encodeURIComponent(integrationId)}`;
 }
 
+/**
+ * Adds a return target to a detail URL so downstream pages can provide
+ * context-aware "Back to ..." behavior instead of always falling back to a
+ * canonical list page.
+ */
+export function appendReturnTo(href: string, returnTo?: string | null): string {
+  if (!returnTo) return href;
+  const [path, qs = ""] = href.split("?");
+  const params = new URLSearchParams(qs);
+  params.set("returnTo", returnTo);
+  const nextQs = params.toString();
+  return nextQs ? `${path}?${nextQs}` : path;
+}
+
+export function safeReturnTo(
+  returnTo: string | null | undefined,
+  fallback: string
+): string {
+  if (!returnTo) return fallback;
+  // Only allow in-app absolute paths.
+  if (!returnTo.startsWith("/")) return fallback;
+  return returnTo;
+}
+
 // ---------------------------------------------------------------------------
 // Canonical parents (for back-nav fallback)
 // ---------------------------------------------------------------------------

@@ -3,8 +3,6 @@ import { IncidentQueueTable } from "@/components/incident-queue-table";
 import { SectionTitle } from "@/components/ui/section-title";
 import { getIncidents } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
-
 export default async function IncidentsPage() {
   const { items } = await getIncidents();
 

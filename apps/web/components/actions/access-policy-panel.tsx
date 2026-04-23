@@ -42,7 +42,7 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/60 px-5 py-3">
         <TrustChip
           tone={
-            policy.telemetry_level === "none" || policy.telemetry_level === "metadata_only"
+            policy.telemetry_level === "metrics_only" || policy.telemetry_level === "logs_only"
               ? "neutral"
               : "ok"
           }

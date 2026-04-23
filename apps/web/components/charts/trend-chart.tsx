@@ -101,7 +101,7 @@ export function TrendChart({
               padding: "6px 10px"
             }}
             labelFormatter={(value) => formatShortDateTime(new Date(value as number))}
-            formatter={(value: number | string) => {
+            formatter={(value) => {
               const num = typeof value === "number" ? value : Number(value);
               const display = Number.isFinite(num) ? num.toFixed(yDigits) : value;
               return [`${display}${unit ?? ""}`, "Value"];

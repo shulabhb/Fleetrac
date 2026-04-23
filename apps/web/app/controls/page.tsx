@@ -2,8 +2,6 @@ import { ControlsBrowser } from "@/components/controls-browser";
 import { SectionTitle } from "@/components/ui/section-title";
 import { getBobInvestigations, getIncidents, getRules } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
-
 export default async function ControlsPage() {
   const [rulesRes, incidentsRes, bobRes] = await Promise.all([
     getRules(),

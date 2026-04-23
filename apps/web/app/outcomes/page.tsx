@@ -5,8 +5,6 @@ import { OutcomesView } from "@/components/operations/outcomes-view";
 import { getChanges, getSystems } from "@/lib/api";
 import { routes, routeToSystem } from "@/lib/routes";
 
-export const dynamic = "force-dynamic";
-
 type SearchParams = {
   system?: string;
   tab?: string;

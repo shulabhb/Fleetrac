@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   ChevronRight,
   LayoutGrid,
@@ -101,6 +101,7 @@ export function ControlsBrowser({
   const [riskDomain, setRiskDomain] = useState("all");
   const [ownerTeam, setOwnerTeam] = useState("all");
   const [query, setQuery] = useState(initialQuery);
+  const deferredQuery = useDeferredValue(query);
 
   // Persist operator preference locally so the view doesn't reset every load.
   useEffect(() => {
@@ -136,10 +137,9 @@ export function ControlsBrowser({
     return map;
   }, [bobControlReviews]);
 
-  const now = Date.now();
-  const within7d = 7 * 24 * 60 * 60 * 1000;
-
   const enriched = useMemo<EnrichedControl[]>(() => {
+    const now = Date.now();
+    const within7d = 7 * 24 * 60 * 60 * 1000;
     const incidentsByRule: Record<string, any[]> = {};
     for (const inc of incidents) (incidentsByRule[inc.rule_id] ??= []).push(inc);
     return rules.map((rule: any) => {
@@ -180,7 +180,7 @@ export function ControlsBrowser({
         isQuiet: recentCount === 0
       };
     });
-  }, [rules, incidents, now, within7d, bobByControl]);
+  }, [rules, incidents, bobByControl]);
 
   const bucketCounts = useMemo(() => {
     let bobFlagged = 0;
@@ -216,7 +216,7 @@ export function ControlsBrowser({
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     const rows = enriched.filter((c) => {
       if (severity !== "all" && c.rule.severity !== severity) return false;
       if (signalType !== "all" && c.signal !== signalType) return false;
@@ -243,7 +243,16 @@ export function ControlsBrowser({
 
     rows.sort((a, b) => compareControls(a, b, sortKey));
     return rows;
-  }, [enriched, severity, signalType, riskDomain, ownerTeam, bucket, query, sortKey]);
+  }, [
+    enriched,
+    severity,
+    signalType,
+    riskDomain,
+    ownerTeam,
+    bucket,
+    deferredQuery,
+    sortKey
+  ]);
 
   const totalRecent = filtered.reduce((acc, c) => acc + c.recentCount, 0);
 

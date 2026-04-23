@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Search, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import type { Change, ChangeLifecycleState, MetricDelta } from "@/lib/operations-types";
 import { KpiCard } from "@/components/kpi-card";
@@ -19,7 +20,7 @@ import {
   outcomeTone,
   verdictColor
 } from "@/lib/governance-states";
-import { routeToOutcome, routeToSystem } from "@/lib/routes";
+import { appendReturnTo, routeToOutcome, routeToSystem } from "@/lib/routes";
 
 type Segment =
   | "all"
@@ -115,6 +116,9 @@ export function OutcomesView({
   changes: Change[];
   systemFilter?: string | null;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const scoped = useMemo(
     () =>
       systemFilter ? changes.filter((c) => c.target_system_id === systemFilter) : changes,
@@ -122,9 +126,11 @@ export function OutcomesView({
   );
 
   const [segment, setSegment] = useState<Segment>("monitoring");
-  const [query, setQuery] = useState("");
-  const [env, setEnv] = useState<string>("all");
-  const [changeType, setChangeType] = useState<string>("all");
+  const [query, setQuery] = useState(searchParams?.get("q") ?? "");
+  const [env, setEnv] = useState<string>(searchParams?.get("env") ?? "all");
+  const [changeType, setChangeType] = useState<string>(
+    searchParams?.get("type") ?? "all"
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -132,6 +138,27 @@ export function OutcomesView({
     const t = q.get("tab") as Segment | null;
     if (t && SEGMENTS.some((s) => s.id === t)) setSegment(t);
   }, []);
+
+  useEffect(() => {
+    const p = new URLSearchParams(searchParams?.toString() ?? "");
+    if (segment === "monitoring") p.delete("tab");
+    else p.set("tab", segment);
+    if (query.trim()) p.set("q", query.trim());
+    else p.delete("q");
+    if (env === "all") p.delete("env");
+    else p.set("env", env);
+    if (changeType === "all") p.delete("type");
+    else p.set("type", changeType);
+    const next = p.toString();
+    const current = searchParams?.toString() ?? "";
+    if (next !== current) {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    }
+  }, [segment, query, env, changeType, searchParams, pathname, router]);
+
+  const returnTo = searchParams?.toString()
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
 
   const counts = useMemo(() => {
     const base: Record<Segment, number> = {

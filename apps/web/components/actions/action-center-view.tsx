@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import type { Action, RiskLevel } from "@/lib/action-types";
 import type { Change } from "@/lib/operations-types";
@@ -9,7 +10,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { ActionCard } from "./action-card";
 import { actionTypeLabel } from "./index";
 import { OutcomesStrip } from "@/components/operations/outcomes-strip";
-import { routeToOutcome } from "@/lib/routes";
+import { appendReturnTo, routeToAction, routeToOutcome } from "@/lib/routes";
 
 type Segment =
   | "pending"
@@ -114,10 +115,36 @@ function inSegment(
 }
 
 export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [segment, setSegment] = useState<Segment>(defaultTab ?? "pending");
-  const [query, setQuery] = useState("");
-  const [risk, setRisk] = useState<RiskLevel | "all">("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [query, setQuery] = useState(searchParams?.get("q") ?? "");
+  const [risk, setRisk] = useState<RiskLevel | "all">(
+    (searchParams?.get("risk") as RiskLevel | "all") ?? "all"
+  );
+  const [typeFilter, setTypeFilter] = useState(searchParams?.get("type") ?? "all");
+
+  useEffect(() => {
+    const p = new URLSearchParams(searchParams?.toString() ?? "");
+    if (segment === "pending") p.delete("tab");
+    else p.set("tab", segment);
+    if (query.trim()) p.set("q", query.trim());
+    else p.delete("q");
+    if (risk === "all") p.delete("risk");
+    else p.set("risk", risk);
+    if (typeFilter === "all") p.delete("type");
+    else p.set("type", typeFilter);
+    const next = p.toString();
+    const current = searchParams?.toString() ?? "";
+    if (next !== current) {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    }
+  }, [segment, query, risk, typeFilter, searchParams, pathname, router]);
+
+  const returnTo = searchParams?.toString()
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
 
   const changesByActionId = useMemo(() => {
     const map = new Map<string, Change>();
@@ -317,7 +344,10 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
         ) : (
           filtered.map((a) => (
             <div key={a.id} className="space-y-1.5">
-              <ActionCard action={a} />
+              <ActionCard
+                action={a}
+                detailHref={appendReturnTo(routeToAction(a.id), returnTo)}
+              />
               {segment === "rollback" && changesByActionId.get(a.id) ? (
                 <RollbackContextRow change={changesByActionId.get(a.id)!} />
               ) : null}

@@ -9,13 +9,15 @@ import {
 } from "./bob-badges";
 import { formatRelativeTime } from "@/lib/format";
 import { humanizeLabel } from "@/lib/present";
-import { routeToBobInvestigation } from "@/lib/routes";
+import { appendReturnTo, routeToBobInvestigation } from "@/lib/routes";
 
 export function InvestigationRow({
   investigation,
+  returnTo,
   className
 }: {
   investigation: BobInvestigation;
+  returnTo?: string;
   className?: string;
 }) {
   const top = investigation.recommendations.find(
@@ -24,7 +26,7 @@ export function InvestigationRow({
 
   return (
     <Link
-      href={routeToBobInvestigation(investigation.id)}
+      href={appendReturnTo(routeToBobInvestigation(investigation.id), returnTo)}
       className={cn(
         "group flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3.5 transition hover:border-slate-300 hover:shadow-card-hover",
         className

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import type { BobInvestigation, InvestigationStatus, TargetType } from "@/lib/bob-types";
 import { InvestigationRow } from "./investigation-row";
@@ -46,6 +47,9 @@ export function BobCopilotView({
   investigations,
   defaultStatusFilter
 }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const initialStatus: StatusFilter =
     defaultStatusFilter &&
     VALID_STATUS_FILTERS.includes(defaultStatusFilter as StatusFilter)
@@ -58,6 +62,38 @@ export function BobCopilotView({
   );
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("priority");
+
+  const returnTo = searchParams?.toString()
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
+
+  useEffect(() => {
+    const p = new URLSearchParams(searchParams?.toString() ?? "");
+    if (statusFilter === "open") p.delete("status");
+    else p.set("status", statusFilter);
+    if (targetFilter === "all") p.delete("target");
+    else p.set("target", targetFilter);
+    if (confidenceFilter === "all") p.delete("confidence");
+    else p.set("confidence", confidenceFilter);
+    if (sort === "priority") p.delete("sort");
+    else p.set("sort", sort);
+    if (query.trim()) p.set("q", query.trim());
+    else p.delete("q");
+    const next = p.toString();
+    const current = searchParams?.toString() ?? "";
+    if (next !== current) {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    }
+  }, [
+    statusFilter,
+    targetFilter,
+    confidenceFilter,
+    sort,
+    query,
+    searchParams,
+    pathname,
+    router
+  ]);
 
   const openStatuses: InvestigationStatus[] = [
     "awaiting_approval",
@@ -231,7 +267,11 @@ export function BobCopilotView({
           </div>
         ) : (
           sorted.map((inv) => (
-            <InvestigationRow key={inv.id} investigation={inv} />
+              <InvestigationRow
+                key={inv.id}
+                investigation={inv}
+                returnTo={returnTo}
+              />
           ))
         )}
       </div>

@@ -21,7 +21,7 @@ export function ActionCenterStrip({ actions }: { actions: Action[] }) {
       a.execution_status === "approved"
   ).length;
   const blocked = actions.filter(
-    (a) => a.execution_status === "policy_blocked"
+    (a) => a.execution_status === "rejected"
   ).length;
   const regression = actions.filter(
     (a) =>

@@ -4,8 +4,6 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { getBobInvestigations } from "@/lib/api";
 import { humanizeLabel } from "@/lib/present";
 
-export const dynamic = "force-dynamic";
-
 type MissingTarget = {
   type: string;
   id: string;

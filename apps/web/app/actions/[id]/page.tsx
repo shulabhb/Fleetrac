@@ -24,22 +24,26 @@ import { BobIcon } from "@/components/bob/bob-icon";
 import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
 import {
+  appendReturnTo,
   routes,
   routeToBobInvestigation,
   routeToControl,
   routeToIncident,
   routeToOutcome,
+  safeReturnTo,
   routeToSystem
 } from "@/lib/routes";
 
 type Props = {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string }>;
 };
 
-export const dynamic = "force-dynamic";
-
-export default async function ActionDetailPage({ params }: Props) {
+export default async function ActionDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const backHref = safeReturnTo(sp.returnTo, routes.actions());
+  const here = `/actions/${id}`;
   let actionRes;
   try {
     actionRes = await getAction(id);
@@ -73,7 +77,7 @@ export default async function ActionDetailPage({ params }: Props) {
     <section className="space-y-5">
       <div className="flex items-center justify-between">
         <Link
-          href={routes.actions()}
+          href={backHref}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -94,14 +98,14 @@ export default async function ActionDetailPage({ params }: Props) {
           action.related_incident_id
             ? {
                 label: "Incident",
-                href: routeToIncident(action.related_incident_id),
+                href: appendReturnTo(routeToIncident(action.related_incident_id), here),
                 icon: "incident"
               }
             : { label: "Incident", icon: "incident", missing: true },
           investigation
             ? {
                 label: "Bob investigation",
-                href: routeToBobInvestigation(investigation.id),
+                href: appendReturnTo(routeToBobInvestigation(investigation.id), here),
                 icon: "bob"
               }
             : { label: "Bob investigation", icon: "bob", missing: true },
@@ -109,7 +113,7 @@ export default async function ActionDetailPage({ params }: Props) {
           change
             ? {
                 label: "Measured outcome",
-                href: routeToOutcome(change.id),
+                href: appendReturnTo(routeToOutcome(change.id), here),
                 icon: "outcome"
               }
             : { label: "Measured outcome", icon: "outcome", missing: true }

@@ -12,12 +12,14 @@ import {
   getRules
 } from "@/lib/api";
 import {
+  appendReturnTo,
   routes,
   routeToAction,
   routeToBobInvestigation,
   routeToControl,
   routeToIncident,
   routeToOutcome,
+  safeReturnTo,
   routeToSystem
 } from "@/lib/routes";
 import { ExecutionEligibilityCard } from "@/components/actions/execution-eligibility";
@@ -37,12 +39,19 @@ import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
 import { humanizeLabel } from "@/lib/present";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string }>;
+};
 
-export const dynamic = "force-dynamic";
-
-export default async function BobInvestigationDetailPage({ params }: Props) {
+export default async function BobInvestigationDetailPage({
+  params,
+  searchParams
+}: Props) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const backHref = safeReturnTo(sp.returnTo, routes.bob());
+  const here = `/bob/${id}`;
   let investigation;
   try {
     const res = await getBobInvestigation(id);
@@ -198,7 +207,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
     <section className="space-y-5">
       <div className="flex items-center justify-between">
         <Link
-          href={routes.bob()}
+          href={backHref}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -218,7 +227,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
           incidentForBreadcrumb
             ? {
                 label: "Incident",
-                href: routeToIncident(incidentForBreadcrumb.id),
+                href: appendReturnTo(routeToIncident(incidentForBreadcrumb.id), here),
                 icon: "incident"
               }
             : { label: "Incident", icon: "incident", missing: true },
@@ -226,14 +235,14 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
           firstInvestigationAction
             ? {
                 label: "Governed action",
-                href: routeToAction(firstInvestigationAction.id),
+                href: appendReturnTo(routeToAction(firstInvestigationAction.id), here),
                 icon: "action"
               }
             : { label: "Governed action", icon: "action", missing: true },
           firstInvestigationChange
             ? {
                 label: "Measured outcome",
-                href: routeToOutcome(firstInvestigationChange.id),
+                href: appendReturnTo(routeToOutcome(firstInvestigationChange.id), here),
                 icon: "outcome"
               }
             : { label: "Measured outcome", icon: "outcome", missing: true }

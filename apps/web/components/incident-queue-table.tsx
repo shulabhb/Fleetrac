@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ChevronRight, Flag, Search } from "lucide-react";
 import { readDemoState } from "@/lib/demo-state";
 import { AnalyzeWithBob } from "@/components/bob/analyze-with-bob";
@@ -15,7 +15,12 @@ import {
   severityRank
 } from "@/lib/present";
 import { formatRelativeTime } from "@/lib/format";
-import { routes, routeToIncident, routeToSystem } from "@/lib/routes";
+import {
+  appendReturnTo,
+  routes,
+  routeToIncident,
+  routeToSystem
+} from "@/lib/routes";
 
 type Props = {
   incidents: any[];
@@ -23,6 +28,8 @@ type Props = {
 
 export function IncidentQueueTable({ incidents }: Props) {
   const params = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
   const systemScope = params?.get("system") ?? null;
   const [severityFilter, setSeverityFilter] = useState(
     params?.get("severity") ?? "all"
@@ -34,7 +41,8 @@ export function IncidentQueueTable({ incidents }: Props) {
     params?.get("owner") ?? "all"
   );
   const [lifecycleFilter, setLifecycleFilter] = useState("open");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(params?.get("q") ?? "");
+  const deferredQuery = useDeferredValue(query);
 
   const overlaid = useMemo(() => {
     const state = readDemoState();
@@ -51,7 +59,7 @@ export function IncidentQueueTable({ incidents }: Props) {
   }, [incidents]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     return overlaid
       .filter((incident) => {
         if (systemScope && incident.system_id !== systemScope) return false;
@@ -95,8 +103,41 @@ export function IncidentQueueTable({ incidents }: Props) {
     riskCategoryFilter,
     ownerTeamFilter,
     lifecycleFilter,
+    deferredQuery
+  ]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(params?.toString() ?? "");
+    if (severityFilter === "all") next.delete("severity");
+    else next.set("severity", severityFilter);
+    if (riskCategoryFilter === "all") next.delete("risk");
+    else next.set("risk", riskCategoryFilter);
+    if (ownerTeamFilter === "all") next.delete("owner");
+    else next.set("owner", ownerTeamFilter);
+    if (lifecycleFilter === "open") next.delete("lifecycle");
+    else next.set("lifecycle", lifecycleFilter);
+    if (query.trim()) next.set("q", query.trim());
+    else next.delete("q");
+
+    const current = params?.toString() ?? "";
+    const target = next.toString();
+    if (target !== current) {
+      router.replace(target ? `${pathname}?${target}` : pathname, {
+        scroll: false
+      });
+    }
+  }, [
+    params,
+    pathname,
+    router,
+    severityFilter,
+    riskCategoryFilter,
+    ownerTeamFilter,
+    lifecycleFilter,
     query
   ]);
+
+  const returnTo = params?.toString() ? `${pathname}?${params.toString()}` : pathname;
 
   const counts = useMemo(() => {
     const high = filtered.filter((i) => i.severity === "high").length;
@@ -129,7 +170,7 @@ export function IncidentQueueTable({ incidents }: Props) {
           </span>
           <div className="flex items-center gap-3">
             <Link
-              href={routeToSystem(systemScope)}
+              href={routeToSystem(systemScope!)}
               className="font-medium text-slate-700 hover:text-slate-900"
             >
               Open system →
@@ -238,7 +279,7 @@ export function IncidentQueueTable({ incidents }: Props) {
                 >
                   <td className="max-w-xs px-4 py-2.5">
                     <Link
-                      href={routeToIncident(incident.id)}
+                      href={appendReturnTo(routeToIncident(incident.id), returnTo)}
                       className="block truncate font-medium text-slate-900 hover:underline"
                     >
                       {incident.title}

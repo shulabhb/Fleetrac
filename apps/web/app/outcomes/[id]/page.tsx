@@ -21,20 +21,26 @@ import {
 } from "@/lib/governance-states";
 import { cn } from "@/lib/cn";
 import {
+  appendReturnTo,
   routes,
   routeToAction,
   routeToBobInvestigation,
   routeToIncident,
   routeToOutcomesForSystem,
+  safeReturnTo,
   routeToSystem
 } from "@/lib/routes";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string }>;
+};
 
-export const dynamic = "force-dynamic";
-
-export default async function OutcomeDetailPage({ params }: Props) {
+export default async function OutcomeDetailPage({ params, searchParams }: Props) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const backHref = safeReturnTo(sp.returnTo, routes.outcomes());
+  const here = `/outcomes/${id}`;
   let change;
   try {
     const res = await getChange(id);
@@ -64,7 +70,7 @@ export default async function OutcomeDetailPage({ params }: Props) {
     <section className="space-y-5">
       <div className="flex items-center justify-between">
         <Link
-          href={routes.outcomes()}
+          href={backHref}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -93,21 +99,24 @@ export default async function OutcomeDetailPage({ params }: Props) {
           change.source_incident_id
             ? {
                 label: "Incident",
-                href: routeToIncident(change.source_incident_id),
+                href: appendReturnTo(routeToIncident(change.source_incident_id), here),
                 icon: "incident"
               }
             : { label: "Incident", icon: "incident", missing: true },
           change.source_investigation_id
             ? {
                 label: "Bob investigation",
-                href: routeToBobInvestigation(change.source_investigation_id),
+                href: appendReturnTo(
+                  routeToBobInvestigation(change.source_investigation_id),
+                  here
+                ),
                 icon: "bob"
               }
             : { label: "Bob investigation", icon: "bob", missing: true },
           change.source_action_id
             ? {
                 label: "Governed action",
-                href: routeToAction(change.source_action_id),
+                href: appendReturnTo(routeToAction(change.source_action_id), here),
                 icon: "action"
               }
             : { label: "Governed action", icon: "action", missing: true },

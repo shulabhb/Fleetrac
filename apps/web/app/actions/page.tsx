@@ -2,8 +2,6 @@ import { ActionCenterView } from "@/components/actions/action-center-view";
 import { SectionTitle } from "@/components/ui/section-title";
 import { getActions, getChanges } from "@/lib/api";
 
-export const dynamic = "force-dynamic";
-
 type Segment =
   | "pending"
   | "ready"

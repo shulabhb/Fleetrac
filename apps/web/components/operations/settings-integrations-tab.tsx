@@ -111,16 +111,28 @@ export function SettingsIntegrationsTab({
 
   const openDetail = useCallback(
     (id: string) => {
-      router.replace(routeToIntegrationSettings(id), { scroll: false });
+      const next = routeToIntegrationSettings(id);
+      const current = searchParams?.toString()
+        ? `/settings?${searchParams.toString()}`
+        : "/settings";
+      if (current !== next) {
+        router.replace(next, { scroll: false });
+      }
     },
-    [router]
+    [router, searchParams]
   );
 
   const closeDetail = useCallback(() => {
     const p = new URLSearchParams(searchParams?.toString() ?? "");
     p.delete("integration");
     const s = p.toString();
-    router.replace(s ? `/settings?${s}` : "/settings", { scroll: false });
+    const next = s ? `/settings?${s}` : "/settings";
+    const current = searchParams?.toString()
+      ? `/settings?${searchParams.toString()}`
+      : "/settings";
+    if (next !== current) {
+      router.replace(next, { scroll: false });
+    }
   }, [router, searchParams]);
 
   const runDemoAction = useCallback((label: string) => {

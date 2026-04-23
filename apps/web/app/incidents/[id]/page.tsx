@@ -26,16 +26,19 @@ import {
   telemetryFieldForMetric
 } from "@/lib/present";
 import {
+  appendReturnTo,
   routes,
   routeToAction,
   routeToBobInvestigation,
   routeToControl,
   routeToIncidentsForSystem,
+  safeReturnTo,
   routeToSystem
 } from "@/lib/routes";
 
 type IncidentDetailPageProps = {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string }>;
 };
 
 function parseThreshold(value: string | number | null | undefined): number | null {
@@ -70,8 +73,14 @@ function metricColor(signal: string): string {
   }
 }
 
-export default async function IncidentDetailPage({ params }: IncidentDetailPageProps) {
+export default async function IncidentDetailPage({
+  params,
+  searchParams
+}: IncidentDetailPageProps) {
   const { id } = await params;
+  const sp = (await searchParams) ?? {};
+  const backHref = safeReturnTo(sp.returnTo, routes.incidents());
+  const here = `/incidents/${id}`;
   const [detail, incidentsRes, bobRes, actionsRes] = await Promise.all([
     getIncidentDetail(id),
     getIncidents(),
@@ -159,7 +168,7 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
         <Link
-          href={routes.incidents()}
+          href={backHref}
           className="inline-flex items-center gap-1 hover:text-slate-900"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -179,14 +188,14 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
           investigation
             ? {
                 label: "Bob investigation",
-                href: routeToBobInvestigation(investigation.id),
+                href: appendReturnTo(routeToBobInvestigation(investigation.id), here),
                 icon: "bob"
               }
             : { label: "Bob investigation", icon: "bob", missing: true },
           firstAction
             ? {
                 label: "Governed action",
-                href: routeToAction(firstAction.id),
+                href: appendReturnTo(routeToAction(firstAction.id), here),
                 icon: "action"
               }
             : { label: "Governed action", icon: "action", missing: true },

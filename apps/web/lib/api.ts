@@ -2,9 +2,17 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://localhost:8000";
 const API_PREFIX = "/api/v1";
 
-async function apiGet<T>(path: string): Promise<T> {
+type ApiGetOptions = {
+  /**
+   * ISR window in seconds for route segment cache. A short TTL keeps the
+   * control plane fresh while still enabling Next.js prefetch/cache wins.
+   */
+  revalidateSeconds?: number;
+};
+
+async function apiGet<T>(path: string, options?: ApiGetOptions): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${API_PREFIX}${path}`, {
-    next: { revalidate: 0 }
+    next: { revalidate: options?.revalidateSeconds ?? 20 }
   });
   if (!res.ok) {
     throw new Error(`API request failed for ${path}: ${res.status}`);
@@ -158,7 +166,8 @@ export async function getExecutionConsole(params?: {
   }
   const qs = search.toString();
   return apiGet<{ items: ExecutionConsoleEntry[] }>(
-    `/execution-console${qs ? `?${qs}` : ""}`
+    `/execution-console${qs ? `?${qs}` : ""}`,
+    { revalidateSeconds: 8 }
   );
 }
 

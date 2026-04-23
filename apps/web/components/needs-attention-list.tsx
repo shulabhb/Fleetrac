@@ -3,7 +3,7 @@ import { ArrowUpRight, Flag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { humanizeLabel } from "@/lib/present";
 import { AnalyzeWithBob } from "@/components/bob/analyze-with-bob";
-import { routeToIncident } from "@/lib/routes";
+import { appendReturnTo, routeToIncident, routes } from "@/lib/routes";
 
 type Row = {
   incident: any;
@@ -41,7 +41,7 @@ export function NeedsAttentionList({ rows }: { rows: Row[] }) {
         return (
           <li key={incident.id} className="relative">
             <Link
-              href={routeToIncident(incident.id)}
+              href={appendReturnTo(routeToIncident(incident.id), routes.dashboard())}
               aria-label={`Open incident ${incident.title}`}
               className="absolute inset-0 z-0 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
             />
