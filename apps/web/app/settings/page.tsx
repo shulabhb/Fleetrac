@@ -28,9 +28,9 @@ export default async function SettingsPage() {
   return (
     <section className="space-y-5">
       <SectionTitle
-        eyebrow="Control Plane"
+        eyebrow="Control plane"
         title="Settings"
-        caption="Integrations, governance defaults, environments, platform readiness and the operational acts Bob has prepared or executed. Fleetrac's operations control surface."
+        caption="Manage integrations and scopes, fleet policies, environment execution posture, connector health, and the governed execution log."
       />
       <SettingsView
         integrations={integrations}

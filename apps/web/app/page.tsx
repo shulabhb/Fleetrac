@@ -9,13 +9,14 @@ import {
   getSystems,
   getTelemetryEvents
 } from "@/lib/api";
-import { BobIcon } from "@/components/bob/bob-icon";
+import { BobDashboardStrip } from "@/components/bob/bob-dashboard-strip";
 import { ActionCenterStrip } from "@/components/actions/action-center-strip";
-import { BobImpactStrip } from "@/components/operations/bob-impact-strip";
 import { OutcomesStrip } from "@/components/operations/outcomes-strip";
 import { OutcomeMiniRow } from "@/components/operations/outcomes-view";
-import { ArrowRight } from "lucide-react";
-import { AnalyticsStrip, type AnalyticsView } from "@/components/charts/analytics-strip";
+import {
+  AnalyticsStrip,
+  type AnalyticsView
+} from "@/components/charts/analytics-strip";
 import { ActivityFeed } from "@/components/activity-feed";
 import { AtRiskList } from "@/components/at-risk-list";
 import { NeedsAttentionList } from "@/components/needs-attention-list";
@@ -26,6 +27,13 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { aggregateByDay, sumSeries } from "@/lib/analytics";
 import { humanizeLabel, postureRank, severityRank } from "@/lib/present";
 import { formatInteger, formatMetric } from "@/lib/format";
+import {
+  routes,
+  routeToBobForTarget,
+  routeToControl,
+  routeToIncident,
+  routeToSystem
+} from "@/lib/routes";
 
 export default async function DashboardPage() {
   const [
@@ -59,7 +67,8 @@ export default async function DashboardPage() {
   const openIncidents = incidents.filter((i) => i.incident_status !== "closed");
   const highSeverityIncidents = openIncidents.filter((i) => i.severity === "high");
   const pendingHumanReviews = incidents.filter(
-    (i) => i.review_required && ["detected", "under_review"].includes(i.incident_status)
+    (i) =>
+      i.review_required && ["detected", "under_review"].includes(i.incident_status)
   );
   const escalatedIncidents = incidents.filter(
     (i) => i.escalation_status === "escalated" || i.incident_status === "escalated"
@@ -82,7 +91,9 @@ export default async function DashboardPage() {
   const atRiskSystems = [...systems]
     .filter((s) => ["at_risk", "critical", "watch"].includes(s.risk_posture))
     .map((system) => {
-      const open = (incidentsBySystem[system.id] ?? []).filter((i) => i.incident_status !== "closed");
+      const open = (incidentsBySystem[system.id] ?? []).filter(
+        (i) => i.incident_status !== "closed"
+      );
       const highestSeverity = ["high", "medium", "low"].find((sev) =>
         open.some((i) => i.severity === sev)
       ) as "high" | "medium" | "low" | undefined;
@@ -125,6 +136,7 @@ export default async function DashboardPage() {
       value,
       href: `/incidents?risk=${encodeURIComponent(label)}`
     }))
+    .sort((a, b) => b.value - a.value)
     .slice(0, 8);
   const ownerBars = Object.entries(byOwner)
     .map(([label, value]) => ({
@@ -172,9 +184,9 @@ export default async function DashboardPage() {
   const analyticsViews: AnalyticsView[] = [
     {
       id: "drift",
-      label: "Fleet Drift Trend",
-      caption: "Last 7 days · average drift index across monitored systems",
-      info: "Drift index captures how far model behavior has moved from its validated baseline. Values above 0.25 historically correlate with reviewer-flagged regressions.",
+      label: "Drift index",
+      caption: "7-day fleet average.",
+      info: "Distance from validated baseline. Above 0.25 typically correlates with reviewer-flagged regressions.",
       data: driftTrend,
       unit: "",
       threshold: 0.25,
@@ -188,47 +200,47 @@ export default async function DashboardPage() {
     },
     {
       id: "incidents",
-      label: "Incident Volume",
-      caption: "Incidents detected per day, across all governance controls",
-      info: "Counts every incident created by the rule engine. Spikes usually indicate either a real upstream regression or a noisy control that may need retuning.",
+      label: "Incident volume",
+      caption: "Incidents detected per day.",
+      info: "Every incident raised by the rule engine. Spikes indicate either an upstream regression or a noisy control.",
       data: incidentVolumeTrend,
       unit: "",
       color: "#be123c",
       yDigits: 0,
-      summary: `${formatInteger(sumSeries(incidentVolumeTrend))} total`
+      summary: `${formatInteger(sumSeries(incidentVolumeTrend))} total · 7d`
     },
     {
       id: "escalations",
-      label: "Escalations Over Time",
-      caption: "Incidents promoted to leadership or specialist review per day",
-      info: "Escalations are a trailing indicator of governance severity. A sustained climb typically means existing playbooks are not resolving issues fast enough.",
+      label: "Escalations",
+      caption: "Routed to leadership or specialists, per day.",
+      info: "Trailing indicator of severity. A sustained climb means playbooks aren't resolving issues fast enough.",
       data: escalationTrend,
       unit: "",
       color: "#b45309",
       yDigits: 0,
-      summary: `${formatInteger(sumSeries(escalationTrend))} total`
+      summary: `${formatInteger(sumSeries(escalationTrend))} total · 7d`
     },
     {
       id: "review",
-      label: "Review Backlog",
-      caption: "New incidents requiring human review, per day",
-      info: "Tracks inflow into the human-in-the-loop queue. Use alongside Escalations to distinguish triage load from severity load.",
+      label: "Review backlog",
+      caption: "Incidents awaiting human review, per day.",
+      info: "Inflow into the reviewer queue. Pair with escalations to distinguish triage load from severity load.",
       data: reviewBacklogTrend,
       unit: "",
       color: "#0f766e",
       yDigits: 0,
-      summary: `${formatInteger(sumSeries(reviewBacklogTrend))} total`
+      summary: `${formatInteger(sumSeries(reviewBacklogTrend))} total · 7d`
     },
     {
       id: "audit",
-      label: "Audit Threshold Breaches",
-      caption: "Events falling below the 95% audit coverage minimum, per day",
-      info: "Audit coverage below 95% means we cannot reconstruct a decision trail on a material share of events — a regulated-AI red flag.",
+      label: "Audit coverage breaches",
+      caption: "Events below the 95% floor, per day.",
+      info: "Below 95% we cannot reconstruct a decision trail on a material share of events — a regulated-AI red flag.",
       data: auditBreachTrend,
       unit: "",
       color: "#0369a1",
       yDigits: 0,
-      summary: `${formatInteger(sumSeries(auditBreachTrend))} events`
+      summary: `${formatInteger(sumSeries(auditBreachTrend))} events · 7d`
     }
   ];
 
@@ -254,18 +266,27 @@ export default async function DashboardPage() {
       seenLabels.add(key);
       return true;
     })
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )
     .slice(0, 12);
 
+  // ---- KPI captions (short, operational)
+  const reviewTone: "neutral" | "warning" =
+    pendingHumanReviews.length > 3 ? "warning" : "neutral";
+  const auditTone: "ok" | "warning" =
+    systemsBelowAuditThreshold > 0 ? "warning" : "ok";
+
   return (
-    <section className="space-y-6">
+    <section className="space-y-7">
+      {/* ============ Overview ============ */}
       <SectionTitle
         eyebrow="Overview"
         title="Governance Operations"
-        caption={`${formatInteger(systems.length)} systems monitored · ${formatInteger(openIncidents.length)} open incidents · mock telemetry feed`}
+        caption={`${formatInteger(systems.length)} systems · ${formatInteger(openIncidents.length)} open incidents · observe → investigate → act → measure`}
         actions={
           <Link
-            href="/incidents"
+            href={routes.incidents()}
             className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:text-slate-900"
           >
             Open Incident Queue →
@@ -273,28 +294,32 @@ export default async function DashboardPage() {
         }
       />
 
+      {/* ============ KPI command row — Observe ============ */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
-          label="Open Incidents"
+          label="Open incidents"
           value={formatInteger(openIncidents.length)}
-          caption="Unresolved governance queue"
-          tooltip="Incidents that have not yet been mitigated, false-positive-closed, or explicitly resolved."
+          caption="Unresolved queue"
+          tooltip="Incidents not yet mitigated, closed as false positive, or resolved."
+          href={routes.incidents()}
         />
         <KpiCard
-          label="High Severity"
+          label="High severity"
           value={formatInteger(highSeverityIncidents.length)}
           caption="Requires immediate ownership"
           tone="urgent"
           highlight={highSeverityIncidents.length > 0}
-          tooltip="Open incidents classified as high severity by their triggering governance control."
+          tooltip="Open incidents classified as high severity by their triggering control."
+          href={routes.incidents()}
         />
         <KpiCard
-          label="Pending Reviews"
+          label="Pending reviews"
           value={formatInteger(pendingHumanReviews.length)}
           caption="Awaiting reviewer decision"
-          tone={pendingHumanReviews.length > 3 ? "warning" : "neutral"}
+          tone={reviewTone}
           highlight={pendingHumanReviews.length > 3}
-          tooltip="Incidents flagged for human-in-the-loop review that have not been dispositioned."
+          tooltip="Flagged for human review and not yet dispositioned."
+          href={routes.incidents()}
         />
         <KpiCard
           label="Escalated"
@@ -302,39 +327,87 @@ export default async function DashboardPage() {
           caption="Routed to leadership or specialists"
           tone={escalatedIncidents.length > 0 ? "urgent" : "neutral"}
           tooltip="Incidents promoted above standard review to a named escalation path."
+          href={routes.incidents()}
         />
         <KpiCard
-          label="Audit Gaps"
+          label="Audit gaps"
           value={formatInteger(systemsBelowAuditThreshold)}
-          caption="Systems below 95% coverage minimum"
-          tone={systemsBelowAuditThreshold > 0 ? "warning" : "ok"}
-          tooltip="Count of systems whose latest telemetry event shows audit coverage under the regulated 95% floor."
+          caption="Systems below 95% coverage"
+          tone={auditTone}
+          tooltip="Systems whose latest telemetry event is under the 95% audit coverage floor."
+          href={routes.systems()}
         />
       </div>
 
-      <BobDashboardStrip investigations={bobRes.items} />
-
-      <ActionCenterStrip actions={actionsRes.items} />
-
-      {allChanges.length > 0 ? <OutcomesStrip changes={allChanges} /> : null}
-
-      {impactRes?.item && <BobImpactStrip summary={impactRes.item} />}
-
-      {recentChanges.length > 0 && (
+      {/* ============ Needs Immediate Attention + Top at-risk ============ */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
-            title="Recent Changes & Impact"
-            caption="Measured outcome of the latest governed changes."
+            title="Needs immediate attention"
+            caption="Start here. Ranked by escalation, severity, review urgency."
             action={
               <Link
-                href="/outcomes"
+                href={routes.incidents()}
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
-                View all →
+                Open incident queue →
               </Link>
             }
           />
-          <div className="mt-3 space-y-2">
+          <div className="mt-1">
+            <NeedsAttentionList rows={urgentRanked} />
+          </div>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Top at-risk systems"
+            caption="By posture and open incident pressure."
+            action={
+              <Link
+                href={routes.systems()}
+                className="text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                All systems →
+              </Link>
+            }
+          />
+          <div className="mt-1">
+            <AtRiskList items={atRiskSystems} />
+          </div>
+        </Card>
+      </div>
+
+      {/* ============ Investigate → Act → Measure band ============ */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="label-eyebrow">Governance control plane</p>
+          <p className="hidden text-[11px] text-slate-500 sm:block">
+            Investigate → Act → Measure
+          </p>
+        </div>
+        <BobDashboardStrip investigations={bobRes.items} />
+        <ActionCenterStrip actions={actionsRes.items} />
+        {allChanges.length > 0 ? (
+          <OutcomesStrip changes={allChanges} bobImpact={impactRes?.item} />
+        ) : null}
+      </div>
+
+      {/* ============ Recent Changes & Impact ============ */}
+      {recentChanges.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Recent changes & impact"
+            caption="Measured outcome of the latest governed changes."
+            action={
+              <Link
+                href={routes.outcomes()}
+                className="text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                View all outcomes →
+              </Link>
+            }
+          />
+          <div className="mt-3 space-y-1.5">
             {recentChanges.map((c: any) => (
               <OutcomeMiniRow key={c.id} change={c} />
             ))}
@@ -342,153 +415,56 @@ export default async function DashboardPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <AnalyticsStrip views={analyticsViews} defaultViewId="drift" />
-        <Card>
-          <CardHeader
-            title="Top At-Risk Systems"
-            caption="Ordered by posture and open incident pressure"
-          />
-          <div className="mt-2">
-            <AtRiskList items={atRiskSystems} />
-          </div>
-        </Card>
-      </div>
+      {/* ============ Fleet analytics ============ */}
+      <AnalyticsStrip views={analyticsViews} defaultViewId="drift" />
 
+      {/* ============ Pressure distribution ============ */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Incidents by Risk Category"
-            caption="Breakdown of the full incident population"
+            title="Incidents by risk category"
+            caption="Where control pressure is concentrated."
           />
           <div className="mt-3">
-            <BarList items={riskBars} tone="accent" />
+            <BarList items={riskBars} tone="accent" showPercent />
           </div>
         </Card>
         <Card>
           <CardHeader
-            title="Incidents by Owner Team"
-            caption="Where the governance load is concentrated"
+            title="Incidents by owner team"
+            caption="Governance load across ownership."
           />
           <div className="mt-3">
-            <BarList items={ownerBars} tone="accent" />
+            <BarList items={ownerBars} tone="accent" showPercent />
           </div>
         </Card>
       </div>
 
+      {/* ============ Activity ============ */}
       <Card>
         <CardHeader
-          title="Needs Immediate Attention"
-          caption="Ranked by escalation, severity, and review urgency"
-          action={
-            <Link
-              href="/incidents"
-              className="text-xs font-medium text-slate-600 hover:text-slate-900"
-            >
-              View all →
-            </Link>
-          }
-        />
-        <div className="mt-1">
-          <NeedsAttentionList rows={urgentRanked} />
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader
-          title="Recent Governance Activity"
-          caption="Incidents, controls, reviews, and audit events across the fleet"
+          title="Recent governance activity"
+          caption="Incidents, controls, reviews, and audit events."
         />
         <div className="mt-3">
           <ActivityFeed
             items={activityItems}
             hrefFor={(item) => {
               if (!item.targetId) return null;
-              // Bob events that target a control should deep-link to Bob
               if (item.action?.startsWith("bob.") && item.targetType === "control") {
-                return `/bob/for/control/${item.targetId}`;
+                return routeToBobForTarget("control", item.targetId);
               }
               if (item.action?.startsWith("bob.") && item.targetType === "incident") {
-                return `/bob/for/incident/${item.targetId}`;
+                return routeToBobForTarget("incident", item.targetId);
               }
-              if (item.targetId.startsWith("inc_")) return `/incidents/${item.targetId}`;
-              if (item.targetId.startsWith("sys_")) return `/systems/${item.targetId}`;
-              if (item.targetId.startsWith("rule_")) return `/controls`;
+              if (item.targetId.startsWith("inc_")) return routeToIncident(item.targetId);
+              if (item.targetId.startsWith("sys_")) return routeToSystem(item.targetId);
+              if (item.targetId.startsWith("rule_")) return routeToControl(item.targetId);
               return null;
             }}
           />
         </div>
       </Card>
     </section>
-  );
-}
-
-function BobDashboardStrip({ investigations }: { investigations: any[] }) {
-  const open = investigations.filter((i) =>
-    ["draft", "ready_for_review", "awaiting_approval"].includes(i.status)
-  );
-  const awaiting = investigations.filter((i) => i.status === "awaiting_approval");
-  const recurring = investigations.filter((i) => i.recurring_issue_flag);
-  const pendingRecs = investigations.reduce(
-    (acc: number, inv: any) =>
-      acc + (inv.recommendations || []).filter((r: any) => r.approval_status === "pending").length,
-    0
-  );
-
-  return (
-    <div className="relative flex flex-wrap items-center gap-4 rounded-lg border border-indigo-100 bg-white px-4 py-3">
-      <span
-        aria-hidden
-        className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r bg-gradient-to-b from-indigo-400 to-indigo-200"
-      />
-      <div className="flex items-center gap-2 pl-2">
-        <BobIcon size="sm" />
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
-            Bob Copilot · Governance AI layer
-          </p>
-          <p className="text-xs text-slate-600">
-            Mock investigations generated from live incident, system and control state.
-          </p>
-        </div>
-      </div>
-      <div className="ml-auto flex flex-wrap items-center gap-4 text-xs">
-        <StripStat label="Open investigations" value={open.length} />
-        <StripStat label="Awaiting approval" value={awaiting.length} emphasize={awaiting.length > 0} />
-        <StripStat label="Pending recommendations" value={pendingRecs} />
-        <StripStat label="Recurring patterns" value={recurring.length} />
-        <Link
-          href="/bob"
-          className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50"
-        >
-          Open Bob Copilot
-          <ArrowRight className="h-3 w-3" />
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function StripStat({
-  label,
-  value,
-  emphasize
-}: {
-  label: string;
-  value: number;
-  emphasize?: boolean;
-}) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <span
-        className={
-          "text-sm font-semibold tabular-nums " +
-          (emphasize ? "text-amber-700" : "text-slate-900")
-        }
-      >
-        {formatInteger(value)}
-      </span>
-      <span className="text-[11px] text-slate-500">{label}</span>
-    </div>
   );
 }

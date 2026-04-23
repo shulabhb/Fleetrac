@@ -23,14 +23,35 @@ const TARGET_OPTIONS: TargetType[] = ["incident", "system", "control"];
 
 type Props = {
   investigations: BobInvestigation[];
+  defaultStatusFilter?: string;
 };
 
 type StatusFilter = "all" | "open" | InvestigationStatus;
 type TargetFilter = "all" | TargetType;
 type SortKey = "priority" | "updated" | "confidence";
 
-export function BobCopilotView({ investigations }: Props) {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
+const VALID_STATUS_FILTERS: StatusFilter[] = [
+  "all",
+  "open",
+  "awaiting_approval",
+  "ready_for_review",
+  "draft",
+  "approved",
+  "monitoring_outcome",
+  "executed",
+  "rejected"
+];
+
+export function BobCopilotView({
+  investigations,
+  defaultStatusFilter
+}: Props) {
+  const initialStatus: StatusFilter =
+    defaultStatusFilter &&
+    VALID_STATUS_FILTERS.includes(defaultStatusFilter as StatusFilter)
+      ? (defaultStatusFilter as StatusFilter)
+      : "open";
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus);
   const [targetFilter, setTargetFilter] = useState<TargetFilter>("all");
   const [confidenceFilter, setConfidenceFilter] = useState<"all" | "high" | "medium" | "low">(
     "all"
@@ -117,25 +138,25 @@ export function BobCopilotView({ investigations }: Props) {
         <KpiCard
           label="Open investigations"
           value={kpis.open}
-          caption="Draft + ready for review + awaiting approval"
+          caption="Draft, ready, or awaiting approval"
           highlight={kpis.open > 0}
         />
         <KpiCard
           label="Awaiting approval"
           value={kpis.awaiting}
-          caption="Needs a human governance decision"
+          caption="Requires a governance decision"
           tone={kpis.awaiting > 0 ? "warning" : "neutral"}
           highlight={kpis.awaiting > 0}
         />
         <KpiCard
           label="Pending recommendations"
           value={kpis.pendingApprovals}
-          caption="Structural fixes Bob is holding for approval"
+          caption="Held for approval"
         />
         <KpiCard
           label="Recurring patterns"
           value={kpis.recurring}
-          caption="Investigations flagged as repeat governance signals"
+          caption="Repeat governance signals"
         />
       </div>
 
@@ -199,7 +220,7 @@ export function BobCopilotView({ investigations }: Props) {
               Showing {sorted.length} of {investigations.length} investigations
             </span>
           </div>
-          <span>Mock analysis; no live model calls yet.</span>
+          <span>Mock analysis; no live model calls.</span>
         </div>
       </div>
 

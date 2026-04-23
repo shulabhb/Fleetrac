@@ -4,7 +4,35 @@ import { getActions, getChanges } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-export default async function ActionCenterPage() {
+type Segment =
+  | "pending"
+  | "ready"
+  | "blocked"
+  | "executed"
+  | "rollback"
+  | "closed_rejected";
+
+const VALID_SEGMENTS: Segment[] = [
+  "pending",
+  "ready",
+  "blocked",
+  "executed",
+  "rollback",
+  "closed_rejected"
+];
+
+export default async function ActionCenterPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
+  const params = (await searchParams) ?? {};
+  const requestedTab = params.tab;
+  const defaultTab: Segment | undefined =
+    requestedTab && VALID_SEGMENTS.includes(requestedTab as Segment)
+      ? (requestedTab as Segment)
+      : undefined;
+
   const [{ items }, changesRes] = await Promise.all([
     getActions(),
     getChanges().catch(() => ({ items: [] }))
@@ -12,11 +40,15 @@ export default async function ActionCenterPage() {
   return (
     <section className="space-y-5">
       <SectionTitle
-        eyebrow="Governed Remediation"
+        eyebrow="Act · Governed remediation"
         title="Action Center"
-        caption="Decisions and execution for governed actions. Every item has an explicit approver, risk level, and execution boundary. Post-execution impact lives in Outcomes."
+        caption="Bob drafts. Humans approve. Execution is bounded, audit-linked, and reversible."
       />
-      <ActionCenterView actions={items} changes={changesRes.items} />
+      <ActionCenterView
+        actions={items}
+        changes={changesRes.items}
+        defaultTab={defaultTab}
+      />
     </section>
   );
 }

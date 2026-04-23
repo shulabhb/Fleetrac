@@ -9,6 +9,7 @@ import {
   Sparkles
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { routes } from "./routes";
 
 export type NavItem = {
   label: string;
@@ -18,12 +19,12 @@ export type NavItem = {
 };
 
 export const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Incident Queue", href: "/incidents", icon: AlertTriangle },
-  { label: "Governance Controls", href: "/controls", icon: ShieldCheck },
-  { label: "Systems", href: "/systems", icon: Server },
-  { label: "Action Center", href: "/actions", icon: PlayCircle },
-  { label: "Outcomes", href: "/outcomes", icon: LineChart },
-  { label: "Bob Copilot", href: "/bob", icon: Sparkles },
-  { label: "Settings", href: "/settings", icon: Settings }
+  { label: "Dashboard", href: routes.dashboard(), icon: LayoutDashboard },
+  { label: "Incident Queue", href: routes.incidents(), icon: AlertTriangle },
+  { label: "Governance Controls", href: routes.controls(), icon: ShieldCheck },
+  { label: "Systems", href: routes.systems(), icon: Server },
+  { label: "Action Center", href: routes.actions(), icon: PlayCircle },
+  { label: "Outcomes", href: routes.outcomes(), icon: LineChart },
+  { label: "Bob Copilot", href: routes.bob(), icon: Sparkles },
+  { label: "Settings", href: routes.settings(), icon: Settings }
 ];

@@ -156,6 +156,8 @@ def _build_entry(action, rng: random.Random) -> ExecutionConsoleEntry:
         integration_label = "Argo Workflows"
     elif integration_id == "int_internal_model_api":
         integration_label = "Internal Model APIs"
+    elif integration_id == "int_slack":
+        integration_label = "Slack"
 
     return ExecutionConsoleEntry(
         id=f"ec_{action.id}",
@@ -227,6 +229,44 @@ def generate_execution_console_store() -> dict[str, list[ExecutionConsoleEntry]]
                     ),
                 )
             )
+
+    # Collaboration / notification path — still governed, auditable rows.
+    entries.append(
+        ExecutionConsoleEntry(
+            id="ec_slack_bob_approval",
+            timestamp=now - timedelta(minutes=12),
+            actor="Bob (Governance Copilot)",
+            action_code="slack.recommendation.post",
+            action_label="Posted Bob recommendation for approval (Slack)",
+            severity="info",
+            target_system_id=None,
+            target_system_name=None,
+            action_id=None,
+            investigation_id=None,
+            integration_id="int_slack",
+            integration_label="Slack",
+            outcome="executed",
+            details="Thread in #ai-governance with policy link and one-click approve route.",
+        )
+    )
+    entries.append(
+        ExecutionConsoleEntry(
+            id="ec_slack_incident_digest",
+            timestamp=now - timedelta(hours=2, minutes=8),
+            actor="Fleetrac Notifications",
+            action_code="slack.incident.digest",
+            action_label="Incident summary pushed to owner channel",
+            severity="notice",
+            target_system_id=None,
+            target_system_name=None,
+            action_id=None,
+            investigation_id=None,
+            integration_id="int_slack",
+            integration_label="Slack",
+            outcome="executed",
+            details="Digest included severity mix, open actions, and SLA clock.",
+        )
+    )
 
     entries.sort(key=lambda e: e.timestamp, reverse=True)
     return {"entries": entries}

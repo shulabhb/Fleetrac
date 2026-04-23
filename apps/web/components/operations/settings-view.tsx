@@ -1,17 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  CheckCircle2,
-  Cable,
-  GitBranch,
-  Globe,
-  HardDrive,
-  ShieldCheck,
-  Terminal,
-  Workflow
-} from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CheckCircle2, Cable, Globe, HardDrive, ShieldCheck, Terminal } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,20 +12,14 @@ import type {
   EnvironmentConfig,
   ExecutionConsoleEntry,
   Integration,
-  OperationsPolicy
+  OperationsPolicy,
+  OperationsPolicyCategory
 } from "@/lib/operations-types";
 import { formatRelativeTime } from "@/lib/format";
-import {
-  ActionScopeBadge,
-  AuthStatusBadge,
-  ConnectionStatusBadge,
-  ConnectorTypeChip,
-  EnvironmentChip,
-  ServiceHealthBadge,
-  SyncStatusBadge,
-  TelemetryAvailabilityBadge
-} from "./operations-badges";
+import { EnvironmentChip, ServiceHealthBadge } from "./operations-badges";
 import { ExecutionConsole } from "./execution-console";
+import { SettingsIntegrationsTab } from "./settings-integrations-tab";
+import { routeToIntegrationSettings } from "@/lib/routes";
 
 type Tab =
   | "integrations"
@@ -41,6 +27,19 @@ type Tab =
   | "environments"
   | "status"
   | "console";
+
+const VALID_TABS: Tab[] = [
+  "integrations",
+  "policies",
+  "environments",
+  "status",
+  "console"
+];
+
+function normalizeTab(raw: string | null | undefined): Tab {
+  if (raw && (VALID_TABS as string[]).includes(raw)) return raw as Tab;
+  return "integrations";
+}
 
 const TABS: { id: Tab; label: string; caption: string; icon: any }[] = [
   {
@@ -51,7 +50,7 @@ const TABS: { id: Tab; label: string; caption: string; icon: any }[] = [
   },
   {
     id: "policies",
-    label: "Operations Policies",
+    label: "Operations policies",
     caption: "Fleet-wide governance defaults for Bob and actions.",
     icon: ShieldCheck
   },
@@ -63,13 +62,13 @@ const TABS: { id: Tab; label: string; caption: string; icon: any }[] = [
   },
   {
     id: "status",
-    label: "Platform Status",
-    caption: "Connector + service readiness.",
+    label: "Platform status",
+    caption: "Connector and service readiness.",
     icon: HardDrive
   },
   {
     id: "console",
-    label: "Execution Console",
+    label: "Execution console",
     caption: "Governed operational acts Bob has prepared or executed.",
     icon: Terminal
   }
@@ -84,14 +83,44 @@ type Props = {
 };
 
 export function SettingsView(props: Props) {
-  const [tab, setTab] = useState<Tab>("integrations");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlTab = normalizeTab(searchParams?.get("tab"));
+  const integrationInUrl = Boolean(searchParams?.get("integration"));
+  const effectiveTab: Tab = integrationInUrl ? "integrations" : urlTab;
+  const [tab, setTab] = useState<Tab>(effectiveTab);
+
+  // Keep internal state in sync with external URL changes (e.g. user navigates
+  // via a deep link like `/settings?tab=policies` or uses browser back/forward).
+  useEffect(() => {
+    setTab(effectiveTab);
+  }, [effectiveTab]);
+
+  const handleTabChange = (next: Tab) => {
+    setTab(next);
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (next !== "integrations" && next !== "console") {
+      params.delete("integration");
+    }
+    if (next === "integrations") {
+      params.delete("tab");
+    } else {
+      params.set("tab", next);
+    }
+    const query = params.toString();
+    router.replace(query ? `/settings?${query}` : "/settings", {
+      scroll: false
+    });
+  };
+
+  const integrationFilterId = searchParams?.get("integration");
 
   return (
     <div className="space-y-5">
-      <TabBar tab={tab} onChange={setTab} />
+      <TabBar tab={tab} onChange={handleTabChange} />
 
       {tab === "integrations" && (
-        <IntegrationsTab integrations={props.integrations} />
+        <SettingsIntegrationsTab integrations={props.integrations} />
       )}
       {tab === "policies" && <PoliciesTab policies={props.policies} />}
       {tab === "environments" && (
@@ -99,7 +128,10 @@ export function SettingsView(props: Props) {
       )}
       {tab === "status" && <StatusTab connectors={props.connectors} />}
       {tab === "console" && (
-        <ExecutionConsole entries={props.executionConsole} />
+        <ExecutionConsole
+          entries={props.executionConsole}
+          initialIntegrationId={integrationFilterId}
+        />
       )}
     </div>
   );
@@ -131,7 +163,7 @@ function TabBar({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) {
   );
 }
 
-// ---------- Integrations ----------
+// ---------- Shared helpers ----------
 
 function groupBy<T, K extends string>(items: T[], key: (t: T) => K) {
   return items.reduce<Record<K, T[]>>((acc, item) => {
@@ -140,126 +172,6 @@ function groupBy<T, K extends string>(items: T[], key: (t: T) => K) {
     acc[k].push(item);
     return acc;
   }, {} as Record<K, T[]>);
-}
-
-const INTEGRATION_GROUP_ORDER = [
-  "cloud",
-  "data_platform",
-  "model_provider",
-  "internal_model_api",
-  "observability",
-  "ticketing",
-  "workflow",
-  "model_registry"
-] as const;
-
-const INTEGRATION_GROUP_LABELS: Record<string, string> = {
-  cloud: "Cloud",
-  data_platform: "Data platforms",
-  model_provider: "Model providers",
-  internal_model_api: "Internal model APIs",
-  observability: "Observability",
-  ticketing: "Ticketing",
-  workflow: "Workflow runners",
-  model_registry: "Model registries"
-};
-
-function IntegrationsTab({ integrations }: { integrations: Integration[] }) {
-  const grouped = useMemo(
-    () => groupBy(integrations, (i) => i.kind),
-    [integrations]
-  );
-
-  const totals = useMemo(() => {
-    const connected = integrations.filter(
-      (i) => i.connection_status === "connected"
-    ).length;
-    const issues = integrations.length - connected;
-    return { connected, issues };
-  }, [integrations]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-[12px]">
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-slate-900 text-white">
-          <Cable className="h-3 w-3" />
-        </span>
-        <span className="font-medium text-slate-800">
-          {integrations.length} integrations configured
-        </span>
-        <Badge tone="low">{totals.connected} connected</Badge>
-        {totals.issues > 0 && (
-          <Badge tone="medium">{totals.issues} need attention</Badge>
-        )}
-        <span className="ml-auto text-[11px] text-slate-500">
-          Read-only configuration view. Changes route through Platform
-          Engineering.
-        </span>
-      </div>
-
-      {INTEGRATION_GROUP_ORDER.map((kind) => {
-        const items = grouped[kind];
-        if (!items?.length) return null;
-        return (
-          <section key={kind} className="space-y-2">
-            <h3 className="label-eyebrow">{INTEGRATION_GROUP_LABELS[kind]}</h3>
-            <div className="grid gap-3 md:grid-cols-2">
-              {items.map((i) => (
-                <IntegrationCard key={i.id} integration={i} />
-              ))}
-            </div>
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
-function IntegrationCard({ integration }: { integration: Integration }) {
-  return (
-    <Card density="compact" className="space-y-3">
-      <CardHeader
-        title={
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{integration.provider}</span>
-            <ConnectionStatusBadge status={integration.connection_status} />
-          </div>
-        }
-        caption={integration.note ?? undefined}
-        action={<ConnectorTypeChip type={integration.connector_type} />}
-      />
-      <div className="flex flex-wrap gap-1.5">
-        <AuthStatusBadge status={integration.auth_status} />
-        <SyncStatusBadge status={integration.sync_status} />
-        <TelemetryAvailabilityBadge level={integration.telemetry_availability} />
-        <ActionScopeBadge scope={integration.action_scope} />
-        <Badge tone="outline">
-          Config · {integration.config_access.replace("_", " ")}
-        </Badge>
-      </div>
-      <div className="grid gap-1.5 text-[12px] text-slate-700">
-        <InfoRow label="Environments">
-          <div className="flex flex-wrap justify-end gap-1">
-            {integration.environments.map((e) => (
-              <Badge key={e} tone="outline">
-                {e}
-              </Badge>
-            ))}
-          </div>
-        </InfoRow>
-        <InfoRow label="Last sync">
-          {formatRelativeTime(integration.last_sync)}
-        </InfoRow>
-        {integration.capabilities.length > 0 && (
-          <InfoRow label="Capabilities">
-            <span className="text-right text-[11px] text-slate-600">
-              {integration.capabilities.join(" · ")}
-            </span>
-          </InfoRow>
-        )}
-      </div>
-    </Card>
-  );
 }
 
 function InfoRow({
@@ -291,11 +203,11 @@ const POLICY_CATEGORY_LABELS: Record<string, string> = {
 };
 
 function PoliciesTab({ policies }: { policies: OperationsPolicy[] }) {
-  const grouped = useMemo(
-    () => groupBy(policies, (p) => p.category),
-    [policies]
-  );
-  const order = [
+  const grouped = useMemo(() => {
+    const g = groupBy(policies, (p) => p.category);
+    return g as Record<OperationsPolicyCategory, OperationsPolicy[]>;
+  }, [policies]);
+  const order: OperationsPolicyCategory[] = [
     "bob_defaults",
     "approvals",
     "execution",
@@ -306,16 +218,21 @@ function PoliciesTab({ policies }: { policies: OperationsPolicy[] }) {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-600">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-slate-500" />
-          <span className="font-medium text-slate-800">
-            Fleet-wide governance defaults
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-slate-500" />
+            <span className="font-medium text-slate-800">
+              Fleet-wide governance defaults
+            </span>
+          </div>
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+            Change requires approval
           </span>
         </div>
         <p className="mt-1">
-          These values are applied unless overridden by an environment- or
-          system-specific policy. Changes require Governance Office approval
-          and are logged to the audit stream.
+          Applied unless overridden by an environment or system policy. Edits
+          here open a governed change request — nothing applies until the
+          Governance Office approves and audit records the decision.
         </p>
       </div>
 
@@ -338,6 +255,10 @@ function PoliciesTab({ policies }: { policies: OperationsPolicy[] }) {
 }
 
 function PolicyRow({ policy }: { policy: OperationsPolicy }) {
+  const [open, setOpen] = useState(false);
+  const [proposal, setProposal] = useState(policy.current_value);
+  const [notice, setNotice] = useState<string | null>(null);
+
   return (
     <Card density="compact">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -347,25 +268,35 @@ function PolicyRow({ policy }: { policy: OperationsPolicy }) {
           </p>
           <p className="text-[12px] text-slate-500">{policy.description}</p>
         </div>
-        <div className="flex flex-col items-end gap-1 text-right">
-          <span className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-2 py-0.5 text-[11px] font-medium text-white">
-            <CheckCircle2 className="h-3 w-3" />
+        <div className="flex flex-col items-end gap-1.5 text-right">
+          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-800">
+            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
             {policy.current_value.replace(/_/g, " ")}
           </span>
           <span className="text-[11px] text-slate-500">
             Scope · {policy.scope.replace("_", " ")}
           </span>
+          <button
+            type="button"
+            onClick={() => {
+              setProposal(policy.current_value);
+              setOpen(true);
+            }}
+            className="text-[11px] font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+          >
+            Propose change
+          </button>
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-        <span className="text-slate-500">Allowed:</span>
+        <span className="text-slate-500">Allowed values:</span>
         {policy.allowed_values.map((v) => (
           <span
             key={v}
             className={cn(
               "rounded-md px-1.5 py-0.5 ring-1 ring-slate-200",
               v === policy.current_value
-                ? "bg-slate-900 text-white ring-slate-900"
+                ? "bg-slate-800 text-white ring-slate-800"
                 : "bg-white text-slate-600"
             )}
           >
@@ -373,10 +304,69 @@ function PolicyRow({ policy }: { policy: OperationsPolicy }) {
           </span>
         ))}
         <span className="ml-auto">
-          Last changed by {policy.last_changed_by} ·{" "}
+          Owner on record · {policy.last_changed_by} ·{" "}
           {formatRelativeTime(policy.last_changed_at)}
         </span>
       </div>
+      {notice ? (
+        <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-700">
+          {notice}
+        </p>
+      ) : null}
+      {open ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => setOpen(false)}
+        >
+          <Card
+            className="max-w-md p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold text-slate-900">
+              Propose change · {policy.label}
+            </p>
+            <p className="mt-1 text-[12px] text-slate-500">
+              Select a target value. This records a change request for the
+              Governance Office — it does not apply immediately.
+            </p>
+            <label className="mt-3 block text-[11px] font-medium text-slate-600">
+              Target value
+            </label>
+            <select
+              className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1.5 text-[12px]"
+              value={proposal}
+              onChange={(e) => setProposal(e.target.value)}
+            >
+              {policy.allowed_values.map((v) => (
+                <option key={v} value={v}>
+                  {v.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setNotice(
+                    `Change request logged (demo): ${policy.label} → ${proposal.replace(/_/g, " ")}. Pending Governance Office approval.`
+                  );
+                }}
+                className="rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-white hover:bg-slate-800"
+              >
+                Submit request
+              </button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -398,8 +388,14 @@ function EnvironmentsTab({
 }
 
 function EnvironmentCard({ env }: { env: EnvironmentConfig }) {
+  const prod = env.kind === "production";
   return (
-    <Card className="space-y-3">
+    <Card
+      className={cn(
+        "space-y-3",
+        prod && "ring-1 ring-slate-300/80"
+      )}
+    >
       <CardHeader
         title={
           <div className="flex flex-wrap items-center gap-2">
@@ -410,6 +406,47 @@ function EnvironmentCard({ env }: { env: EnvironmentConfig }) {
         }
         caption={env.description}
       />
+      <div className="rounded-md border border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-700">
+        <p className="font-medium text-slate-800">Operational posture</p>
+        <ul className="mt-1.5 grid gap-1 sm:grid-cols-2">
+          <li>
+            <span className="text-slate-500">Bob mode:</span>{" "}
+            <span className="font-medium text-slate-900">
+              {env.default_bob_mode.replace(/_/g, " ")}
+            </span>
+          </li>
+          <li>
+            <span className="text-slate-500">Auto-exec low-risk:</span>{" "}
+            <span className="font-medium text-slate-900">
+              {env.auto_execute_low_risk ? "Allowed" : "Blocked"}
+            </span>
+          </li>
+          <li>
+            <span className="text-slate-500">Maintenance silences alerts:</span>{" "}
+            <span className="font-medium text-slate-900">
+              {env.maintenance_suppresses_alerts ? "Yes" : "No"}
+            </span>
+          </li>
+          <li>
+            <span className="text-slate-500">Rollback dual approval:</span>{" "}
+            <span className="font-medium text-slate-900">
+              {env.rollback_requires_dual_approval ? "Required" : "Not required"}
+            </span>
+          </li>
+          <li>
+            <span className="text-slate-500">Threshold tuning:</span>{" "}
+            <span className="font-medium text-slate-900">
+              {env.threshold_tuning_pre_approved ? "Pre-approved" : "Review each"}
+            </span>
+          </li>
+          <li>
+            <span className="text-slate-500">Tickets:</span>{" "}
+            <span className="font-medium text-slate-900">
+              {env.ticket_creation_always_allowed ? "Always on" : "Policy-gated"}
+            </span>
+          </li>
+        </ul>
+      </div>
       <div className="grid gap-1.5 text-[12px] text-slate-700">
         <InfoRow label="Default Bob mode">
           <span className="font-mono text-[11px] text-slate-600">
@@ -453,11 +490,14 @@ function EnvironmentCard({ env }: { env: EnvironmentConfig }) {
 function ToggleRow({ label, on }: { label: string; on: boolean }) {
   return (
     <InfoRow label={label}>
-      {on ? (
-        <Badge tone="low">Enabled</Badge>
-      ) : (
-        <Badge tone="outline">Disabled</Badge>
-      )}
+      <span
+        className={cn(
+          "font-medium tabular-nums",
+          on ? "text-slate-900" : "text-slate-400"
+        )}
+      >
+        {on ? "On" : "Off"}
+      </span>
     </InfoRow>
   );
 }
@@ -470,6 +510,8 @@ const CONNECTOR_AREA_LABELS: Record<string, string> = {
   config_metadata: "Config metadata",
   action_runner: "Action runner",
   ticketing: "Ticketing",
+  collaboration: "Collaboration",
+  alerting: "Alerting & on-call",
   workflow_runner: "Workflow runner",
   bob_investigation: "Bob investigation service",
   version_sync: "Version sync",
@@ -494,12 +536,18 @@ function StatusTab({ connectors }: { connectors: ConnectorStatus[] }) {
           {healthy} / {total} healthy
         </Badge>
         <span className="ml-auto text-[11px] text-slate-500">
-          Connector + service status powering the governance operations plane.
+          Connector and service readiness.
         </span>
       </div>
 
       <div className="grid gap-2">
-        {Object.entries(grouped).map(([area, items]) => (
+        {Object.entries(grouped)
+          .sort(([a], [b]) =>
+            (CONNECTOR_AREA_LABELS[a] ?? a).localeCompare(
+              CONNECTOR_AREA_LABELS[b] ?? b
+            )
+          )
+          .map(([area, items]) => (
           <Card key={area} density="compact" className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-[12px] font-semibold text-slate-900">
@@ -519,7 +567,7 @@ function StatusTab({ connectors }: { connectors: ConnectorStatus[] }) {
                       <p className="text-[11px] text-slate-500">{c.note}</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <ServiceHealthBadge health={c.health} />
                     {c.latency_ms != null && (
                       <span className="text-[11px] text-slate-500 tabular-nums">
@@ -529,6 +577,14 @@ function StatusTab({ connectors }: { connectors: ConnectorStatus[] }) {
                     <span className="text-[11px] text-slate-400">
                       {formatRelativeTime(c.last_check_at)}
                     </span>
+                    {c.integration_id ? (
+                      <Link
+                        href={routeToIntegrationSettings(c.integration_id)}
+                        className="text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
+                      >
+                        Integration →
+                      </Link>
+                    ) : null}
                   </div>
                 </div>
               ))}

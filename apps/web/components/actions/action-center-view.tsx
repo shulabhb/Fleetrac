@@ -9,14 +9,17 @@ import { KpiCard } from "@/components/kpi-card";
 import { ActionCard } from "./action-card";
 import { actionTypeLabel } from "./index";
 import { OutcomesStrip } from "@/components/operations/outcomes-strip";
+import { routeToOutcome } from "@/lib/routes";
 
 type Segment =
   | "pending"
   | "ready"
-  | "executed"
   | "blocked"
+  | "executed"
   | "rollback"
   | "closed_rejected";
+
+type SegmentGroup = "decision" | "post_execution";
 
 type Props = {
   actions: Action[];
@@ -24,40 +27,54 @@ type Props = {
   defaultTab?: Segment;
 };
 
-const SEGMENTS: { id: Segment; label: string; caption: string }[] = [
+type SegmentDef = {
+  id: Segment;
+  label: string;
+  group: SegmentGroup;
+  caption: string;
+};
+
+const SEGMENTS: SegmentDef[] = [
   {
     id: "pending",
-    label: "Pending approval",
-    caption: "Bob-prepared changes awaiting a human governance decision."
+    label: "Awaiting approval",
+    group: "decision",
+    caption:
+      "Bob-prepared changes waiting on a human governance decision. Nothing is executed until approved."
   },
   {
     id: "ready",
-    label: "Approved · ready to execute",
+    label: "Approved",
+    group: "decision",
     caption:
-      "Approved. Awaiting owner handoff or permitted execution window."
-  },
-  {
-    id: "executed",
-    label: "Executed",
-    caption:
-      "Executed within approved scope. Post-execution impact lives in Outcomes."
+      "Approved within policy. Awaiting the permitted execution window or owner handoff."
   },
   {
     id: "blocked",
     label: "Policy-blocked",
+    group: "decision",
     caption:
-      "Blocked by policy (missing approval, restricted type, maintenance window, no config access). Kept visible so the blocking reason is auditable."
+      "Blocked by policy — missing approver, restricted type, maintenance window, or no config access. Kept visible so the blocking reason is auditable."
+  },
+  {
+    id: "executed",
+    label: "Executed",
+    group: "post_execution",
+    caption:
+      "Executed within approved scope. Post-execution impact is measured in Outcomes."
   },
   {
     id: "rollback",
     label: "Rollback candidates",
+    group: "post_execution",
     caption:
-      "Executed changes that regressed on monitored metrics. Bob has flagged these as rollback candidates."
+      "Executed changes that regressed on monitored metrics. Flagged for rollback or scoped review."
   },
   {
     id: "closed_rejected",
-    label: "Rejected / closed",
-    caption: "Rejected or policy-escalated actions preserved for audit."
+    label: "Rejected · closed",
+    group: "post_execution",
+    caption: "Rejected, policy-escalated, or reverted actions preserved for audit."
   }
 ];
 
@@ -125,7 +142,6 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
   }, [changes]);
 
   useEffect(() => {
-    // Honor ?tab= deep links (e.g. Dashboard "View outcomes")
     if (typeof window === "undefined") return;
     const q = new URLSearchParams(window.location.search);
     const t = q.get("tab") as Segment | null;
@@ -183,76 +199,74 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
   }, [actions, segment, risk, typeFilter, query, rollbackActionIds]);
 
   const seg = SEGMENTS.find((s) => s.id === segment)!;
+  const decisionSegs = SEGMENTS.filter((s) => s.group === "decision");
+  const postExecSegs = SEGMENTS.filter((s) => s.group === "post_execution");
 
   return (
     <section className="space-y-5">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
-          label="Pending approval"
+          label="Awaiting approval"
           value={kpis.pending}
-          caption="Awaiting a human governance decision"
+          caption="Drafted by Bob · approver pending"
           tone={kpis.pending > 0 ? "warning" : "neutral"}
           highlight={kpis.pending > 0}
         />
         <KpiCard
-          label="High-risk pending"
+          label="High-risk awaiting"
           value={kpis.highRiskPending}
-          caption="Requires dual approval before execution"
+          caption="Dual approval required"
           tone={kpis.highRiskPending > 0 ? "urgent" : "neutral"}
           highlight={kpis.highRiskPending > 0}
         />
         <KpiCard
-          label="Ready to execute"
+          label="Approved"
           value={kpis.ready}
-          caption="Approved; awaiting permitted execution window"
+          caption="Cleared for bounded execution"
         />
         <KpiCard
           label="Policy-blocked"
           value={kpis.blocked}
-          caption="Blocked by policy; reason retained for audit"
+          caption="Held by policy · reason retained"
           tone={kpis.blocked > 0 ? "warning" : "neutral"}
         />
         <KpiCard
           label="Rollback candidates"
           value={kpis.rollback}
-          caption="Executed changes flagged for rollback"
+          caption="Regressed post-execution"
           tone={kpis.rollback > 0 ? "urgent" : "neutral"}
           highlight={kpis.rollback > 0}
         />
       </div>
 
-      {changes.length > 0 ? <OutcomesStrip changes={changes} density="compact" /> : null}
+      {changes.length > 0 ? (
+        <OutcomesStrip changes={changes} density="compact" />
+      ) : null}
 
       <div className="rounded-lg border border-slate-200 bg-white">
-        <div className="flex flex-wrap gap-0 border-b border-slate-200 px-1.5 pt-1.5">
-          {SEGMENTS.map((s) => {
-            const active = s.id === segment;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSegment(s.id)}
-                className={
-                  "relative rounded-md px-3 py-1.5 text-xs font-medium transition " +
-                  (active
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")
-                }
-              >
-                {s.label}
-                <span
-                  className={
-                    "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums " +
-                    (active
-                      ? "bg-white/20 text-white"
-                      : "bg-slate-100 text-slate-600")
-                  }
-                >
-                  {counts[s.id]}
-                </span>
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-slate-200 px-2 pt-1.5 pb-1.5">
+          <GroupLabel>Decision</GroupLabel>
+          {decisionSegs.map((s) => (
+            <SegmentTab
+              key={s.id}
+              active={segment === s.id}
+              label={s.label}
+              count={counts[s.id]}
+              onClick={() => setSegment(s.id)}
+            />
+          ))}
+          <span className="mx-1 h-4 w-px bg-slate-200" aria-hidden />
+          <GroupLabel>Post-execution</GroupLabel>
+          {postExecSegs.map((s) => (
+            <SegmentTab
+              key={s.id}
+              active={segment === s.id}
+              label={s.label}
+              count={counts[s.id]}
+              onClick={() => setSegment(s.id)}
+              variant={s.id === "rollback" && counts[s.id] > 0 ? "urgent" : "default"}
+            />
+          ))}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2.5">
@@ -287,7 +301,12 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
           </Select>
         </div>
 
-        <div className="px-3 py-2 text-[11px] text-slate-500">{seg.caption}</div>
+        <div className="flex items-center justify-between gap-3 px-3 py-2 text-[11px]">
+          <p className="text-slate-500">{seg.caption}</p>
+          <p className="shrink-0 tabular-nums text-slate-400">
+            {filtered.length} of {counts[segment]} {counts[segment] === 1 ? "action" : "actions"}
+          </p>
+        </div>
       </div>
 
       <div className="space-y-2.5">
@@ -307,6 +326,59 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
         )}
       </div>
     </section>
+  );
+}
+
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="select-none pl-1 pr-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+      {children}
+    </span>
+  );
+}
+
+function SegmentTab({
+  active,
+  label,
+  count,
+  onClick,
+  variant = "default"
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
+  variant?: "default" | "urgent";
+}) {
+  const activeCls = active
+    ? "bg-slate-900 text-white"
+    : variant === "urgent" && count > 0
+      ? "text-rose-700 hover:bg-rose-50"
+      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900";
+  const countCls = active
+    ? "bg-white/20 text-white"
+    : variant === "urgent" && count > 0
+      ? "bg-rose-100 text-rose-700"
+      : "bg-slate-100 text-slate-600";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "relative rounded-md px-2.5 py-1.5 text-xs font-medium transition " +
+        activeCls
+      }
+    >
+      {label}
+      <span
+        className={
+          "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums " +
+          countCls
+        }
+      >
+        {count}
+      </span>
+    </button>
   );
 }
 
@@ -338,7 +410,7 @@ function RollbackContextRow({ change }: { change: Change }) {
           </span>
         ) : null}
         <a
-          href={`/outcomes/${change.id}`}
+          href={routeToOutcome(change.id)}
           className="ml-auto font-medium text-rose-700 hover:text-rose-900 hover:underline"
         >
           Open outcome →

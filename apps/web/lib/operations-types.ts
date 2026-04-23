@@ -60,6 +60,7 @@ export type IntegrationKind =
   | "model_provider"
   | "observability"
   | "ticketing"
+  | "collaboration"
   | "workflow"
   | "model_registry"
   | "internal_model_api";
@@ -97,6 +98,20 @@ export type IntegrationActionScope =
   | "approval_gated"
   | "limited_execution";
 
+export type IntegrationActivityLevel = "info" | "warn" | "error";
+
+export type IntegrationActivity = {
+  at: string;
+  message: string;
+  level: IntegrationActivityLevel;
+};
+
+export type IntegrationAuditLine = {
+  at: string;
+  actor: string;
+  summary: string;
+};
+
 export type Integration = {
   id: string;
   provider: string;
@@ -112,6 +127,14 @@ export type Integration = {
   last_sync?: string | null;
   note?: string | null;
   capabilities: string[];
+  provider_key?: string | null;
+  granted_scopes?: string[];
+  activity_log?: IntegrationActivity[];
+  failure_notes?: string[];
+  downstream_endpoints?: string[];
+  audit_log?: IntegrationAuditLine[];
+  bob_prepare_actions?: boolean;
+  bob_execute_after_approval?: boolean;
 };
 
 export type EnvironmentKind =
@@ -169,6 +192,8 @@ export type ConnectorArea =
   | "config_metadata"
   | "action_runner"
   | "ticketing"
+  | "collaboration"
+  | "alerting"
   | "workflow_runner"
   | "bob_investigation"
   | "version_sync"

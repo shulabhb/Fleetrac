@@ -10,6 +10,11 @@ import {
 } from "./bob-badges";
 import { EvidenceList } from "./evidence-list";
 import { formatRelativeTime } from "@/lib/format";
+import {
+  routeToBobForTarget,
+  routeToBobInvestigation,
+  type BobTargetType
+} from "@/lib/routes";
 
 type BobSummaryPanelProps = {
   investigation: BobInvestigation;
@@ -32,7 +37,7 @@ export function BobSummaryPanel({
   const top = investigation.recommendations.find(
     (r) => r.id === investigation.top_recommendation_id
   );
-  const detailHref = href ?? `/bob/${investigation.id}`;
+  const detailHref = href ?? routeToBobInvestigation(investigation.id);
 
   return (
     <div
@@ -180,6 +185,36 @@ export function BobEmptyPanel({
   targetId: string;
   className?: string;
 }) {
+  const body =
+    targetType === "system"
+      ? {
+          lead: "Bob has not opened a system-level investigation here.",
+          explain:
+            "Bob opens a system-level read when telemetry drifts past a governance threshold, a recurrence pattern emerges across incidents, or a control fires repeatedly on this system.",
+          triggers: [
+            "Telemetry drift or grounding degradation beyond threshold",
+            "Recurring incidents across multiple rules",
+            "Repeated control fires on the same system",
+            "Audit coverage floor breach"
+          ],
+          cta: "Ask Bob to analyze now"
+        }
+      : targetType === "control"
+        ? {
+            lead: `Bob has not opened an analysis on this ${targetType} yet.`,
+            explain:
+              "Bob analyzes a control when it fires repeatedly, when threshold tuning would reduce noise, or when a correlated root cause appears across the incidents it raised.",
+            triggers: [],
+            cta: "Run Bob analysis"
+          }
+        : {
+            lead: `Bob has not opened an investigation on this ${targetType} yet.`,
+            explain:
+              "When telemetry shifts or a recurrence pattern is detected, Bob will draft an investigation here with evidence, likely root cause, and a recommended next action for human approval.",
+            triggers: [],
+            cta: "Run Bob investigation"
+          };
+
   return (
     <div
       className={cn(
@@ -188,19 +223,28 @@ export function BobEmptyPanel({
       )}
     >
       <BobEyebrow />
-      <p className="mt-2 text-sm text-slate-700">
-        Bob has not opened an investigation on this {targetType} yet.
+      <p className="mt-2 text-sm text-slate-700">{body.lead}</p>
+      <p className="mt-1 text-xs leading-relaxed text-slate-600">
+        {body.explain}
       </p>
-      <p className="mt-1 text-xs text-slate-500">
-        When telemetry shifts or a recurrence pattern is detected, Bob will
-        draft an investigation here with evidence, likely root cause, and a
-        recommended next action for human approval.
-      </p>
+      {body.triggers.length > 0 ? (
+        <ul className="mt-2 grid grid-cols-1 gap-x-4 gap-y-0.5 text-[11px] text-slate-600 md:grid-cols-2">
+          {body.triggers.map((t) => (
+            <li key={t} className="flex items-start gap-1.5">
+              <span
+                aria-hidden
+                className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-indigo-400"
+              />
+              <span>{t}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <Link
-        href={`/bob/for/${targetType}/${targetId}`}
+        href={routeToBobForTarget(targetType as BobTargetType, targetId)}
         className="mt-3 inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
       >
-        Run Bob investigation
+        {body.cta}
         <ArrowRight className="h-3 w-3" />
       </Link>
     </div>

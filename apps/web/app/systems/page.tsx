@@ -11,7 +11,7 @@ export default async function SystemsPage() {
       <SectionTitle
         eyebrow="Fleet"
         title="Systems"
-        caption="Every monitored AI system with its posture, ownership, and active governance load."
+        caption="Every monitored AI system — with posture, ownership, and current governance load."
       />
       <SystemsFleetView systems={items} incidents={incidents} />
     </section>

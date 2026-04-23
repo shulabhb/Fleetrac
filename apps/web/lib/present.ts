@@ -38,6 +38,33 @@ export function lifecycleBadgeClasses(status: string): string {
   return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
 }
 
+export function postureTone(
+  posture: string | null | undefined
+): "high" | "medium" | "low" | "neutral" | "info" {
+  if (posture === "critical" || posture === "at_risk") return "high";
+  if (posture === "watch") return "medium";
+  if (posture === "healthy") return "low";
+  return "neutral";
+}
+
+export function severityTone(
+  severity: string | null | undefined
+): "high" | "medium" | "low" | "neutral" {
+  if (severity === "high") return "high";
+  if (severity === "medium") return "medium";
+  if (severity === "low") return "low";
+  return "neutral";
+}
+
+export function connectionTone(
+  status: string | null | undefined
+): "bg-emerald-500" | "bg-amber-500" | "bg-rose-500" | "bg-slate-400" {
+  if (status === "connected") return "bg-emerald-500";
+  if (status === "degraded") return "bg-amber-500";
+  if (status === "disconnected") return "bg-rose-500";
+  return "bg-slate-400";
+}
+
 export function postureRank(posture: string): number {
   switch (posture) {
     case "critical":

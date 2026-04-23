@@ -16,6 +16,10 @@ import type {
   ServiceHealth,
   TelemetryAvailability
 } from "@/lib/operations-types";
+import {
+  actionAccessLabel,
+  observabilityAccessLabel
+} from "@/lib/integration-access-vocabulary";
 
 type Tone = "neutral" | "high" | "medium" | "low" | "info" | "outline";
 
@@ -154,13 +158,6 @@ export function ConnectorTypeChip({ type }: { type: ConnectorType }) {
   return <Badge tone="outline">{connectorTypeLabel[type]}</Badge>;
 }
 
-const telemetryLabel: Record<TelemetryAvailability, string> = {
-  full: "Full telemetry",
-  partial: "Partial telemetry",
-  metadata_only: "Metadata only",
-  none: "No telemetry"
-};
-
 const telemetryTone: Record<TelemetryAvailability, Tone> = {
   full: "low",
   partial: "medium",
@@ -173,16 +170,10 @@ export function TelemetryAvailabilityBadge({
 }: {
   level: TelemetryAvailability;
 }) {
-  return <Badge tone={telemetryTone[level]}>{telemetryLabel[level]}</Badge>;
+  return (
+    <Badge tone={telemetryTone[level]}>{observabilityAccessLabel(level)}</Badge>
+  );
 }
-
-const actionScopeLabel: Record<IntegrationActionScope, string> = {
-  none: "No actions",
-  read_only: "Read only",
-  prepare_only: "Prepare only",
-  approval_gated: "Approval-gated",
-  limited_execution: "Limited execution"
-};
 
 const actionScopeTone: Record<IntegrationActionScope, Tone> = {
   none: "neutral",
@@ -193,7 +184,9 @@ const actionScopeTone: Record<IntegrationActionScope, Tone> = {
 };
 
 export function ActionScopeBadge({ scope }: { scope: IntegrationActionScope }) {
-  return <Badge tone={actionScopeTone[scope]}>{actionScopeLabel[scope]}</Badge>;
+  return (
+    <Badge tone={actionScopeTone[scope]}>{actionAccessLabel(scope)}</Badge>
+  );
 }
 
 const serviceHealthTone: Record<ServiceHealth, Tone> = {
@@ -246,7 +239,7 @@ const changeStateLabel: Record<ChangeLifecycleState, string> = {
   proposed: "Proposed",
   approved: "Approved",
   executed: "Executed",
-  monitoring: "Monitoring",
+  monitoring: "Under monitoring",
   improvement_observed: "Improvement observed",
   no_material_change: "No material change",
   regression_detected: "Regression detected",

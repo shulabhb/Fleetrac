@@ -15,6 +15,7 @@ type BarListProps = {
   max?: number;
   tone?: "accent" | "danger" | "warn" | "ok";
   valueFormatter?: (value: number) => string;
+  showPercent?: boolean;
   className?: string;
 };
 
@@ -25,18 +26,27 @@ const toneBar: Record<string, string> = {
   ok: "bg-emerald-600"
 };
 
-export function BarList({ items, max, tone = "accent", valueFormatter, className }: BarListProps) {
+export function BarList({
+  items,
+  max,
+  tone = "accent",
+  valueFormatter,
+  showPercent,
+  className
+}: BarListProps) {
   if (!items.length) {
-    return <p className="text-sm text-slate-500">Nothing to show yet.</p>;
+    return <p className="text-sm text-slate-500">No data in this window.</p>;
   }
+  const total = items.reduce((sum, i) => sum + i.value, 0);
   const upper = max ?? Math.max(...items.map((i) => i.value), 1);
   const format = valueFormatter ?? ((v: number) => String(v));
   const sorted = [...items].sort((a, b) => b.value - a.value);
 
   return (
-    <ul className={cn("space-y-2.5", className)}>
+    <ul className={cn("space-y-2", className)}>
       {sorted.map((item) => {
         const pct = Math.max(4, (item.value / upper) * 100);
+        const sharePct = total > 0 ? Math.round((item.value / total) * 100) : 0;
         const Row = (
           <div className="group">
             <div className="flex items-baseline justify-between gap-3">
@@ -46,27 +56,42 @@ export function BarList({ items, max, tone = "accent", valueFormatter, className
               >
                 {item.label}
               </span>
-              <span className="tabular-nums text-xs font-semibold text-slate-900">
-                {format(item.value)}
+              <span className="flex items-baseline gap-1.5 text-xs">
+                <span className="tabular-nums font-semibold text-slate-900">
+                  {format(item.value)}
+                </span>
+                {showPercent && total > 0 ? (
+                  <span className="tabular-nums text-[11px] text-slate-400">
+                    {sharePct}%
+                  </span>
+                ) : null}
               </span>
             </div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
               <div
-                className={cn("h-full rounded-full transition-[width]", toneBar[tone])}
+                className={cn(
+                  "h-full rounded-full transition-[width]",
+                  toneBar[tone]
+                )}
                 style={{ width: `${pct}%` }}
               />
             </div>
-            {item.hint ? <p className="mt-1 text-[11px] text-slate-500">{item.hint}</p> : null}
+            {item.hint ? (
+              <p className="mt-0.5 text-[11px] text-slate-500">{item.hint}</p>
+            ) : null}
           </div>
         );
         return (
           <li key={item.label}>
             {item.href ? (
-              <Link href={item.href} className="block rounded-md p-1 hover:bg-slate-50">
+              <Link
+                href={item.href}
+                className="block rounded-md px-1 py-0.5 hover:bg-slate-50"
+              >
                 {Row}
               </Link>
             ) : (
-              Row
+              <div className="px-1 py-0.5">{Row}</div>
             )}
           </li>
         );

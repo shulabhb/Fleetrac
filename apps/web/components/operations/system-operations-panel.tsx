@@ -10,9 +10,10 @@ import {
 } from "./operations-badges";
 
 /**
- * Panel that renders the full operational picture for a system: what version
- * is live, what rollback options exist, whether maintenance is active, and
- * what last changed. Designed to read like a governed production-asset page.
+ * Safe operational control surface for a system. Answers:
+ *   What version is live?  What came before?  Is rollback recommended?
+ *   Is maintenance active?  Is there a candidate version in canary?
+ *   What was the last config change?
  */
 export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
   return (
@@ -27,48 +28,47 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
         }
         caption={
           ops.operations_state_reason ??
-          "Current operational posture, deployed version and rollback options."
+          "Deployed version, rollback options, maintenance window and last config change."
         }
       />
 
       <div className="grid gap-3 md:grid-cols-3">
-        <Block label="Current version">
+        <VersionBlock label="Current version" caption={`Deployed ${formatRelativeTime(ops.deployed_at)} by ${ops.last_changed_by}`}>
           <VersionChip version={ops.current_version} tone="info" />
-          <p className="mt-1 text-[11px] text-slate-500">
-            Deployed {formatRelativeTime(ops.deployed_at)} by {ops.last_changed_by}
-          </p>
-        </Block>
-        <Block label="Previous version">
+        </VersionBlock>
+        <VersionBlock
+          label="Previous version"
+          caption={ops.previous_version ? "Rollback target if needed" : "No prior version on record"}
+        >
           {ops.previous_version ? (
             <VersionChip version={ops.previous_version} />
           ) : (
-            <span className="text-[12px] text-slate-500">—</span>
+            <span className="text-[12px] text-slate-400">—</span>
           )}
-          <p className="mt-1 text-[11px] text-slate-500">
-            Rollback target if needed
-          </p>
-        </Block>
-        <Block label="Candidate version">
+        </VersionBlock>
+        <VersionBlock
+          label="Candidate version"
+          caption={
+            ops.canary_active && ops.canary_traffic_pct != null
+              ? `Canary at ${ops.canary_traffic_pct.toFixed(0)}% traffic`
+              : ops.candidate_version
+                ? "Staged, no canary active"
+                : "No candidate pending"
+          }
+        >
           {ops.candidate_version ? (
             <VersionChip version={ops.candidate_version} tone="outline" />
           ) : (
-            <span className="text-[12px] text-slate-500">None pending</span>
+            <span className="text-[12px] text-slate-400">—</span>
           )}
-          <p className="mt-1 text-[11px] text-slate-500">
-            {ops.canary_active && ops.canary_traffic_pct != null
-              ? `Canary at ${ops.canary_traffic_pct.toFixed(0)}% traffic`
-              : "No canary in progress"}
-          </p>
-        </Block>
+        </VersionBlock>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         <Card density="compact" className="bg-slate-50">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Undo2 className="h-4 w-4 text-slate-500" />
-            <span className="text-[12px] font-semibold text-slate-800">
-              Rollback
-            </span>
+            <span className="text-[12px] font-semibold text-slate-800">Rollback</span>
             {ops.rollback_recommended ? (
               <Badge tone="high">Recommended by Bob</Badge>
             ) : ops.rollback_available ? (
@@ -78,31 +78,25 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
             )}
           </div>
           <div className="mt-2 space-y-1 text-[12px] text-slate-700">
-            <Row label="Target">
-              {ops.rollback_target ?? "—"}
-            </Row>
+            <Row label="Target">{ops.rollback_target ?? "—"}</Row>
             <Row label="Requires approval">
               {ops.rollback_requires_approval ? "Yes" : "No"}
             </Row>
-            {ops.rollback_blocked_reason && (
+            {ops.rollback_blocked_reason ? (
               <p className="mt-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] text-rose-700 ring-1 ring-rose-200">
                 <AlertTriangle className="mr-1 inline h-3 w-3" />
                 {ops.rollback_blocked_reason}
               </p>
-            )}
+            ) : null}
           </div>
         </Card>
 
         <Card density="compact" className="bg-slate-50">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Wrench className="h-4 w-4 text-slate-500" />
-            <span className="text-[12px] font-semibold text-slate-800">
-              Maintenance
-            </span>
+            <span className="text-[12px] font-semibold text-slate-800">Maintenance</span>
             {ops.maintenance.active ? (
-              <Badge tone="info" dot>
-                Window active
-              </Badge>
+              <Badge tone="info" dot>Window active</Badge>
             ) : (
               <Badge tone="outline">Off</Badge>
             )}
@@ -112,7 +106,8 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
               <>
                 <Row label="Reason">{ops.maintenance.reason ?? "—"}</Row>
                 <Row label="Window">
-                  {formatShortDateTime(ops.maintenance.started_at)} →{" "}
+                  {formatShortDateTime(ops.maintenance.started_at)}
+                  <ArrowRight className="mx-1 inline h-3 w-3 text-slate-400" />
                   {formatShortDateTime(ops.maintenance.ends_at)}
                 </Row>
                 <Row label="Suppresses noise">
@@ -120,22 +115,23 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
                 </Row>
                 <Row label="Bob allowed in-window">
                   {ops.maintenance.bob_allowed_during_maintenance
-                    ? "Yes (prepare + execute)"
-                    : "No (Bob holds until window closes)"}
+                    ? "Yes — prepare + execute"
+                    : "No — holds until window closes"}
                 </Row>
               </>
             ) : (
-              <p className="text-slate-600">
-                No maintenance window active. Bob operates under normal policy.
+              <p className="text-[11px] text-slate-500">
+                No maintenance window active. Bob operates under the normal
+                access & action policy.
               </p>
             )}
           </div>
         </Card>
       </div>
 
-      {ops.last_config_change_summary && (
+      {ops.last_config_change_summary ? (
         <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px]">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               Last config change
             </span>
@@ -145,24 +141,27 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
           </div>
           <p className="mt-1 text-slate-700">{ops.last_config_change_summary}</p>
         </div>
-      )}
+      ) : null}
     </Card>
   );
 }
 
-function Block({
+function VersionBlock({
   label,
+  caption,
   children
 }: {
   label: string;
+  caption: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+    <div className="rounded-md border border-slate-200 bg-white px-3 py-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </p>
       <div className="mt-1.5">{children}</div>
+      <p className="mt-1.5 text-[11px] text-slate-500">{caption}</p>
     </div>
   );
 }
@@ -185,24 +184,23 @@ function Row({
 }
 
 /**
- * Compact operations chip-row used in places like system cards or the top of
- * system detail hero.
+ * Compact operations chip-row used in the hero strip and on cards.
  */
 export function OperationsSummaryStrip({ ops }: { ops: SystemOperations }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 text-[12px]">
+    <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
       <OperationsStateBadge state={ops.operations_state} />
       <VersionChip version={ops.current_version} label="live" tone="info" />
       <ReleaseChannelChip channel={ops.release_channel} />
-      {ops.maintenance.active && (
-        <Badge tone="info" dot>
-          Maintenance window
-        </Badge>
-      )}
-      {ops.rollback_recommended && <Badge tone="high">Rollback recommended</Badge>}
-      {ops.canary_active && (
+      {ops.maintenance.active ? (
+        <Badge tone="info" dot>Maintenance window</Badge>
+      ) : null}
+      {ops.rollback_recommended ? (
+        <Badge tone="high">Rollback recommended</Badge>
+      ) : null}
+      {ops.canary_active ? (
         <Badge tone="info">Canary {ops.canary_traffic_pct?.toFixed(0) ?? 10}%</Badge>
-      )}
+      ) : null}
     </div>
   );
 }

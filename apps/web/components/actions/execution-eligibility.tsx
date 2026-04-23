@@ -3,6 +3,7 @@ import { CheckCircle2, Lock, ShieldAlert } from "lucide-react";
 import type { Action } from "@/lib/action-types";
 import { BobOperatingModeBadge, ExecutionModeChip } from "./index";
 import type { BobOperatingMode } from "@/lib/action-types";
+import { routeToAction } from "@/lib/routes";
 
 type Props = {
   action: Action;
@@ -42,8 +43,8 @@ export function ExecutionEligibilityCard({
 
       <ul className="mt-3 space-y-2 text-xs text-slate-700">
         <Row
-          label="Execution eligible"
-          value={eligible ? "Yes" : "No"}
+          label="Policy check"
+          value={eligible ? "Allowed" : "Blocked"}
           tone={eligible ? "ok" : "warn"}
           icon={
             eligible ? (
@@ -54,13 +55,13 @@ export function ExecutionEligibilityCard({
           }
         />
         <Row
-          label="Requires approval"
+          label="Approval required"
           value={requiresApproval ? "Yes" : "No"}
-          tone={requiresApproval ? "warn" : "ok"}
+          tone="ok"
           icon={<Lock className="h-3.5 w-3.5 text-slate-500" />}
         />
         <Row
-          label="Required approver"
+          label="Approver"
           value={action.required_approver}
           icon={<span className="h-3.5 w-3.5" />}
         />
@@ -76,7 +77,7 @@ export function ExecutionEligibilityCard({
         />
         {!eligible && action.blocked_reason ? (
           <Row
-            label="Restricted because"
+            label="Blocked by policy"
             value={action.blocked_reason}
             tone="warn"
             icon={<ShieldAlert className="h-3.5 w-3.5 text-rose-600" />}
@@ -92,7 +93,7 @@ export function ExecutionEligibilityCard({
 
       <div className="mt-3 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
         <Link
-          href={`/actions/${action.id}`}
+          href={routeToAction(action.id)}
           className="font-medium text-slate-600 hover:text-slate-900 hover:underline"
         >
           Open action detail →

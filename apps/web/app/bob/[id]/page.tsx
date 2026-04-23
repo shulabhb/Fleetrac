@@ -5,11 +5,21 @@ import {
   getAccessPolicy,
   getActions,
   getBobInvestigation,
+  getBobInvestigations,
   getChanges,
   getIncidentDetail,
   getIncidents,
   getRules
 } from "@/lib/api";
+import {
+  routes,
+  routeToAction,
+  routeToBobInvestigation,
+  routeToControl,
+  routeToIncident,
+  routeToOutcome,
+  routeToSystem
+} from "@/lib/routes";
 import { ExecutionEligibilityCard } from "@/components/actions/execution-eligibility";
 import { LinkedActionsPanel } from "@/components/actions/linked-actions";
 import { ChangesTimeline } from "@/components/operations/change-impact";
@@ -23,6 +33,7 @@ import { EvidenceList } from "@/components/bob/evidence-list";
 import { InvestigationActivity } from "@/components/bob/investigation-activity";
 import { RecommendationCard } from "@/components/bob/recommendation-card";
 import { BobInvestigationWorkflow } from "@/components/bob/bob-workflow-panel";
+import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
 import { humanizeLabel } from "@/lib/present";
 
@@ -50,6 +61,8 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
     relatedSystemLabel?: string;
     relatedControlId?: string;
     relatedControlName?: string;
+    relatedControlInvestigationId?: string;
+    relatedSystemInvestigationId?: string;
     openInvestigationsForSystem?: number;
   } = {};
 
@@ -94,12 +107,44 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
     // Non-fatal — related context just won't render.
   }
 
+  // Resolve sibling Bob investigations (control / system) that the related
+  // context panel may want to link to. Pre-resolving means the panel only
+  // shows those rows when a real investigation exists, and the link can
+  // bypass the `/bob/for/…` resolver entirely.
+  try {
+    const { items: allInvestigations } = await getBobInvestigations();
+    if (
+      relatedContext.relatedControlId &&
+      investigation.target_type !== "control"
+    ) {
+      const match = (allInvestigations ?? []).find(
+        (inv: any) =>
+          inv.target_type === "control" &&
+          inv.target_id === relatedContext.relatedControlId
+      );
+      if (match) relatedContext.relatedControlInvestigationId = match.id;
+    }
+    if (
+      relatedContext.relatedSystemId &&
+      investigation.target_type !== "system"
+    ) {
+      const match = (allInvestigations ?? []).find(
+        (inv: any) =>
+          inv.target_type === "system" &&
+          inv.target_id === relatedContext.relatedSystemId
+      );
+      if (match) relatedContext.relatedSystemInvestigationId = match.id;
+    }
+  } catch {
+    // Non-fatal.
+  }
+
   const targetHref =
     investigation.target_type === "incident"
-      ? `/incidents/${investigation.target_id}`
+      ? routeToIncident(investigation.target_id)
       : investigation.target_type === "system"
-      ? `/systems/${investigation.target_id}`
-      : `/controls?q=${encodeURIComponent(investigation.target_id)}`;
+      ? routeToSystem(investigation.target_id)
+      : routeToControl(investigation.target_id);
 
   const top = investigation.recommendations.find(
     (r) => r.id === investigation.top_recommendation_id
@@ -137,11 +182,23 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
   }).catch(() => ({ items: [] as any[] }));
   const investigationChanges = changesRes.items ?? [];
 
+  const firstInvestigationAction = investigationActions[0] ?? null;
+  const firstInvestigationChange = investigationChanges[0] ?? null;
+  const incidentForBreadcrumb =
+    investigation.target_type === "incident"
+      ? { id: investigation.target_id, label: investigation.target_label }
+      : relatedContext.relatedIncidentId
+        ? {
+            id: relatedContext.relatedIncidentId,
+            label: relatedContext.relatedIncidentTitle ?? ""
+          }
+        : null;
+
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between">
         <Link
-          href="/bob"
+          href={routes.bob()}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -156,13 +213,40 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
         </Link>
       </div>
 
+      <FlowBreadcrumb
+        steps={[
+          incidentForBreadcrumb
+            ? {
+                label: "Incident",
+                href: routeToIncident(incidentForBreadcrumb.id),
+                icon: "incident"
+              }
+            : { label: "Incident", icon: "incident", missing: true },
+          { label: "Bob investigation", icon: "bob", active: true },
+          firstInvestigationAction
+            ? {
+                label: "Governed action",
+                href: routeToAction(firstInvestigationAction.id),
+                icon: "action"
+              }
+            : { label: "Governed action", icon: "action", missing: true },
+          firstInvestigationChange
+            ? {
+                label: "Measured outcome",
+                href: routeToOutcome(firstInvestigationChange.id),
+                icon: "outcome"
+              }
+            : { label: "Measured outcome", icon: "outcome", missing: true }
+        ]}
+      />
+
       <div className="relative rounded-lg border border-slate-200 bg-white p-5">
         <span
           aria-hidden
           className="absolute left-0 top-5 bottom-5 w-[3px] rounded-r bg-gradient-to-b from-indigo-400 to-indigo-200"
         />
         <div className="pl-3">
-          <BobEyebrow />
+          <BobEyebrow label="Bob investigation" />
           <div className="mt-1.5 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-xl font-semibold tracking-tight text-slate-900">
@@ -240,8 +324,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
               Recommendations
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Structural fixes Bob has drafted. Primary recommendations require
-              human governance approval before execution.
+              Drafted by Bob. Approval-gated, policy-checked, and reversible by default.
             </p>
             <div className="mt-3 space-y-2.5">
               {top ? (
@@ -267,7 +350,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
               Evidence reviewed
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Data points Bob inspected during this investigation.
+              Telemetry, controls, and prior incidents Bob inspected.
             </p>
             <div className="mt-3">
               <EvidenceList evidence={investigation.evidence} />
@@ -298,15 +381,14 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">
-                    Changes & Impact
+                    Changes & impact
                   </h2>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    Measured outcomes of actions derived from this
-                    investigation.
+                    Measured post-remediation impact.
                   </p>
                 </div>
                 <Link
-                  href="/outcomes"
+                  href={routes.outcomes()}
                   className="text-xs font-medium text-slate-600 hover:text-slate-900"
                 >
                   View in Outcomes →
@@ -325,7 +407,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
               Bob activity log
             </h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Ordered record of what Bob reviewed. Every step is auditable.
+              Ordered, auditable record of Bob&apos;s review.
             </p>
             <div className="mt-3">
               <InvestigationActivity events={investigation.activity} />
@@ -347,7 +429,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
                         relatedContext.relatedSystemId}
                     </span>
                     <Link
-                      href={`/systems/${relatedContext.relatedSystemId}`}
+                      href={routeToSystem(relatedContext.relatedSystemId)}
                       className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
                     >
                       Open →
@@ -363,7 +445,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
                         relatedContext.relatedIncidentId}
                     </span>
                     <Link
-                      href={`/incidents/${relatedContext.relatedIncidentId}`}
+                      href={routeToIncident(relatedContext.relatedIncidentId)}
                       className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
                     >
                       Open →
@@ -379,7 +461,7 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
                         relatedContext.relatedControlId}
                     </span>
                     <Link
-                      href={`/controls?q=${encodeURIComponent(relatedContext.relatedControlId)}`}
+                      href={routeToControl(relatedContext.relatedControlId)}
                       className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
                     >
                       Open →
@@ -387,7 +469,8 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
                   </li>
                 ) : null}
                 {investigation.target_type === "system" &&
-                relatedContext.relatedControlId ? (
+                relatedContext.relatedControlId &&
+                relatedContext.relatedControlInvestigationId ? (
                   <li className="flex items-center justify-between gap-2">
                     <span className="min-w-0 truncate">
                       <span className="text-slate-400">
@@ -397,7 +480,9 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
                         relatedContext.relatedControlId}
                     </span>
                     <Link
-                      href={`/bob/for/control/${relatedContext.relatedControlId}`}
+                      href={routeToBobInvestigation(
+                        relatedContext.relatedControlInvestigationId
+                      )}
                       className="shrink-0 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
                     >
                       Open →
@@ -405,7 +490,8 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
                   </li>
                 ) : null}
                 {investigation.target_type === "incident" &&
-                relatedContext.relatedSystemId ? (
+                relatedContext.relatedSystemId &&
+                relatedContext.relatedSystemInvestigationId ? (
                   <li className="flex items-center justify-between gap-2">
                     <span className="min-w-0 truncate">
                       <span className="text-slate-400">
@@ -415,7 +501,9 @@ export default async function BobInvestigationDetailPage({ params }: Props) {
                         relatedContext.relatedSystemId}
                     </span>
                     <Link
-                      href={`/bob/for/system/${relatedContext.relatedSystemId}`}
+                      href={routeToBobInvestigation(
+                        relatedContext.relatedSystemInvestigationId
+                      )}
                       className="shrink-0 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
                     >
                       Open →

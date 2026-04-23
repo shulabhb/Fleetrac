@@ -96,6 +96,7 @@ IntegrationKind = Literal[
     "model_provider",
     "observability",
     "ticketing",
+    "collaboration",
     "workflow",
     "model_registry",
     "internal_model_api",
@@ -143,6 +144,22 @@ IntegrationActionScope = Literal[
 ]
 
 
+class IntegrationActivity(BaseModel):
+    """Recent connector / sync activity line for Settings drilldown (mock)."""
+
+    at: datetime
+    message: str
+    level: Literal["info", "warn", "error"] = "info"
+
+
+class IntegrationAuditLine(BaseModel):
+    """Audit-visible change on an integration (mock)."""
+
+    at: datetime
+    actor: str
+    summary: str
+
+
 class Integration(BaseModel):
     id: str
     provider: str
@@ -158,6 +175,20 @@ class Integration(BaseModel):
     last_sync: datetime | None = None
     note: str | None = None
     capabilities: list[str] = Field(default_factory=list)
+    # --- Extended admin / drilldown (mock; safe defaults keep API backward compatible)
+    provider_key: str | None = None
+    """Slug for UI marks (e.g. aws, slack). When omitted, clients may infer from id."""
+
+    granted_scopes: list[str] = Field(default_factory=list)
+    activity_log: list[IntegrationActivity] = Field(default_factory=list)
+    failure_notes: list[str] = Field(default_factory=list)
+    downstream_endpoints: list[str] = Field(default_factory=list)
+    audit_log: list[IntegrationAuditLine] = Field(default_factory=list)
+    bob_prepare_actions: bool = True
+    """Whether Bob may prepare governed actions that touch this integration."""
+
+    bob_execute_after_approval: bool = False
+    """Whether execution may run here after explicit human approval (policy bounded)."""
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +264,8 @@ class ConnectorStatus(BaseModel):
         "config_metadata",
         "action_runner",
         "ticketing",
+        "collaboration",
+        "alerting",
         "workflow_runner",
         "bob_investigation",
         "version_sync",

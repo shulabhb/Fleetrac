@@ -1,0 +1,184 @@
+/**
+ * Canonical route builders for Fleetrac.
+ *
+ * Rationale: every cross-object navigation in the app must land on an exact
+ * object, not a generic list. This module is the single source of truth for
+ * URL construction so leaf components never hand-assemble routes.
+ *
+ * All builders return absolute, encoded paths suitable for `<Link href={…}>`
+ * or `router.push(…)`. Callers should never prepend/append to the result.
+ */
+
+// ---------------------------------------------------------------------------
+// Object types
+// ---------------------------------------------------------------------------
+
+/** Targets Bob can review (used by the `/bob/for/<type>/<id>` resolver). */
+export type BobTargetType = "incident" | "system" | "control";
+
+/** Canonical settings tabs, kept in sync with `SettingsView`. */
+export type SettingsTab =
+  | "integrations"
+  | "policies"
+  | "environments"
+  | "status"
+  | "console";
+
+/** Outcomes view segments — mirrors `SEGMENTS` in `outcomes-view.tsx`. */
+export type OutcomesSegment =
+  | "all"
+  | "monitoring"
+  | "improvement"
+  | "follow_up"
+  | "regression"
+  | "closed";
+
+/** Action Center segments — mirrors the server-side whitelist. */
+export type ActionSegment =
+  | "pending"
+  | "ready"
+  | "blocked"
+  | "executed"
+  | "rollback"
+  | "closed_rejected";
+
+/** Bob investigation status filter tokens. */
+export type BobStatusFilter =
+  | "open"
+  | "awaiting_approval"
+  | "approved"
+  | "executed"
+  | "closed";
+
+// ---------------------------------------------------------------------------
+// Core list pages (canonical parents)
+// ---------------------------------------------------------------------------
+
+export const routes = {
+  dashboard: () => "/",
+  incidents: () => "/incidents",
+  systems: () => "/systems",
+  controls: () => "/controls",
+  actions: () => "/actions",
+  outcomes: () => "/outcomes",
+  bob: () => "/bob",
+  settings: () => "/settings"
+} as const;
+
+// ---------------------------------------------------------------------------
+// Object detail builders
+// ---------------------------------------------------------------------------
+
+export function routeToIncident(id: string): string {
+  return `/incidents/${encodeURIComponent(id)}`;
+}
+
+export function routeToSystem(id: string): string {
+  return `/systems/${encodeURIComponent(id)}`;
+}
+
+/**
+ * Controls do not have their own `/controls/<id>` page; we filter the
+ * controls browser by id instead. This helper keeps callers consistent.
+ */
+export function routeToControl(id: string): string {
+  return `/controls?q=${encodeURIComponent(id)}`;
+}
+
+export function routeToAction(id: string): string {
+  return `/actions/${encodeURIComponent(id)}`;
+}
+
+export function routeToOutcome(id: string): string {
+  return `/outcomes/${encodeURIComponent(id)}`;
+}
+
+export function routeToBobInvestigation(id: string): string {
+  return `/bob/${encodeURIComponent(id)}`;
+}
+
+/**
+ * Resolver-aware Bob link. Callers without a resolved investigation id route
+ * through `/bob/for/<type>/<id>`, which redirects server-side to the exact
+ * investigation or to the Bob list with a `missing=` banner.
+ *
+ * If the caller *does* have an investigation id already, prefer
+ * `routeToBobInvestigation(investigationId)` to avoid an unnecessary hop.
+ */
+export function routeToBobForTarget(
+  targetType: BobTargetType,
+  targetId: string
+): string {
+  return `/bob/for/${encodeURIComponent(targetType)}/${encodeURIComponent(targetId)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Scoped / filtered list builders
+// ---------------------------------------------------------------------------
+
+export function routeToIncidentsForSystem(systemId: string): string {
+  return `/incidents?system=${encodeURIComponent(systemId)}`;
+}
+
+export function routeToOutcomesForSystem(
+  systemId: string,
+  tab?: OutcomesSegment
+): string {
+  const qs = new URLSearchParams({ system: systemId });
+  if (tab) qs.set("tab", tab);
+  return `/outcomes?${qs.toString()}`;
+}
+
+export function routeToOutcomesTab(tab: OutcomesSegment): string {
+  return `/outcomes?tab=${encodeURIComponent(tab)}`;
+}
+
+export function routeToActionsTab(tab: ActionSegment): string {
+  return `/actions?tab=${encodeURIComponent(tab)}`;
+}
+
+export function routeToBobByStatus(status: BobStatusFilter): string {
+  return `/bob?status=${encodeURIComponent(status)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+
+export function routeToSettings(
+  tab?: SettingsTab,
+  options?: { integration?: string }
+): string {
+  const qs = new URLSearchParams();
+  if (tab && tab !== "integrations") {
+    qs.set("tab", tab);
+  }
+  if (options?.integration) {
+    qs.set("integration", options.integration);
+  }
+  const s = qs.toString();
+  return s ? `/settings?${s}` : "/settings";
+}
+
+/** Deep-link to Integrations with a specific connector detail open. */
+export function routeToIntegrationSettings(integrationId: string): string {
+  return `/settings?integration=${encodeURIComponent(integrationId)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical parents (for back-nav fallback)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every object type maps to a single canonical parent list page. Used as the
+ * back-nav fallback when navigation history is unavailable.
+ */
+export const canonicalParent = {
+  incident: () => routes.incidents(),
+  system: () => routes.systems(),
+  control: () => routes.controls(),
+  action: () => routes.actions(),
+  outcome: () => routes.outcomes(),
+  bob: () => routes.bob(),
+  settings: () => routes.settings()
+} as const;

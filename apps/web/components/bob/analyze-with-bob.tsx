@@ -4,10 +4,22 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { BobIcon } from "./bob-icon";
 import type { TargetType } from "@/lib/bob-types";
+import {
+  routeToBobForTarget,
+  routeToBobInvestigation,
+  type BobTargetType
+} from "@/lib/routes";
 
 type AnalyzeWithBobProps = {
   targetType: TargetType;
   targetId: string;
+  /**
+   * When the caller has already resolved the investigation id, pass it so the
+   * link bypasses the `/bob/for/<type>/<id>` resolver and lands directly on
+   * the Bob investigation detail. One hop, no redirect, no chance of a
+   * transient "missing" fallback.
+   */
+  investigationId?: string | null;
   hasInvestigation?: boolean;
   label?: string;
   variant?: "inline" | "button" | "compact";
@@ -15,28 +27,33 @@ type AnalyzeWithBobProps = {
 };
 
 /**
- * Subtle Bob entry point. Links to /bob/for/<type>/<id> which the Bob detail
- * page can resolve to an investigation. If `hasInvestigation` is true we
- * tighten the label (View Bob analysis) so the action reflects reality.
+ * Subtle Bob entry point. If `investigationId` is provided we link directly
+ * to the investigation. Otherwise we fall back to the resolver, which either
+ * redirects to the exact investigation or surfaces a clear "no review" banner
+ * on the Bob list.
  */
 export function AnalyzeWithBob({
   targetType,
   targetId,
+  investigationId,
   hasInvestigation,
   label,
   variant = "inline",
   className
 }: AnalyzeWithBobProps) {
+  const resolved = Boolean(investigationId) || Boolean(hasInvestigation);
   const text =
     label ??
-    (hasInvestigation
+    (resolved
       ? "View Bob analysis"
       : targetType === "incident"
       ? "Analyze with Bob"
       : targetType === "control"
       ? "Analyze control"
       : "Analyze system");
-  const href = `/bob/for/${targetType}/${targetId}`;
+  const href = investigationId
+    ? routeToBobInvestigation(investigationId)
+    : routeToBobForTarget(targetType as BobTargetType, targetId);
 
   if (variant === "button") {
     return (

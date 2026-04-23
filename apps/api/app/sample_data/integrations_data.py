@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.schemas.operations import Integration
+from app.schemas.operations import (
+    Integration,
+    IntegrationActivity,
+    IntegrationAuditLine,
+)
 
 
 def _ts(hours_ago: int, minutes: int = 0) -> datetime:
@@ -33,6 +37,39 @@ INTEGRATIONS: list[Integration] = [
         last_sync=_ts(0, 12),
         note="Primary cloud. Read-only IAM role used for config and log ingest.",
         capabilities=["cloudwatch_logs", "s3_artifact_registry", "bedrock_metadata"],
+        provider_key="aws",
+        granted_scopes=[
+            "cloudwatch:Describe*",
+            "logs:FilterLogEvents",
+            "logs:StartQuery",
+            "s3:GetObject",
+            "bedrock:ListFoundationModels",
+        ],
+        downstream_endpoints=[
+            "CloudWatch Logs (us-east-1)",
+            "S3 governance artifact bucket",
+        ],
+        activity_log=[
+            IntegrationActivity(
+                at=_ts(0, 12),
+                message="Incremental log partition sync completed.",
+                level="info",
+            ),
+            IntegrationActivity(
+                at=_ts(2, 0),
+                message="Bedrock model inventory refresh OK.",
+                level="info",
+            ),
+        ],
+        audit_log=[
+            IntegrationAuditLine(
+                at=_ts(720, 0),
+                actor="Platform Engineering",
+                summary="Rotated read-only IAM role credentials.",
+            ),
+        ],
+        bob_prepare_actions=True,
+        bob_execute_after_approval=False,
     ),
     Integration(
         id="int_azure",
@@ -241,6 +278,28 @@ INTEGRATIONS: list[Integration] = [
         last_sync=_ts(0, 6),
         note="Fleetrac may open governance tickets with a pre-approved template.",
         capabilities=["ticket_create", "status_sync"],
+        provider_key="jira",
+        granted_scopes=[
+            "jira:issue:create",
+            "jira:issue:read",
+            "jira:project:read",
+            "jira:webhook:receive",
+        ],
+        downstream_endpoints=["Jira Cloud · AI-Governance project"],
+        activity_log=[
+            IntegrationActivity(
+                at=_ts(0, 6),
+                message="Ticket sync · 14 issues reconciled.",
+                level="info",
+            ),
+            IntegrationActivity(
+                at=_ts(5, 0),
+                message="Bob handoff template v3 published to Jira.",
+                level="info",
+            ),
+        ],
+        bob_prepare_actions=True,
+        bob_execute_after_approval=True,
     ),
     Integration(
         id="int_servicenow",
@@ -257,6 +316,33 @@ INTEGRATIONS: list[Integration] = [
         last_sync=_ts(72, 0),
         note="Credentials expired. Ticket creation falls back to Jira until re-authorized.",
         capabilities=["ticket_create"],
+        provider_key="servicenow",
+        granted_scopes=["sn_incident.read", "sn_incident.write"],
+        failure_notes=[
+            "OAuth refresh failed: refresh token revoked in ServiceNow instance.",
+            "Last successful sync was 72h ago; outbound change requests are paused.",
+        ],
+        activity_log=[
+            IntegrationActivity(
+                at=_ts(72, 0),
+                message="Scheduled sync skipped — auth expired.",
+                level="error",
+            ),
+            IntegrationActivity(
+                at=_ts(73, 0),
+                message="Retry scheduled after credential renewal.",
+                level="warn",
+            ),
+        ],
+        audit_log=[
+            IntegrationAuditLine(
+                at=_ts(168, 0),
+                actor="Security Operations",
+                summary="Scoped API user to incident table only.",
+            ),
+        ],
+        bob_prepare_actions=False,
+        bob_execute_after_approval=False,
     ),
     Integration(
         id="int_airflow",
@@ -305,5 +391,133 @@ INTEGRATIONS: list[Integration] = [
         last_sync=_ts(0, 11),
         note="Version + tag metadata. Rollback targets resolved here.",
         capabilities=["model_versions", "tags", "stage_transitions"],
+        provider_key="mlflow",
+        bob_prepare_actions=True,
+        bob_execute_after_approval=False,
+    ),
+    Integration(
+        id="int_slack",
+        provider="Slack",
+        kind="collaboration",
+        connection_status="connected",
+        auth_status="ok",
+        sync_status="healthy",
+        connector_type="api",
+        environments=["production", "staging", "internal_only"],
+        telemetry_availability="none",
+        config_access="none",
+        action_scope="limited_execution",
+        last_sync=_ts(0, 2),
+        note="Governance notifications and human-in-the-loop approvals in #ai-governance.",
+        capabilities=[
+            "notify_owner_channel",
+            "post_incident_summary",
+            "send_bob_recommendation_for_approval",
+            "push_follow_up_reminders",
+            "post_rollback_candidate_alerts",
+        ],
+        provider_key="slack",
+        granted_scopes=[
+            "chat:write",
+            "chat:write.public",
+            "channels:read",
+            "users:read",
+            "incoming-webhook",
+        ],
+        downstream_endpoints=[
+            "Workspace · Fleetrac Prod",
+            "Channel · #ai-governance",
+            "Channel · #model-ops-oncall",
+        ],
+        activity_log=[
+            IntegrationActivity(
+                at=_ts(0, 2),
+                message="Posted Bob recommendation summary for approval (threaded).",
+                level="info",
+            ),
+            IntegrationActivity(
+                at=_ts(1, 15),
+                message="Incident digest pushed to owner channel.",
+                level="info",
+            ),
+            IntegrationActivity(
+                at=_ts(6, 40),
+                message="Rollback candidate alert delivered with policy link.",
+                level="warn",
+            ),
+        ],
+        audit_log=[
+            IntegrationAuditLine(
+                at=_ts(240, 0),
+                actor="Governance Office",
+                summary="Approved Slack app manifest v2 (approval threads).",
+            ),
+        ],
+        bob_prepare_actions=True,
+        bob_execute_after_approval=True,
+    ),
+    Integration(
+        id="int_teams",
+        provider="Microsoft Teams",
+        kind="collaboration",
+        connection_status="connected",
+        auth_status="token_expiring",
+        sync_status="healthy",
+        connector_type="api",
+        environments=["production", "staging"],
+        telemetry_availability="none",
+        config_access="none",
+        action_scope="prepare_only",
+        last_sync=_ts(0, 45),
+        note="Optional Microsoft 365 path for regulated tenants; outbound posts are approval-gated.",
+        capabilities=[
+            "post_channel_message",
+            "post_adaptive_card",
+            "read_team_members",
+        ],
+        provider_key="teams",
+        granted_scopes=[
+            "ChannelMessage.Send",
+            "Team.ReadBasic.All",
+            "User.Read.All",
+        ],
+        downstream_endpoints=["Team · AI Platform · channel Governance alerts"],
+        activity_log=[
+            IntegrationActivity(
+                at=_ts(0, 45),
+                message="Adaptive card: awaiting approval for threshold change.",
+                level="info",
+            ),
+        ],
+        bob_prepare_actions=True,
+        bob_execute_after_approval=False,
+    ),
+    Integration(
+        id="int_pagerduty",
+        provider="PagerDuty",
+        kind="observability",
+        connection_status="connected",
+        auth_status="ok",
+        sync_status="healthy",
+        connector_type="api",
+        environments=["production", "staging"],
+        telemetry_availability="partial",
+        config_access="none",
+        action_scope="prepare_only",
+        last_sync=_ts(0, 7),
+        note="Incident routing metadata and on-call schedules; no direct execute.",
+        capabilities=["incidents_read", "schedules_read", "notes_append"],
+        provider_key="pagerduty",
+        granted_scopes=["incidents:read", "schedules:read", "users:read"],
+        downstream_endpoints=["REST Events v2 · governance service"],
+        activity_log=[
+            IntegrationActivity(
+                at=_ts(0, 7),
+                message="Synced on-call roster for 6 escalation policies.",
+                level="info",
+            ),
+        ],
+        bob_prepare_actions=True,
+        bob_execute_after_approval=False,
     ),
 ]

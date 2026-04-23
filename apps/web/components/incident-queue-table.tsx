@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ChevronRight, Flag, Search } from "lucide-react";
 import { readDemoState } from "@/lib/demo-state";
@@ -14,15 +15,24 @@ import {
   severityRank
 } from "@/lib/present";
 import { formatRelativeTime } from "@/lib/format";
+import { routes, routeToIncident, routeToSystem } from "@/lib/routes";
 
 type Props = {
   incidents: any[];
 };
 
 export function IncidentQueueTable({ incidents }: Props) {
-  const [severityFilter, setSeverityFilter] = useState("all");
-  const [riskCategoryFilter, setRiskCategoryFilter] = useState("all");
-  const [ownerTeamFilter, setOwnerTeamFilter] = useState("all");
+  const params = useSearchParams();
+  const systemScope = params?.get("system") ?? null;
+  const [severityFilter, setSeverityFilter] = useState(
+    params?.get("severity") ?? "all"
+  );
+  const [riskCategoryFilter, setRiskCategoryFilter] = useState(
+    params?.get("risk") ?? "all"
+  );
+  const [ownerTeamFilter, setOwnerTeamFilter] = useState(
+    params?.get("owner") ?? "all"
+  );
   const [lifecycleFilter, setLifecycleFilter] = useState("open");
   const [query, setQuery] = useState("");
 
@@ -44,6 +54,7 @@ export function IncidentQueueTable({ incidents }: Props) {
     const q = query.trim().toLowerCase();
     return overlaid
       .filter((incident) => {
+        if (systemScope && incident.system_id !== systemScope) return false;
         if (severityFilter !== "all" && incident.severity !== severityFilter) return false;
         if (riskCategoryFilter !== "all" && incident.risk_category !== riskCategoryFilter) return false;
         if (ownerTeamFilter !== "all" && incident.owner_team !== ownerTeamFilter) return false;
@@ -77,7 +88,15 @@ export function IncidentQueueTable({ incidents }: Props) {
         if (sev !== 0) return sev;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [overlaid, severityFilter, riskCategoryFilter, ownerTeamFilter, lifecycleFilter, query]);
+  }, [
+    overlaid,
+    systemScope,
+    severityFilter,
+    riskCategoryFilter,
+    ownerTeamFilter,
+    lifecycleFilter,
+    query
+  ]);
 
   const counts = useMemo(() => {
     const high = filtered.filter((i) => i.severity === "high").length;
@@ -94,8 +113,36 @@ export function IncidentQueueTable({ incidents }: Props) {
   const ownerTeams = [...new Set(overlaid.map((i) => i.owner_team))].sort();
   const lifecycles = [...new Set(overlaid.map((i) => i.incident_status))].sort();
 
+  const scopedSystemName = systemScope
+    ? (overlaid.find((i) => i.system_id === systemScope)?.system_name ?? systemScope)
+    : null;
+
   return (
     <div className="space-y-3">
+      {scopedSystemName ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-600">
+          <span>
+            Scoped to system ·{" "}
+            <span className="font-medium text-slate-800">
+              {scopedSystemName}
+            </span>
+          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href={routeToSystem(systemScope)}
+              className="font-medium text-slate-700 hover:text-slate-900"
+            >
+              Open system →
+            </Link>
+            <Link
+              href={routes.incidents()}
+              className="font-medium text-slate-500 hover:text-slate-900"
+            >
+              Clear scope
+            </Link>
+          </div>
+        </div>
+      ) : null}
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-card">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
@@ -191,7 +238,7 @@ export function IncidentQueueTable({ incidents }: Props) {
                 >
                   <td className="max-w-xs px-4 py-2.5">
                     <Link
-                      href={`/incidents/${incident.id}`}
+                      href={routeToIncident(incident.id)}
                       className="block truncate font-medium text-slate-900 hover:underline"
                     >
                       {incident.title}
@@ -209,7 +256,7 @@ export function IncidentQueueTable({ incidents }: Props) {
                   </td>
                   <td className="max-w-[14rem] px-4 py-2.5">
                     <Link
-                      href={`/systems/${incident.system_id}`}
+                      href={routeToSystem(incident.system_id)}
                       className="truncate font-medium text-slate-800 hover:underline"
                     >
                       {incident.system_name}

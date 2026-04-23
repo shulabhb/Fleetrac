@@ -20,11 +20,11 @@ type SortKey =
   | "recent";
 
 const SORT_OPTIONS: { id: SortKey; label: string }[] = [
-  { id: "severity", label: "Highest severity" },
-  { id: "openCount", label: "Most open incidents" },
-  { id: "posture", label: "Posture severity" },
-  { id: "recent", label: "Recently active" },
-  { id: "alphabetical", label: "A → Z" }
+  { id: "severity", label: "Open severity (high → low)" },
+  { id: "posture", label: "Posture (critical → healthy)" },
+  { id: "openCount", label: "Open incident count" },
+  { id: "recent", label: "Recent activity" },
+  { id: "alphabetical", label: "Name (A → Z)" }
 ];
 
 export function SystemsFleetView({ systems, incidents }: Props) {
@@ -152,11 +152,31 @@ export function SystemsFleetView({ systems, incidents }: Props) {
     return postures;
   }, [enriched]);
 
+  const filtersActive =
+    posture !== "all" ||
+    owner !== "all" ||
+    regulatorySensitivity !== "all" ||
+    businessFunction !== "all" ||
+    deploymentScope !== "all" ||
+    hasOpenIncidents !== "all" ||
+    query.trim().length > 0;
+
+  function clearFilters() {
+    setPosture("all");
+    setOwner("all");
+    setRegulatorySensitivity("all");
+    setBusinessFunction("all");
+    setDeploymentScope("all");
+    setHasOpenIncidents("all");
+    setQuery("");
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-card">
+        {/* Row 1 — search + sort */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-[240px] flex-1">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
@@ -166,23 +186,54 @@ export function SystemsFleetView({ systems, incidents }: Props) {
               className="h-8 w-full rounded-md border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
             />
           </div>
+          <div className="ml-auto flex items-center gap-2">
+            <label className="text-[11px] uppercase tracking-wide text-slate-400">
+              Sort
+            </label>
+            <Select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              className="min-w-[200px]"
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+
+        {/* Row 2 — filters */}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <Select value={posture} onChange={(e) => setPosture(e.target.value)}>
-            <option value="all">All postures</option>
+            <option value="all">Posture · any</option>
             <option value="critical">Critical</option>
             <option value="at_risk">At risk</option>
             <option value="watch">Watch</option>
             <option value="healthy">Healthy</option>
           </Select>
+          <Select
+            value={hasOpenIncidents}
+            onChange={(e) => setHasOpenIncidents(e.target.value)}
+          >
+            <option value="all">Open incidents · any</option>
+            <option value="yes">With open incidents</option>
+            <option value="no">No open incidents</option>
+          </Select>
           <Select value={owner} onChange={(e) => setOwner(e.target.value)}>
-            <option value="all">All owners</option>
+            <option value="all">Owner · all</option>
             {owners.map((o) => (
               <option key={o} value={o}>
                 {o}
               </option>
             ))}
           </Select>
-          <Select value={businessFunction} onChange={(e) => setBusinessFunction(e.target.value)}>
-            <option value="all">All functions</option>
+          <Select
+            value={businessFunction}
+            onChange={(e) => setBusinessFunction(e.target.value)}
+          >
+            <option value="all">Function · all</option>
             {businessFunctions.map((o) => (
               <option key={o} value={o}>
                 {o}
@@ -193,45 +244,42 @@ export function SystemsFleetView({ systems, incidents }: Props) {
             value={regulatorySensitivity}
             onChange={(e) => setRegulatorySensitivity(e.target.value)}
           >
-            <option value="all">All sensitivities</option>
+            <option value="all">Sensitivity · any</option>
             {sensitivities.map((o) => (
               <option key={o} value={o}>
                 {humanizeLabel(o)}
               </option>
             ))}
           </Select>
-          <Select value={deploymentScope} onChange={(e) => setDeploymentScope(e.target.value)}>
-            <option value="all">Any scope</option>
+          <Select
+            value={deploymentScope}
+            onChange={(e) => setDeploymentScope(e.target.value)}
+          >
+            <option value="all">Scope · any</option>
             {scopes.map((o) => (
               <option key={o} value={o}>
                 {humanizeLabel(o)}
               </option>
             ))}
           </Select>
-          <Select value={hasOpenIncidents} onChange={(e) => setHasOpenIncidents(e.target.value)}>
-            <option value="all">Open incidents: any</option>
-            <option value="yes">With open incidents</option>
-            <option value="no">Without open incidents</option>
-          </Select>
-          <div className="ml-auto flex items-center gap-2">
-            <label className="text-[11px] uppercase tracking-wide text-slate-400">Sort</label>
-            <Select
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className="min-w-[160px]"
+          {filtersActive ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto text-[11px] font-medium text-slate-500 hover:text-slate-900"
             >
-              {SORT_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-          </div>
+              Clear filters
+            </button>
+          ) : null}
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
+
+        {/* Row 3 — fleet summary */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
           <span>
-            <span className="font-semibold tabular-nums text-slate-900">{sorted.length}</span> of{" "}
-            {systems.length} systems
+            <span className="font-semibold tabular-nums text-slate-900">
+              {sorted.length}
+            </span>{" "}
+            of {systems.length} systems
           </span>
           <span className="inline-flex items-center gap-1">
             <Dot className="bg-red-500" />

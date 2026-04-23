@@ -12,7 +12,22 @@ import {
 } from "@/components/operations/operations-badges";
 import { MetricDeltaRow } from "@/components/operations/change-impact";
 import { ExecutionConsole } from "@/components/operations/execution-console";
+import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
+import {
+  outcomeNextStep,
+  outcomeVerdict,
+  verdictRing
+} from "@/lib/governance-states";
+import { cn } from "@/lib/cn";
+import {
+  routes,
+  routeToAction,
+  routeToBobInvestigation,
+  routeToIncident,
+  routeToOutcomesForSystem,
+  routeToSystem
+} from "@/lib/routes";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -42,14 +57,14 @@ export default async function OutcomeDetailPage({ params }: Props) {
   const action = actionRes?.item ?? null;
   const consoleEntries = consoleRes?.items ?? [];
 
-  const step = nextStep(change);
-  const verdict = verdictFor(change);
+  const verdict = outcomeVerdict(change);
+  const nextStep = outcomeNextStep(change);
 
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between">
         <Link
-          href="/outcomes"
+          href={routes.outcomes()}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -57,14 +72,14 @@ export default async function OutcomeDetailPage({ params }: Props) {
         </Link>
         <div className="flex items-center gap-2">
           <Link
-            href={`/systems/${change.target_system_id}`}
+            href={routeToSystem(change.target_system_id)}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
           >
             Open system · {change.target_system_name}
           </Link>
           {change.source_action_id ? (
             <Link
-              href={`/actions/${change.source_action_id}`}
+              href={routeToAction(change.source_action_id)}
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
             >
               Open action
@@ -73,12 +88,40 @@ export default async function OutcomeDetailPage({ params }: Props) {
         </div>
       </div>
 
+      <FlowBreadcrumb
+        steps={[
+          change.source_incident_id
+            ? {
+                label: "Incident",
+                href: routeToIncident(change.source_incident_id),
+                icon: "incident"
+              }
+            : { label: "Incident", icon: "incident", missing: true },
+          change.source_investigation_id
+            ? {
+                label: "Bob investigation",
+                href: routeToBobInvestigation(change.source_investigation_id),
+                icon: "bob"
+              }
+            : { label: "Bob investigation", icon: "bob", missing: true },
+          change.source_action_id
+            ? {
+                label: "Governed action",
+                href: routeToAction(change.source_action_id),
+                icon: "action"
+              }
+            : { label: "Governed action", icon: "action", missing: true },
+          { label: "Measured outcome", icon: "outcome", active: true }
+        ]}
+      />
+
       <SectionTitle
-        eyebrow="Outcome"
+        eyebrow="Measured outcome"
         title={change.change_type}
         caption={change.change_summary}
       />
 
+      {/* Verdict + context hero --------------------------------------------- */}
       <Card>
         <div className="flex flex-wrap items-center gap-2">
           <ChangeStateBadge state={change.impact_status} />
@@ -96,13 +139,34 @@ export default async function OutcomeDetailPage({ params }: Props) {
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-[1.3fr_1fr]">
-          <div className="space-y-2">
+          <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Current verdict
             </p>
-            <p className="text-sm text-slate-800">{verdict}</p>
-            <p className="text-[12px] text-slate-600">
-              <span className="font-semibold">Next:</span> {step}
+            <div className="mt-1 flex flex-wrap items-start gap-2">
+              <span
+                className={cn(
+                  "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1",
+                  verdictRing[verdict.tone]
+                )}
+              >
+                {verdict.tone === "urgent"
+                  ? "Needs rollback review"
+                  : verdict.tone === "warn"
+                    ? "Needs follow-up"
+                    : verdict.tone === "ok"
+                      ? "Favorable"
+                      : verdict.tone === "info"
+                        ? "Measurement open"
+                        : "Closed"}
+              </span>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-slate-800">
+              {verdict.sentence}
+            </p>
+            <p className="mt-2 text-[12px] text-slate-600">
+              <span className="font-semibold">What happens next · </span>
+              {nextStepSentence(nextStep.label, change)}
             </p>
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 text-[12px] text-slate-700">
@@ -117,7 +181,16 @@ export default async function OutcomeDetailPage({ params }: Props) {
                     : "—"
                 }
               />
-              <KV label="Rollback available" value={change.rollback_available ? "Yes" : "No"} />
+              <KV
+                label="Rollback"
+                value={
+                  change.rollback_recommended
+                    ? "Recommended"
+                    : change.rollback_available
+                      ? "Available"
+                      : "No path"
+                }
+              />
             </div>
           </div>
         </div>
@@ -128,7 +201,7 @@ export default async function OutcomeDetailPage({ params }: Props) {
           <Card>
             <CardHeader
               title="Change executed"
-              caption="What actually moved, and between which states."
+              caption="What changed, between which versions or configurations."
             />
             <div className="mt-3 space-y-2 text-[12px] text-slate-700">
               <p>{change.change_summary}</p>
@@ -177,26 +250,26 @@ export default async function OutcomeDetailPage({ params }: Props) {
 
           <Card>
             <CardHeader
-              title="Expected vs Actual"
-              caption="Bob's hypothesis at approval time, next to what actually happened."
+              title="Expected vs actual"
+              caption="Bob&apos;s hypothesis vs measured result on watched metrics."
             />
-            <div className="mt-3 grid gap-3 rounded-md bg-slate-50 p-3 md:grid-cols-2">
+            <div className="mt-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50/50 p-3 md:grid-cols-2">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  Expected
+                  Bob expected
                 </p>
                 <p className="mt-1 text-[12px] text-slate-700">
                   {change.expected_impact_summary}
                 </p>
                 {change.watched_metrics.length > 0 && (
                   <p className="mt-2 text-[11px] text-slate-500">
-                    Watched: {change.watched_metrics.join(" · ")}
+                    Watched · {change.watched_metrics.join(" · ")}
                   </p>
                 )}
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  Actual
+                  What actually happened
                 </p>
                 <p className="mt-1 text-[12px] text-slate-700">
                   {change.actual_outcome_summary}
@@ -204,10 +277,13 @@ export default async function OutcomeDetailPage({ params }: Props) {
               </div>
             </div>
             {change.metric_deltas.length > 0 && (
-              <div className="mt-3 divide-y divide-slate-100 rounded-md border border-slate-200 bg-white px-3">
-                {change.metric_deltas.map((d) => (
-                  <MetricDeltaRow key={d.metric} delta={d} />
-                ))}
+              <div className="mt-3">
+                <p className="label-eyebrow mb-1.5">Metric movement</p>
+                <div className="divide-y divide-slate-100 rounded-md border border-slate-200 bg-white px-3">
+                  {change.metric_deltas.map((d) => (
+                    <MetricDeltaRow key={d.metric} delta={d} />
+                  ))}
+                </div>
               </div>
             )}
           </Card>
@@ -215,8 +291,8 @@ export default async function OutcomeDetailPage({ params }: Props) {
           {consoleEntries.length > 0 && (
             <ExecutionConsole
               entries={consoleEntries}
-              title="Execution Console · this outcome"
-              caption="Operational acts tied to the action that produced this outcome."
+              title="Execution console · this outcome"
+              caption="Audit-linked steps tied to the producing action."
             />
           )}
         </div>
@@ -250,7 +326,7 @@ export default async function OutcomeDetailPage({ params }: Props) {
                     ? "Recommended"
                     : change.rollback_available
                       ? "Available"
-                      : "Unavailable"
+                      : "No path"
                 }
               />
               <Row
@@ -261,38 +337,41 @@ export default async function OutcomeDetailPage({ params }: Props) {
           </Card>
 
           <Card>
-            <CardHeader title="Related context" />
+            <CardHeader
+              title="Related context"
+              caption="System, investigation, incident, and action."
+            />
             <ul className="mt-2 space-y-2 text-[12px] text-slate-700">
               <RelatedRow
                 label="System"
                 value={change.target_system_name}
-                href={`/systems/${change.target_system_id}`}
+                href={routeToSystem(change.target_system_id)}
               />
               {change.source_action_id ? (
                 <RelatedRow
                   label="Action"
                   value={action?.title ?? change.source_action_id}
-                  href={`/actions/${change.source_action_id}`}
+                  href={routeToAction(change.source_action_id)}
                 />
               ) : null}
               {change.source_investigation_id ? (
                 <RelatedRow
                   label="Bob investigation"
                   value={change.source_investigation_id}
-                  href={`/bob/${change.source_investigation_id}`}
+                  href={routeToBobInvestigation(change.source_investigation_id)}
                 />
               ) : null}
               {change.source_incident_id ? (
                 <RelatedRow
                   label="Incident"
                   value={change.source_incident_id}
-                  href={`/incidents/${change.source_incident_id}`}
+                  href={routeToIncident(change.source_incident_id)}
                 />
               ) : null}
               <RelatedRow
                 label="All outcomes for this system"
                 value="View"
-                href={`/outcomes?system=${change.target_system_id}`}
+                href={routeToOutcomesForSystem(change.target_system_id)}
               />
             </ul>
           </Card>
@@ -352,40 +431,26 @@ function RelatedRow({
   );
 }
 
-function nextStep(c: {
-  impact_status: string;
-  rollback_recommended: boolean;
-  follow_up_required: boolean;
-}): string {
-  if (c.rollback_recommended || c.impact_status === "rollback_candidate")
-    return "Prepare rollback request; dual approval required before execution.";
-  if (c.impact_status === "regression_detected")
-    return "Review regression with control owner; consider rollback or scope narrowing.";
-  if (c.follow_up_required || c.impact_status === "follow_up_required")
-    return "Open a follow-up monitoring window and re-evaluate at next cycle.";
-  if (c.impact_status === "improvement_observed")
-    return "Close outcome with reviewer sign-off.";
-  if (c.impact_status === "no_material_change")
-    return "Closed — no material change observed; no follow-up needed.";
-  if (c.impact_status === "closed") return "Closed. Preserved for audit.";
-  return "Continue monitoring; re-evaluate at end of window.";
-}
-
-function verdictFor(c: {
-  impact_status: string;
-  follow_up_required: boolean;
-  rollback_recommended: boolean;
-}): string {
-  if (c.rollback_recommended || c.impact_status === "rollback_candidate")
-    return "Change regressed on monitored metrics; rollback is recommended.";
-  if (c.impact_status === "regression_detected")
-    return "Monitored metrics worsened beyond the noise threshold.";
-  if (c.impact_status === "improvement_observed")
-    return "Metrics moved in the expected direction. Outcome favorable.";
-  if (c.impact_status === "no_material_change")
-    return "Metrics did not move materially in either direction.";
-  if (c.impact_status === "follow_up_required" || c.follow_up_required)
-    return "Partial movement. Reviewer follow-up or extended monitoring required.";
-  if (c.impact_status === "closed") return "Outcome closed. Kept for audit.";
-  return "Outcome still under measurement. Monitoring window open.";
+/** Expand a short next-step label into a full sentence for the hero block. */
+function nextStepSentence(
+  label: string,
+  c: { rollback_available: boolean }
+): string {
+  switch (label) {
+    case "Prepare rollback request":
+      return c.rollback_available
+        ? "Prepare a rollback request in Action Center; dual approval required before execution."
+        : "Prepare a rollback request in Action Center; rollback is not currently available without restoring a prior version.";
+    case "Review regression with control owner":
+      return "Review the regression with the control owner; consider rollback or scope narrowing.";
+    case "Open follow-up monitoring window":
+      return "Open a follow-up monitoring window and re-evaluate at the next cycle.";
+    case "Close outcome with reviewer sign-off":
+      return "Close this outcome with reviewer sign-off; preserve the result for audit.";
+    case "None — closed":
+      return "No action required. Outcome closed and preserved for audit.";
+    case "Monitor to end of window":
+    default:
+      return "Continue monitoring; re-evaluate at the end of the window.";
+  }
 }

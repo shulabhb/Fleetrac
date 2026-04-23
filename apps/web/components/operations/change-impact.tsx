@@ -10,6 +10,7 @@ import {
   EnvironmentChip,
   VersionChip
 } from "./operations-badges";
+import { routeToAction } from "@/lib/routes";
 
 function formatMetricValue(value: number | null | undefined, unit?: string | null) {
   if (value == null) return "—";
@@ -96,7 +97,7 @@ export function ChangeImpactCard({ change }: { change: Change }) {
         action={
           change.source_action_id ? (
             <Link
-              href={`/actions/${change.source_action_id}`}
+              href={routeToAction(change.source_action_id)}
               className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
             >
               Action

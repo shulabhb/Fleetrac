@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 
@@ -10,6 +12,7 @@ type KpiCardProps = {
   tooltip?: ReactNode;
   trailing?: ReactNode;
   highlight?: boolean;
+  href?: string;
 };
 
 export function KpiCard({
@@ -19,7 +22,8 @@ export function KpiCard({
   tone = "neutral",
   tooltip,
   trailing,
-  highlight
+  highlight,
+  href
 }: KpiCardProps) {
   const valueClass =
     tone === "urgent"
@@ -30,11 +34,12 @@ export function KpiCard({
           ? "text-emerald-700"
           : "text-slate-900";
 
-  return (
+  const container = (
     <div
       className={cn(
-        "relative flex flex-col justify-between overflow-hidden rounded-lg border bg-white p-4 shadow-card",
-        highlight ? "border-slate-300" : "border-slate-200"
+        "group relative flex h-full flex-col justify-between overflow-hidden rounded-lg border bg-white p-4 shadow-card transition",
+        highlight ? "border-slate-300" : "border-slate-200",
+        href ? "hover:border-slate-300 hover:shadow-sm" : ""
       )}
     >
       {highlight ? (
@@ -57,12 +62,34 @@ export function KpiCard({
         <div className="flex items-center gap-1">
           {trailing}
           {tooltip ? <InfoTooltip content={tooltip} /> : null}
+          {href ? (
+            <ArrowUpRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:text-slate-600" />
+          ) : null}
         </div>
       </div>
-      <p className={cn("mt-2 text-3xl font-semibold tabular-nums tracking-tight", valueClass)}>
+      <p
+        className={cn(
+          "mt-2 text-3xl font-semibold tabular-nums tracking-tight",
+          valueClass
+        )}
+      >
         {value}
       </p>
-      {caption ? <p className="mt-1 text-xs text-slate-500">{caption}</p> : null}
+      {caption ? (
+        <p className="mt-1 text-[11px] text-slate-500">{caption}</p>
+      ) : null}
     </div>
   );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 rounded-lg"
+      >
+        {container}
+      </Link>
+    );
+  }
+  return container;
 }

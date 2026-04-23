@@ -16,39 +16,34 @@ import {
 import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
 import { AccessPolicyPanel } from "@/components/actions/access-policy-panel";
 import { LinkedActionsPanel } from "@/components/actions/linked-actions";
-import {
-  OperationsSummaryStrip,
-  SystemOperationsPanel
-} from "@/components/operations/system-operations-panel";
+import { SystemOperationsPanel } from "@/components/operations/system-operations-panel";
+import { SystemHero } from "@/components/systems/system-hero";
+import { TelemetryTile } from "@/components/systems/telemetry-tile";
 import { ChangesTimeline } from "@/components/operations/change-impact";
 import { ExecutionConsole } from "@/components/operations/execution-console";
 import { ActivityFeed } from "@/components/activity-feed";
-import { TrendChart } from "@/components/charts/trend-chart";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { SectionTitle } from "@/components/ui/section-title";
 import {
   humanizeLabel,
-  metricLabel,
-  postureBadgeClasses,
   severityBadgeClasses,
   severityRank,
   signalColor,
   signalTypeForField
 } from "@/lib/present";
-import { formatInteger, formatMetric, formatRelativeTime } from "@/lib/format";
+import { formatInteger, formatRelativeTime } from "@/lib/format";
+import {
+  routes,
+  routeToBobForTarget,
+  routeToControl,
+  routeToIncident,
+  routeToIncidentsForSystem,
+  routeToOutcomesForSystem
+} from "@/lib/routes";
 
 type Props = {
   params: Promise<{ id: string }>;
 };
-
-function postureTone(posture: string): "high" | "medium" | "low" | "neutral" {
-  if (posture === "critical" || posture === "at_risk") return "high";
-  if (posture === "watch") return "medium";
-  if (posture === "healthy") return "low";
-  return "neutral";
-}
 
 export default async function SystemDetailPage({ params }: Props) {
   const { id } = await params;
@@ -111,9 +106,7 @@ export default async function SystemDetailPage({ params }: Props) {
 
   const latestEvent = chronologicalTelemetry[chronologicalTelemetry.length - 1];
 
-  // Surface a rich mix of audit events scoped to this system: incident
-  // lifecycle, control triggers, Bob investigation events, follow-ups, and
-  // audit-floor breaches from its telemetry.
+  // Surface a rich mix of audit events scoped to this system.
   const incidentIds = new Set(incidents.map((item: any) => item.id));
   const telemetryIds = new Set(telemetry.map((t: any) => t.id));
   const ruleIdsUsedOnSystem = new Set(incidents.map((i: any) => i.rule_id));
@@ -172,13 +165,22 @@ export default async function SystemDetailPage({ params }: Props) {
     openIncidents.some((i: any) => i.severity === sev)
   ) as "high" | "medium" | "low" | undefined;
 
-  const displayName = `${system.use_case} (${system.model})`;
+  // Identify actions that were the source of rollback-candidate changes on this
+  // system, so LinkedActionsPanel can surface a "Rollback candidates" pill.
+  const rollbackActionIds = new Set<string>(
+    changes
+      .filter(
+        (c: any) =>
+          c.impact_status === "rollback_candidate" && typeof c.source_action_id === "string"
+      )
+      .map((c: any) => c.source_action_id as string)
+  );
 
   return (
     <section className="space-y-5">
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <Link
-          href="/systems"
+          href={routes.systems()}
           className="inline-flex items-center gap-1 hover:text-slate-900"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
@@ -186,121 +188,25 @@ export default async function SystemDetailPage({ params }: Props) {
         </Link>
       </div>
 
-      <Card className="p-0">
-        <div className="flex flex-wrap items-start justify-between gap-4 p-5">
-          <div className="min-w-0">
-            <p className="label-eyebrow">System</p>
-            <h2 className="mt-1 truncate text-xl font-semibold tracking-tight text-slate-900">
-              {displayName}
-            </h2>
-            <p className="mt-0.5 text-xs font-mono uppercase tracking-wide text-slate-400">
-              {system.id}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={postureTone(system.risk_posture)} dot size="sm">
-              {humanizeLabel(system.risk_posture)}
-            </Badge>
-            {highestSeverity ? (
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${severityBadgeClasses(highestSeverity)}`}
-              >
-                {humanizeLabel(highestSeverity)} open
-              </span>
-            ) : (
-              <Badge tone="low" size="sm">
-                No open issues
-              </Badge>
-            )}
-            {bobInvestigation ? (
-              <Link
-                href={`/bob/${bobInvestigation.id}`}
-                className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-100"
-              >
-                Bob review open →
-              </Link>
-            ) : null}
-          </div>
-        </div>
-        {ops ? (
-          <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-2.5">
-            <OperationsSummaryStrip ops={ops} />
-          </div>
-        ) : null}
-        <dl className="grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-200 text-sm md:grid-cols-4">
-          {[
-            ["Owner", system.owner],
-            ["Control Owner", system.control_owner],
-            ["Business Function", system.business_function],
-            ["Regulatory Sensitivity", humanizeLabel(system.regulatory_sensitivity)],
-            ["Deployment Scope", humanizeLabel(system.deployment_scope)],
-            ["Environment", humanizeLabel(system.environment)],
-            ["Model Type", humanizeLabel(system.model_type)],
-            ["Open Incidents", formatInteger(openIncidents.length)]
-          ].map(([label, value]) => (
-            <div key={label as string} className="bg-white px-5 py-3">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">{label}</p>
-              <p className="mt-0.5 truncate text-sm text-slate-800">{value || "—"}</p>
-            </div>
-          ))}
-        </dl>
-        {(system.hosting_environment ||
-          system.integration_mode ||
-          system.telemetry_coverage != null ||
-          system.connection_status) && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 bg-slate-50/60 px-5 py-2.5 text-[11px] text-slate-500">
-            {system.hosting_environment ? (
-              <span>
-                <span className="text-slate-400">Hosting:</span>{" "}
-                <span className="font-medium text-slate-700">
-                  {system.hosting_environment}
-                </span>
-              </span>
-            ) : null}
-            {system.integration_mode ? (
-              <span>
-                <span className="text-slate-400">Integration:</span>{" "}
-                <span className="font-medium text-slate-700">
-                  {system.integration_mode}
-                </span>
-              </span>
-            ) : null}
-            {system.telemetry_coverage != null ? (
-              <span>
-                <span className="text-slate-400">Telemetry coverage:</span>{" "}
-                <span className="font-medium text-slate-700">
-                  {Math.round(system.telemetry_coverage)}%
-                </span>
-              </span>
-            ) : null}
-            {system.connection_status ? (
-              <span className="inline-flex items-center gap-1">
-                <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    system.connection_status === "connected"
-                      ? "bg-emerald-500"
-                      : system.connection_status === "degraded"
-                      ? "bg-amber-500"
-                      : "bg-slate-400"
-                  }`}
-                />
-                <span className="font-medium text-slate-700">
-                  {humanizeLabel(system.connection_status)}
-                </span>
-              </span>
-            ) : null}
-          </div>
-        )}
-      </Card>
+      <SystemHero
+        system={system}
+        ops={ops}
+        openIncidentCount={openIncidents.length}
+        highestOpenSeverity={highestSeverity}
+        bobInvestigationId={bobInvestigation?.id ?? null}
+      />
 
+      {/* Bob System Analysis — the structural read */}
       <section>
-        <header className="mb-2 flex items-center justify-between">
-          <p className="label-eyebrow flex items-center gap-1.5 text-indigo-700">
-            Bob System Analysis
-          </p>
-          <p className="text-[11px] text-slate-500">
-            Bob&apos;s structural read of this system — recurring patterns, stability,
-            suggested stabilization path.
+        <header className="mb-2 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="label-eyebrow text-indigo-700">Bob system analysis</p>
+            <h3 className="mt-0.5 text-sm font-semibold tracking-tight text-slate-900">
+              Structural read of this system
+            </h3>
+          </div>
+          <p className="max-w-md text-[11px] text-slate-500">
+            Recurrence, likely root cause, and next approval-gated remediation.
           </p>
         </header>
         {bobInvestigation ? (
@@ -310,32 +216,36 @@ export default async function SystemDetailPage({ params }: Props) {
         )}
       </section>
 
+      {/* Operations state — versioning, maintenance, rollback */}
       {ops ? <SystemOperationsPanel ops={ops} /> : null}
 
+      {/* Access & action policy (trust surface) + governed actions sidecar */}
       {accessPolicy ? (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <AccessPolicyPanel policy={accessPolicy} />
           <LinkedActionsPanel
             actions={systemActions}
             title="Governed actions on this system"
-            caption="Actions routed through the Action Center, scoped to this system."
+            caption="Routed through the Action Center, bounded by the policy on the left."
+            rollbackActionIds={rollbackActionIds}
             emptyLabel={
               openIncidents.length === 0
-                ? "This system is healthy. No governed actions are currently open. If recurrence or breach appears, Bob will draft remediations within the policy above."
-                : "No governed actions yet for this system. When Bob drafts a remediation from the open incidents, it will appear here with its approval and execution state."
+                ? "Healthy — no governed actions open. Any future recurrence routes here for approval."
+                : "No governed actions yet. Bob's remediations will appear here with approval and execution state."
             }
           />
         </div>
       ) : null}
 
+      {/* Changes & Impact — what actually changed, did it help? */}
       <Card>
         <CardHeader
-          title="Changes & Impact"
-          caption="Governed changes on this system. Expected vs. actual on monitored metrics."
+          title="Changes & impact"
+          caption="Governed changes executed here. Expected vs. actual on monitored metrics."
           action={
             changes.length > 0 ? (
               <Link
-                href={`/outcomes?system=${id}`}
+                href={routeToOutcomesForSystem(id)}
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
                 View all outcomes →
@@ -346,16 +256,16 @@ export default async function SystemDetailPage({ params }: Props) {
         <div className="mt-3">
           <ChangesTimeline
             changes={changes.slice(0, 5)}
-            emptyLabel={
-              openIncidents.length === 0
-                ? "No governed changes in this window. The system has been operating within policy; Bob has not needed to prepare a remediation."
-                : "No governed changes yet. When a Bob recommendation is approved and executed on this system, its expected vs actual impact will appear here."
-            }
+          emptyLabel={
+            openIncidents.length === 0
+              ? "No governed changes in this window. Operating within policy."
+              : "No governed changes yet. Approved Bob recommendations will appear here with measured impact."
+          }
           />
           {changes.length > 5 ? (
             <div className="mt-3 text-center">
               <Link
-                href={`/outcomes?system=${id}`}
+                href={routeToOutcomesForSystem(id)}
                 className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:border-slate-300"
               >
                 See all {changes.length} outcomes for this system →
@@ -365,18 +275,19 @@ export default async function SystemDetailPage({ params }: Props) {
         </div>
       </Card>
 
-      {consoleEntries.length > 0 && (
+      {consoleEntries.length > 0 ? (
         <ExecutionConsole
           entries={consoleEntries}
-          title="Execution Console · this system"
-          caption="Governed operational acts Bob has prepared or executed against this system."
+          title="Execution console · this system"
+          caption="Audit-linked operational acts Bob has prepared or executed."
         />
-      )}
+      ) : null}
 
+      {/* Telemetry evidence + recent incidents */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
-            title="Telemetry Trends"
+            title="Telemetry trends"
             caption={
               latestEvent
                 ? `Last ingested ${formatRelativeTime(latestEvent.timestamp)} · ${formatInteger(telemetry.length)} events`
@@ -384,45 +295,45 @@ export default async function SystemDetailPage({ params }: Props) {
             }
             action={
               <InfoTooltip
-                content="Trends are computed from the most recent telemetry events ingested for this system. Dashed lines mark governance review thresholds for the corresponding control."
+                content="Computed from recent telemetry events. Dashed lines mark the governance review threshold for each control."
                 ariaLabel="About telemetry trends"
               />
             }
           />
           <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <TrendTile
-              label="Drift Index"
-              caption="Review above 0.25"
+            <TelemetryTile
+              label="Drift index"
+              threshold="Review above 0.25"
               data={driftSeries}
-              threshold={0.25}
+              thresholdValue={0.25}
               thresholdLabel="Review"
               color="#0f172a"
               yDigits={3}
             />
-            <TrendTile
+            <TelemetryTile
               label="Latency p95"
-              caption="SLA at 1500 ms"
+              threshold="SLA at 1500 ms"
               data={latencySeries}
-              threshold={1500}
+              thresholdValue={1500}
               thresholdLabel="SLA"
               color="#0369a1"
               unit=" ms"
               yDigits={0}
             />
-            <TrendTile
-              label="Grounding Score"
-              caption="Alert below 0.7"
+            <TelemetryTile
+              label="Grounding score"
+              threshold="Alert below 0.7"
               data={groundingSeries}
-              threshold={0.7}
+              thresholdValue={0.7}
               thresholdLabel="Alert"
               color="#7c3aed"
               yDigits={2}
             />
-            <TrendTile
-              label="Audit Coverage"
-              caption="Regulatory floor 95%"
+            <TelemetryTile
+              label="Audit coverage"
+              threshold="Regulatory floor 95%"
               data={auditSeries}
-              threshold={95}
+              thresholdValue={95}
               thresholdLabel="Floor"
               color="#047857"
               unit="%"
@@ -433,11 +344,11 @@ export default async function SystemDetailPage({ params }: Props) {
 
         <Card>
           <CardHeader
-            title="Recent Incidents"
+            title="Recent incidents"
             caption={`${openIncidents.length} open · ${incidents.length} total`}
             action={
               <Link
-                href={`/incidents?system=${id}`}
+                href={routeToIncidentsForSystem(id)}
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
                 View all →
@@ -446,7 +357,7 @@ export default async function SystemDetailPage({ params }: Props) {
           />
           {recentIncidents.length === 0 ? (
             <div className="mt-4 rounded-md border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-              No incidents recorded for this system. Controls below are actively monitoring its telemetry.
+              No incidents recorded. Controls below are actively monitoring.
             </div>
           ) : (
             <ul className="mt-2 divide-y divide-slate-100">
@@ -455,8 +366,8 @@ export default async function SystemDetailPage({ params }: Props) {
                 .map((incident: any) => (
                   <li key={incident.id}>
                     <Link
-                      href={`/incidents/${incident.id}`}
-                      className="group flex items-start justify-between gap-3 py-2.5"
+                      href={routeToIncident(incident.id)}
+                      className="group flex items-start justify-between gap-3 py-2.5 transition hover:bg-slate-50/60"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
@@ -470,8 +381,10 @@ export default async function SystemDetailPage({ params }: Props) {
                           </p>
                         </div>
                         <p className="mt-0.5 text-[11px] text-slate-500">
-                          {humanizeLabel(incident.incident_status)} ·{" "}
-                          {humanizeLabel(incident.escalation_status)} ·{" "}
+                          {humanizeLabel(incident.incident_status)}
+                          <span className="mx-1.5 text-slate-300">·</span>
+                          {humanizeLabel(incident.escalation_status)}
+                          <span className="mx-1.5 text-slate-300">·</span>
                           {formatRelativeTime(incident.created_at)}
                         </p>
                       </div>
@@ -483,16 +396,17 @@ export default async function SystemDetailPage({ params }: Props) {
         </Card>
       </div>
 
+      {/* Governance activity + active controls */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader
-            title="Recent Governance Activity"
-            caption="Audit events tied to this system"
+            title="Recent governance activity"
+            caption="Audit events scoped to this system"
           />
           <div className="mt-3">
             {activityItems.length === 0 ? (
               <p className="text-sm text-slate-500">
-                No governance activity logged for this system in the current window.
+                No governance activity in this window.
               </p>
             ) : (
               <ActivityFeed
@@ -500,13 +414,15 @@ export default async function SystemDetailPage({ params }: Props) {
                 hrefFor={(item) => {
                   if (!item.targetId) return null;
                   if (item.action?.startsWith("bob.") && item.targetType === "control") {
-                    return `/bob/for/control/${item.targetId}`;
+                    return routeToBobForTarget("control", item.targetId);
                   }
                   if (item.action?.startsWith("bob.") && item.targetType === "incident") {
-                    return `/bob/for/incident/${item.targetId}`;
+                    return routeToBobForTarget("incident", item.targetId);
                   }
-                  if (item.targetId.startsWith("inc_")) return `/incidents/${item.targetId}`;
-                  if (item.targetId.startsWith("rule_")) return `/controls`;
+                  if (item.targetId.startsWith("inc_"))
+                    return routeToIncident(item.targetId);
+                  if (item.targetId.startsWith("rule_"))
+                    return routeToControl(item.targetId);
                   return null;
                 }}
               />
@@ -516,20 +432,20 @@ export default async function SystemDetailPage({ params }: Props) {
 
         <Card>
           <CardHeader
-            title="Active Controls Affecting This System"
-            caption="Controls currently monitoring or recently triggered"
+            title="Active controls on this system"
+            caption="Currently monitoring — recently triggered first."
           />
           <div className="mt-4 space-y-4">
             <ControlGroup
-              label="Recently triggered"
+              label="Recently triggered (last 7 days)"
               emptyLabel="No control has triggered in the last 7 days."
               rules={recentlyTriggered}
               incidentsByRule={incidentsByRule}
               highlight
             />
             <ControlGroup
-              label="Coverage (not recently triggered)"
-              emptyLabel="All previously-triggering controls are quiet. This system is also covered by fleet-wide controls."
+              label="Monitoring coverage"
+              emptyLabel="All previously-triggering controls are quiet. Fleet-wide controls still apply."
               rules={coveringControls}
               incidentsByRule={incidentsByRule}
             />
@@ -537,56 +453,6 @@ export default async function SystemDetailPage({ params }: Props) {
         </Card>
       </div>
     </section>
-  );
-}
-
-function TrendTile({
-  label,
-  caption,
-  data,
-  threshold,
-  thresholdLabel,
-  color,
-  unit,
-  yDigits
-}: {
-  label: string;
-  caption: string;
-  data: { t: string | number | Date; v: number | null }[];
-  threshold?: number;
-  thresholdLabel?: string;
-  color: string;
-  unit?: string;
-  yDigits?: number;
-}) {
-  const values = data.map((d) => d.v).filter((v): v is number => v != null);
-  const last = values[values.length - 1];
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            {label}
-          </p>
-          <p className="text-[11px] text-slate-500">{caption}</p>
-        </div>
-        <p className="tabular-nums text-lg font-semibold text-slate-900">
-          {last != null ? formatMetric(last, { digits: yDigits, unit }) : "—"}
-        </p>
-      </div>
-      <div className="mt-2">
-        <TrendChart
-          data={data}
-          threshold={threshold}
-          thresholdLabel={thresholdLabel}
-          color={color}
-          unit={unit}
-          height={96}
-          showXAxis={false}
-          yDigits={yDigits}
-        />
-      </div>
-    </div>
   );
 }
 
@@ -609,7 +475,7 @@ function ControlGroup({
       {rules.length === 0 ? (
         <p className="mt-1 text-xs text-slate-500">{emptyLabel}</p>
       ) : (
-        <ul className="mt-2 space-y-2">
+        <ul className="mt-2 space-y-1.5">
           {rules.map((rule: any) => {
             const incs = incidentsByRule[rule.id] ?? [];
             const lastTriggered = incs[0]?.created_at;
@@ -621,9 +487,11 @@ function ControlGroup({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <ShieldCheck className="h-3.5 w-3.5 text-slate-400" />
-                      <p className="truncate text-sm font-medium text-slate-900">{rule.name}</p>
+                      <p className="truncate text-sm font-medium text-slate-900">
+                        {rule.name}
+                      </p>
                       <span
                         className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${signalColor(signal)}`}
                       >
@@ -635,11 +503,13 @@ function ControlGroup({
                         {humanizeLabel(rule.severity)}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{rule.description}</p>
+                    <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">
+                      {rule.description}
+                    </p>
                   </div>
                   <div className="shrink-0 text-right text-[11px] text-slate-500">
                     <p className="tabular-nums font-semibold text-slate-900">
-                      {incs.length} fires
+                      {incs.length} {incs.length === 1 ? "fire" : "fires"}
                     </p>
                     {highlight && lastTriggered ? (
                       <p>{formatRelativeTime(lastTriggered)}</p>

@@ -53,7 +53,7 @@ export function IncidentWorkflowPanel({
   return (
     <Card>
       <CardHeader
-        title="Governance Workflow"
+        title="Governance workflow"
         caption={helperText}
         action={
           <div className="flex flex-wrap items-center gap-1.5">
@@ -133,8 +133,7 @@ export function IncidentWorkflowPanel({
         />
       </div>
       <p className="mt-3 text-[11px] text-slate-500">
-        Demo actions persist in local browser memory so you can walk through the workflow. Use “Reset
-        demo state” in the sidebar to clear.
+        Demo actions persist locally. Use “Reset demo state” in the sidebar to clear.
       </p>
     </Card>
   );

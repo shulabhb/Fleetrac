@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
 import { LinkedActionsPanel } from "@/components/actions/linked-actions";
+import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatInteger, formatMetric, formatRelativeTime } from "@/lib/format";
 import {
   humanizeLabel,
@@ -24,6 +25,14 @@ import {
   signalTypeForField,
   telemetryFieldForMetric
 } from "@/lib/present";
+import {
+  routes,
+  routeToAction,
+  routeToBobInvestigation,
+  routeToControl,
+  routeToIncidentsForSystem,
+  routeToSystem
+} from "@/lib/routes";
 
 type IncidentDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -144,17 +153,46 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
     targetId: entry.target_id
   }));
 
+  const firstAction = incidentActions[0] ?? null;
+
   return (
     <section className="space-y-5">
-      <div className="flex items-center gap-2 text-xs text-slate-500">
+      <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
         <Link
-          href="/incidents"
+          href={routes.incidents()}
           className="inline-flex items-center gap-1 hover:text-slate-900"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
           Back to Incident Queue
         </Link>
+        <Link
+          href={routeToSystem(incident.system_id)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
+        >
+          Open system · {incident.system_name}
+        </Link>
       </div>
+
+      <FlowBreadcrumb
+        steps={[
+          { label: "Incident", icon: "incident", active: true },
+          investigation
+            ? {
+                label: "Bob investigation",
+                href: routeToBobInvestigation(investigation.id),
+                icon: "bob"
+              }
+            : { label: "Bob investigation", icon: "bob", missing: true },
+          firstAction
+            ? {
+                label: "Governed action",
+                href: routeToAction(firstAction.id),
+                icon: "action"
+              }
+            : { label: "Governed action", icon: "action", missing: true },
+          { label: "Measured outcome", icon: "outcome", missing: true }
+        ]}
+      />
 
       <Card className="p-0">
         <div className="flex flex-wrap items-start justify-between gap-4 p-5">
@@ -181,7 +219,7 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
               </Badge>
               {incident.review_required ? (
                 <Badge tone="medium" size="sm">
-                  Review Required
+                  Review required
                 </Badge>
               ) : null}
               <span className="text-[11px] text-slate-500">
@@ -197,28 +235,28 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
         <dl className="grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-200 text-sm md:grid-cols-4">
           <MetaCell label="System">
             <Link
-              href={`/systems/${incident.system_id}`}
+              href={routeToSystem(incident.system_id)}
               className="truncate font-medium text-slate-900 hover:underline"
             >
               {incident.system_name}
             </Link>
             <span className="block truncate text-[11px] text-slate-500">{incident.system_id}</span>
           </MetaCell>
-          <MetaCell label="Owner Team">{incident.owner_team}</MetaCell>
+          <MetaCell label="Owner team">{incident.owner_team}</MetaCell>
           <MetaCell label="Control">
             <Link
-              href={`/controls?q=${encodeURIComponent(incident.rule_id)}`}
+              href={routeToControl(incident.rule_id)}
               className="truncate font-mono text-[12px] text-slate-700 hover:text-slate-900 hover:underline"
             >
               {incident.rule_id}
             </Link>
           </MetaCell>
-          <MetaCell label="Similar Incidents (7d)">
+          <MetaCell label="Similar incidents (7d)">
             <div className="flex items-center justify-between gap-2">
               <span>{formatInteger(similarLast7Days)}</span>
               {similarLast7Days > 0 ? (
                 <Link
-                  href={`/incidents?system=${incident.system_id}`}
+                  href={routeToIncidentsForSystem(incident.system_id)}
                   className="text-[10px] font-medium text-slate-500 hover:text-slate-900 hover:underline"
                 >
                   View →
@@ -232,11 +270,10 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
       <section>
         <header className="mb-2 flex items-center justify-between">
           <p className="label-eyebrow flex items-center gap-1.5 text-indigo-700">
-            Bob Analysis
+            Bob analysis
           </p>
           <p className="text-[11px] text-slate-500">
-            Bob&apos;s read of likely root cause and recommended next action · separate
-            from the human-driven incident record above.
+            Likely root cause and recommended next action.
           </p>
         </header>
         {investigation ? (
@@ -249,7 +286,7 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
       <LinkedActionsPanel
         actions={incidentActions}
         title="Governed actions from this incident"
-        caption="Remediations Bob drafted for this incident, with their approver, execution eligibility and outcome monitoring state."
+        caption="Remediations Bob drafted, with approver, eligibility, and monitoring state."
       />
 
       <Card>
@@ -257,8 +294,8 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
           title="Evidence"
           caption={
             metricField
-              ? `${metricLabel(metricField)} over recent telemetry events for ${incident.system_name}`
-              : "Breach evidence and supporting metrics"
+              ? `${metricLabel(metricField)} · ${incident.system_name}`
+              : "Breach evidence and supporting metrics."
           }
           action={<GaugeCircle className="h-4 w-4 text-slate-400" />}
         />
@@ -316,8 +353,7 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
               />
             </div>
             <p className="mt-2 text-[11px] text-slate-500">
-              Dashed line shows the governance threshold. The latest value to the right of the chart is
-              what caused this incident to fire.
+              Dashed line is the governance threshold. The latest value triggered this incident.
             </p>
           </div>
 
@@ -365,15 +401,15 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader
-            title="Business & Governance Context"
-            caption="What this incident means for the organization"
+            title="Business & governance context"
+            caption="Organizational exposure if left untreated."
             action={<FileText className="h-4 w-4 text-slate-400" />}
           />
           <p className="mt-3 text-sm leading-relaxed text-slate-700">
-            This incident affects governance confidence for a production AI workflow in{" "}
-            <span className="font-medium text-slate-900">{incident.owner_team}</span>. If
-            left untreated, it can increase policy exposure, review burden, and stakeholder
-            risk in regulated decision flows.
+            Affects governance confidence for a production AI workflow owned by{" "}
+            <span className="font-medium text-slate-900">{incident.owner_team}</span>.
+            Untreated, it increases policy exposure, review burden, and stakeholder risk in
+            regulated decision flows.
           </p>
           <div className="mt-3 space-y-1.5 text-xs text-slate-600">
             <p>
@@ -383,19 +419,13 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
               </span>
             </p>
             <p>
-              <span className="text-slate-400">Regulated workflow owner:</span>{" "}
+              <span className="text-slate-400">Owner team:</span>{" "}
               <span className="font-medium text-slate-800">{incident.owner_team}</span>
             </p>
-            {investigation ? (
-              <p className="pt-1 text-[11px] text-slate-500">
-                For Bob&apos;s view of likely root cause and suggested fix, see the Bob
-                Analysis section above.
-              </p>
-            ) : null}
           </div>
         </Card>
         <Card>
-          <CardHeader title="Audit Trail" caption="Actions recorded for this incident" />
+          <CardHeader title="Audit trail" caption="Actions recorded for this incident." />
           <div className="mt-3">
             <ActivityFeed items={activityItems} emptyLabel="No audit entries yet." />
           </div>

@@ -36,7 +36,7 @@ const EXEC_CFG: Record<
     className: "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
   },
   ready_to_execute: {
-    label: "Ready to execute",
+    label: "Approved · ready",
     className: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
   },
   executed: {
@@ -93,11 +93,11 @@ const APPROVAL_CFG: Record<
   { label: string; className: string }
 > = {
   not_required: {
-    label: "No approval needed",
+    label: "No approval required",
     className: "bg-slate-50 text-slate-600 ring-1 ring-slate-200"
   },
   pending: {
-    label: "Approval pending",
+    label: "Awaiting approval",
     className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
   },
   approved: {
@@ -109,7 +109,7 @@ const APPROVAL_CFG: Record<
     className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
   },
   escalated: {
-    label: "Policy escalation",
+    label: "Policy-escalated",
     className: "bg-orange-50 text-orange-800 ring-1 ring-orange-200"
   }
 };
@@ -253,7 +253,7 @@ const MON_CFG: Record<MonitoringStatus, { label: string; className: string }> = 
     className: "bg-slate-50 text-slate-500 ring-1 ring-slate-200"
   },
   monitoring_next_window: {
-    label: "Monitoring next window",
+    label: "Under monitoring",
     className: "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
   },
   awaiting_telemetry: {
@@ -261,7 +261,7 @@ const MON_CFG: Record<MonitoringStatus, { label: string; className: string }> = 
     className: "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
   },
   no_meaningful_change: {
-    label: "No meaningful change",
+    label: "No material change",
     className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
   },
   improvement_observed: {
@@ -327,7 +327,7 @@ const BOB_MODE_CFG: Record<
     className: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
   },
   limited_auto_execution: {
-    label: "Limited auto execution",
+    label: "Limited auto-execution",
     className: "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
   }
 };

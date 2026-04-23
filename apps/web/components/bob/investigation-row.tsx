@@ -9,6 +9,7 @@ import {
 } from "./bob-badges";
 import { formatRelativeTime } from "@/lib/format";
 import { humanizeLabel } from "@/lib/present";
+import { routeToBobInvestigation } from "@/lib/routes";
 
 export function InvestigationRow({
   investigation,
@@ -23,7 +24,7 @@ export function InvestigationRow({
 
   return (
     <Link
-      href={`/bob/${investigation.id}`}
+      href={routeToBobInvestigation(investigation.id)}
       className={cn(
         "group flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3.5 transition hover:border-slate-300 hover:shadow-card-hover",
         className

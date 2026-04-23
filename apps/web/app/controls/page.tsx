@@ -16,9 +16,9 @@ export default async function ControlsPage() {
   return (
     <section className="space-y-5">
       <SectionTitle
-        eyebrow="Policy"
+        eyebrow="Policy · Control operations"
         title="Governance Controls"
-        caption="What controls exist, what they monitor, how often they fire, and who owns them. Bob&apos;s tuning suggestions appear alongside — clearly separated from the control catalog."
+        caption="Firing rate, ownership, and Bob review state across the control fleet. Use buckets to scope: active, recurring, Bob-flagged, or quiet."
       />
       <ControlsBrowser
         rules={rulesRes.items}

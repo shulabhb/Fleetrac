@@ -62,8 +62,8 @@ export function ApprovalBadge({
     ApprovalStatus,
     { label: string; tone: "neutral" | "high" | "medium" | "low" | "info" | "outline" }
   > = {
-    not_required: { label: "No approval needed", tone: "outline" },
-    pending: { label: "Pending approval", tone: "medium" },
+    not_required: { label: "No approval required", tone: "outline" },
+    pending: { label: "Awaiting approval", tone: "medium" },
     approved: { label: "Approved", tone: "low" },
     rejected: { label: "Rejected", tone: "high" }
   };
