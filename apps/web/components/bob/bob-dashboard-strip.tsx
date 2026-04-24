@@ -37,8 +37,8 @@ export function BobDashboardStrip({
       accent="indigo"
       icon={<Sparkles className="h-3.5 w-3.5" />}
       eyebrow="Investigate · Bob Copilot"
-      caption="Bounded, approval-gated recommendations."
-      cta={{ label: "Open Bob Copilot", href: routes.bob() }}
+      caption="Diagnose queue items and prepare bounded recommendations for Action Center."
+      cta={{ label: "Review investigations", href: routes.bob() }}
       stats={
         <>
           <StripStat

@@ -44,7 +44,7 @@ export function LinkedActionsPanel({
     : 0;
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4">
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-none">
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="label-eyebrow flex items-center gap-1.5">
@@ -71,14 +71,10 @@ export function LinkedActionsPanel({
         </p>
       ) : (
         <>
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
-            <Pill
-              label="Awaiting approval"
-              value={awaitingCount}
-              tone={awaitingCount > 0 ? "warn" : "default"}
-            />
-            <Pill label="Approved" value={approvedCount} />
-            <Pill label="Under monitoring" value={monitoringCount} />
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+            <Count label="awaiting approval" value={awaitingCount} warn={awaitingCount > 0} />
+            <Count label="approved" value={approvedCount} />
+            <Count label="under monitoring" value={monitoringCount} />
             {rollbackCount > 0 ? (
               <Pill
                 label="Rollback candidates"
@@ -127,6 +123,29 @@ function Pill({
     >
       <span className="tabular-nums">{value}</span>
       <span>{label}</span>
+    </span>
+  );
+}
+
+function Count({
+  label,
+  value,
+  warn
+}: {
+  label: string;
+  value: number;
+  warn?: boolean;
+}) {
+  return (
+    <span>
+      <span
+        className={
+          "font-semibold tabular-nums " + (warn ? "text-amber-700" : "text-slate-700")
+        }
+      >
+        {value}
+      </span>{" "}
+      {label}
     </span>
   );
 }

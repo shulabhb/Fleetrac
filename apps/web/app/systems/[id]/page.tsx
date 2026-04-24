@@ -22,6 +22,7 @@ import { TelemetryTile } from "@/components/systems/telemetry-tile";
 import { ChangesTimeline } from "@/components/operations/change-impact";
 import { ExecutionConsole } from "@/components/operations/execution-console";
 import { ActivityFeed } from "@/components/activity-feed";
+import { DisclosureSection } from "@/components/shared/disclosure-section";
 import { Card, CardHeader } from "@/components/ui/card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import {
@@ -175,10 +176,12 @@ export default async function SystemDetailPage({ params }: Props) {
       )
       .map((c: any) => c.source_action_id as string)
   );
+  const visibleChanges = changes.slice(0, 2);
+  const hiddenChanges = changes.slice(2);
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center gap-2 text-xs text-slate-500">
+      <div className="flex min-h-8 items-center gap-2 text-xs text-slate-500">
         <Link
           href={routes.systems()}
           className="inline-flex items-center gap-1 hover:text-slate-900"
@@ -196,19 +199,103 @@ export default async function SystemDetailPage({ params }: Props) {
         bobInvestigationId={bobInvestigation?.id ?? null}
       />
 
+      {/* Operations state — versioning, maintenance, rollback */}
+      {ops ? (
+        <section>
+          <LayerHeader
+            eyebrow="Immediate decision layer"
+            title="Current production truth"
+            caption="Versioning, maintenance posture, rollback readiness, and operating state."
+          />
+          <SystemOperationsPanel ops={ops} />
+        </section>
+      ) : null}
+
+      {/* Access & action policy (trust surface) + governed actions sidecar */}
+      {accessPolicy ? (
+        <section>
+          <LayerHeader
+            eyebrow="Decision-support layer"
+            title="Policy and governed actions"
+            caption="Capability boundaries and action history for this production system."
+          />
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+            <AccessPolicyPanel policy={accessPolicy} />
+            <LinkedActionsPanel
+              actions={systemActions}
+              title="Governed actions on this system"
+              caption="Routed through the Action Center, bounded by the policy on the left."
+              rollbackActionIds={rollbackActionIds}
+              emptyLabel={
+                openIncidents.length === 0
+                  ? "Healthy — no governed actions open. Any future recurrence routes here for approval."
+                  : "No governed actions yet. Bob's remediations will appear here with approval and execution state."
+              }
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {/* Changes & Impact — what actually changed, did it help? */}
+      <section>
+        <LayerHeader
+          eyebrow="Decision-support layer"
+          title="Recent governed outcomes"
+          caption="Executed changes on this system and whether measured impact supports the current posture."
+        />
+        <Card>
+          <CardHeader
+            title="Changes & impact"
+            caption="Governed changes executed here. Expected vs. actual on monitored metrics."
+            action={
+              changes.length > 0 ? (
+                <Link
+                  href={routeToOutcomesForSystem(id)}
+                  className="text-xs font-medium text-slate-600 hover:text-slate-900"
+                >
+                  Measure all outcomes →
+                </Link>
+              ) : null
+            }
+          />
+          <div className="mt-3">
+            <ChangesTimeline
+              changes={visibleChanges}
+            emptyLabel={
+              openIncidents.length === 0
+                ? "No governed changes in this window. Operating within policy."
+                : "No governed changes yet. Approved Bob recommendations will appear here with measured impact."
+            }
+            />
+            {hiddenChanges.length > 0 ? (
+              <DisclosureSection
+                title={`Older governed outcomes (${hiddenChanges.length})`}
+                summary="Additional measured changes remain available without crowding current posture."
+                className="mt-3"
+              >
+                <ChangesTimeline changes={hiddenChanges} />
+                <div className="mt-3 text-center">
+                  <Link
+                    href={routeToOutcomesForSystem(id)}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:border-slate-300"
+                  >
+                    Measure all {changes.length} outcomes for this system →
+                  </Link>
+                </div>
+              </DisclosureSection>
+            ) : null}
+          </div>
+        </Card>
+      </section>
+
       {/* Bob System Analysis — the structural read */}
       <section>
-        <header className="mb-2 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="label-eyebrow text-indigo-700">Bob system analysis</p>
-            <h3 className="mt-0.5 text-sm font-semibold tracking-tight text-slate-900">
-              Structural read of this system
-            </h3>
-          </div>
-          <p className="max-w-md text-[11px] text-slate-500">
-            Recurrence, likely root cause, and next approval-gated remediation.
-          </p>
-        </header>
+        <LayerHeader
+          eyebrow="Decision-support layer"
+          title="Bob system analysis"
+          caption="Structural read: recurrence, likely root cause, and next approval-gated remediation."
+          tone="indigo"
+        />
         {bobInvestigation ? (
           <BobSummaryPanel investigation={bobInvestigation} variant="compact" />
         ) : (
@@ -216,142 +303,85 @@ export default async function SystemDetailPage({ params }: Props) {
         )}
       </section>
 
-      {/* Operations state — versioning, maintenance, rollback */}
-      {ops ? <SystemOperationsPanel ops={ops} /> : null}
-
-      {/* Access & action policy (trust surface) + governed actions sidecar */}
-      {accessPolicy ? (
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <AccessPolicyPanel policy={accessPolicy} />
-          <LinkedActionsPanel
-            actions={systemActions}
-            title="Governed actions on this system"
-            caption="Routed through the Action Center, bounded by the policy on the left."
-            rollbackActionIds={rollbackActionIds}
-            emptyLabel={
-              openIncidents.length === 0
-                ? "Healthy — no governed actions open. Any future recurrence routes here for approval."
-                : "No governed actions yet. Bob's remediations will appear here with approval and execution state."
-            }
-          />
-        </div>
-      ) : null}
-
-      {/* Changes & Impact — what actually changed, did it help? */}
-      <Card>
-        <CardHeader
-          title="Changes & impact"
-          caption="Governed changes executed here. Expected vs. actual on monitored metrics."
-          action={
-            changes.length > 0 ? (
-              <Link
-                href={routeToOutcomesForSystem(id)}
-                className="text-xs font-medium text-slate-600 hover:text-slate-900"
-              >
-                View all outcomes →
-              </Link>
-            ) : null
-          }
-        />
-        <div className="mt-3">
-          <ChangesTimeline
-            changes={changes.slice(0, 5)}
-          emptyLabel={
-            openIncidents.length === 0
-              ? "No governed changes in this window. Operating within policy."
-              : "No governed changes yet. Approved Bob recommendations will appear here with measured impact."
-          }
-          />
-          {changes.length > 5 ? (
-            <div className="mt-3 text-center">
-              <Link
-                href={routeToOutcomesForSystem(id)}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:border-slate-300"
-              >
-                See all {changes.length} outcomes for this system →
-              </Link>
-            </div>
-          ) : null}
-        </div>
-      </Card>
-
-      {consoleEntries.length > 0 ? (
-        <ExecutionConsole
-          entries={consoleEntries}
-          title="Execution console · this system"
-          caption="Audit-linked operational acts Bob has prepared or executed."
-        />
-      ) : null}
-
       {/* Telemetry evidence + recent incidents */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader
-            title="Telemetry trends"
-            caption={
-              latestEvent
-                ? `Last ingested ${formatRelativeTime(latestEvent.timestamp)} · ${formatInteger(telemetry.length)} events`
-                : "Awaiting first telemetry event"
-            }
-            action={
-              <InfoTooltip
-                content="Computed from recent telemetry events. Dashed lines mark the governance review threshold for each control."
-                ariaLabel="About telemetry trends"
+      <DisclosureSection
+        eyebrow="Decision-support layer"
+        title="Telemetry and incident evidence"
+        summary={
+          latestEvent
+            ? `${openIncidents.length} open incidents · ${formatInteger(telemetry.length)} telemetry events · last ingested ${formatRelativeTime(latestEvent.timestamp)}`
+            : `${openIncidents.length} open incidents · awaiting telemetry ingest`
+        }
+        defaultOpen={true}
+      >
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <Card>
+            <CardHeader
+              title="Telemetry trends"
+              caption={
+                latestEvent
+                  ? `Last ingested ${formatRelativeTime(latestEvent.timestamp)} · ${formatInteger(telemetry.length)} events`
+                  : "Awaiting first telemetry event"
+              }
+              action={
+                <InfoTooltip
+                  content="Computed from recent telemetry events. Dashed lines mark the governance review threshold for each control."
+                  ariaLabel="About telemetry trends"
+                />
+              }
+            />
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <TelemetryTile
+                label="Drift index"
+                threshold="Review above 0.25"
+                data={driftSeries}
+                thresholdValue={0.25}
+                thresholdLabel="Review"
+                color="#0f172a"
+                yDigits={3}
               />
-            }
-          />
-          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <TelemetryTile
-              label="Drift index"
-              threshold="Review above 0.25"
-              data={driftSeries}
-              thresholdValue={0.25}
-              thresholdLabel="Review"
-              color="#0f172a"
-              yDigits={3}
-            />
-            <TelemetryTile
-              label="Latency p95"
-              threshold="SLA at 1500 ms"
-              data={latencySeries}
-              thresholdValue={1500}
-              thresholdLabel="SLA"
-              color="#0369a1"
-              unit=" ms"
-              yDigits={0}
-            />
-            <TelemetryTile
-              label="Grounding score"
-              threshold="Alert below 0.7"
-              data={groundingSeries}
-              thresholdValue={0.7}
-              thresholdLabel="Alert"
-              color="#7c3aed"
-              yDigits={2}
-            />
-            <TelemetryTile
-              label="Audit coverage"
-              threshold="Regulatory floor 95%"
-              data={auditSeries}
-              thresholdValue={95}
-              thresholdLabel="Floor"
-              color="#047857"
-              unit="%"
-              yDigits={1}
-            />
-          </div>
-        </Card>
+              <TelemetryTile
+                label="Latency p95"
+                threshold="SLA at 1500 ms"
+                data={latencySeries}
+                thresholdValue={1500}
+                thresholdLabel="SLA"
+                color="#0369a1"
+                unit=" ms"
+                yDigits={0}
+              />
+              <TelemetryTile
+                label="Grounding score"
+                threshold="Alert below 0.7"
+                data={groundingSeries}
+                thresholdValue={0.7}
+                thresholdLabel="Alert"
+                color="#7c3aed"
+                yDigits={2}
+              />
+              <TelemetryTile
+                label="Audit coverage"
+                threshold="Regulatory floor 95%"
+                data={auditSeries}
+                thresholdValue={95}
+                thresholdLabel="Floor"
+                color="#047857"
+                unit="%"
+                yDigits={1}
+              />
+            </div>
+          </Card>
 
-        <Card>
+          <Card>
           <CardHeader
             title="Recent incidents"
             caption={`${openIncidents.length} open · ${incidents.length} total`}
             action={
               <Link
-                href={routeToIncidentsForSystem(id)}
+               href={routeToIncidentsForSystem(id)}
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
-                View all →
+                Return to incident →
               </Link>
             }
           />
@@ -393,66 +423,115 @@ export default async function SystemDetailPage({ params }: Props) {
                 ))}
             </ul>
           )}
-        </Card>
-      </div>
+          </Card>
+        </div>
+      </DisclosureSection>
+
+      {consoleEntries.length > 0 ? (
+        <DisclosureSection
+          eyebrow="Audit / deep-detail layer"
+          title="Execution record"
+          summary={`${consoleEntries.length} audit-linked operational acts Bob has prepared or executed.`}
+        >
+          <ExecutionConsole
+            entries={consoleEntries}
+            title="Execution console · this system"
+            caption="Audit-linked operational acts Bob has prepared or executed."
+          />
+        </DisclosureSection>
+      ) : null}
 
       {/* Governance activity + active controls */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Recent governance activity"
-            caption="Audit events scoped to this system"
-          />
-          <div className="mt-3">
-            {activityItems.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No governance activity in this window.
-              </p>
-            ) : (
-              <ActivityFeed
-                items={activityItems}
-                hrefFor={(item) => {
-                  if (!item.targetId) return null;
-                  if (item.action?.startsWith("bob.") && item.targetType === "control") {
-                    return routeToBobForTarget("control", item.targetId);
-                  }
-                  if (item.action?.startsWith("bob.") && item.targetType === "incident") {
-                    return routeToBobForTarget("incident", item.targetId);
-                  }
-                  if (item.targetId.startsWith("inc_"))
-                    return routeToIncident(item.targetId);
-                  if (item.targetId.startsWith("rule_"))
-                    return routeToControl(item.targetId);
-                  return null;
-                }}
-              />
-            )}
-          </div>
-        </Card>
+      <DisclosureSection
+        eyebrow="Audit / deep-detail layer"
+        title="Governance record and controls"
+        summary={`${activityItems.length} audit events · ${recentlyTriggered.length} controls triggered recently · ${coveringControls.length} controls in monitoring coverage`}
+      >
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <Card surface="audit">
+            <CardHeader
+              title="Recent governance activity"
+              caption="Audit events scoped to this system"
+            />
+            <div className="mt-3">
+              {activityItems.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  No governance activity in this window.
+                </p>
+              ) : (
+                <ActivityFeed
+                  items={activityItems}
+                  hrefFor={(item) => {
+                    if (!item.targetId) return null;
+                    if (item.action?.startsWith("bob.") && item.targetType === "control") {
+                      return routeToBobForTarget("control", item.targetId);
+                    }
+                    if (item.action?.startsWith("bob.") && item.targetType === "incident") {
+                      return routeToBobForTarget("incident", item.targetId);
+                    }
+                    if (item.targetId.startsWith("inc_"))
+                      return routeToIncident(item.targetId);
+                    if (item.targetId.startsWith("rule_"))
+                      return routeToControl(item.targetId);
+                    return null;
+                  }}
+                />
+              )}
+            </div>
+          </Card>
 
-        <Card>
-          <CardHeader
-            title="Active controls on this system"
-            caption="Currently monitoring — recently triggered first."
-          />
-          <div className="mt-4 space-y-4">
-            <ControlGroup
-              label="Recently triggered (last 7 days)"
-              emptyLabel="No control has triggered in the last 7 days."
-              rules={recentlyTriggered}
-              incidentsByRule={incidentsByRule}
-              highlight
+          <Card surface="audit">
+            <CardHeader
+              title="Active controls on this system"
+              caption="Currently monitoring — recently triggered first."
             />
-            <ControlGroup
-              label="Monitoring coverage"
-              emptyLabel="All previously-triggering controls are quiet. Fleet-wide controls still apply."
-              rules={coveringControls}
-              incidentsByRule={incidentsByRule}
-            />
-          </div>
-        </Card>
-      </div>
+            <div className="mt-4 space-y-4">
+              <ControlGroup
+                label="Recently triggered (last 7 days)"
+                emptyLabel="No control has triggered in the last 7 days."
+                rules={recentlyTriggered}
+                incidentsByRule={incidentsByRule}
+                highlight
+              />
+              <ControlGroup
+                label="Monitoring coverage"
+                emptyLabel="All previously-triggering controls are quiet. Fleet-wide controls still apply."
+                rules={coveringControls}
+                incidentsByRule={incidentsByRule}
+              />
+            </div>
+          </Card>
+        </div>
+      </DisclosureSection>
     </section>
+  );
+}
+
+function LayerHeader({
+  eyebrow,
+  title,
+  caption,
+  tone = "slate"
+}: {
+  eyebrow: string;
+  title: string;
+  caption: string;
+  tone?: "slate" | "indigo";
+}) {
+  return (
+    <header className="mb-2 flex flex-wrap items-end justify-between gap-2">
+      <div>
+        <p
+          className={`label-eyebrow ${tone === "indigo" ? "text-indigo-700" : ""}`}
+        >
+          {eyebrow}
+        </p>
+        <h3 className="mt-0.5 text-sm font-semibold tracking-tight text-slate-900">
+          {title}
+        </h3>
+      </div>
+      <p className="max-w-md text-[11px] text-slate-500">{caption}</p>
+    </header>
   );
 }
 

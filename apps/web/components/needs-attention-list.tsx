@@ -92,7 +92,7 @@ export function NeedsAttentionList({ rows }: { rows: Row[] }) {
                     targetType="incident"
                     targetId={incident.id}
                     hasInvestigation
-                    label="View Bob analysis"
+                    label="Open Bob investigation"
                   />
                 </div>
               </div>

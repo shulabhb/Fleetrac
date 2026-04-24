@@ -157,7 +157,7 @@ export function BobSummaryPanel({
             href={detailHref}
             className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50"
           >
-            Open investigation
+            Open Bob investigation
             <ArrowRight className="h-3 w-3" />
           </Link>
         </div>
@@ -197,7 +197,7 @@ export function BobEmptyPanel({
             "Repeated control fires on the same system",
             "Audit coverage floor breach"
           ],
-          cta: "Ask Bob to analyze now"
+          cta: "Start Bob system analysis"
         }
       : targetType === "control"
         ? {
@@ -205,14 +205,14 @@ export function BobEmptyPanel({
             explain:
               "Bob analyzes a control when it fires repeatedly, when threshold tuning would reduce noise, or when a correlated root cause appears across the incidents it raised.",
             triggers: [],
-            cta: "Run Bob analysis"
+            cta: "Start Bob control analysis"
           }
         : {
             lead: `Bob has not opened an investigation on this ${targetType} yet.`,
             explain:
               "When telemetry shifts or a recurrence pattern is detected, Bob will draft an investigation here with evidence, likely root cause, and a recommended next action for human approval.",
             triggers: [],
-            cta: "Run Bob investigation"
+            cta: "Start Bob investigation"
           };
 
   return (

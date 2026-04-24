@@ -5,11 +5,7 @@ import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  ChangeStateBadge,
-  EnvironmentChip,
-  VersionChip
-} from "./operations-badges";
+import { VersionChip } from "./operations-badges";
 import { routeToAction } from "@/lib/routes";
 
 function formatMetricValue(value: number | null | undefined, unit?: string | null) {
@@ -80,18 +76,14 @@ export function MetricDeltaRow({ delta }: { delta: MetricDelta }) {
 
 export function ChangeImpactCard({ change }: { change: Change }) {
   return (
-    <Card density="compact" className="space-y-3">
+    <Card density="compact" surface="evidence" className="space-y-3">
       <CardHeader
-        title={
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{change.change_type}</span>
-            <ChangeStateBadge state={change.impact_status} />
-            <EnvironmentChip env={change.environment} />
-          </div>
-        }
+        title={change.change_type}
         caption={
           <span className="text-slate-500">
-            {change.changed_by_label} · executed {formatRelativeTime(change.executed_at)}
+            {change.impact_status.replace(/_/g, " ")} · {change.environment} ·{" "}
+            {change.changed_by_label} · executed{" "}
+            {formatRelativeTime(change.executed_at)}
           </span>
         }
         action={
@@ -258,8 +250,10 @@ export function ChangeImpactMiniRow({ change }: { change: Change }) {
       : null;
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px]">
-      <ChangeStateBadge state={change.impact_status} />
-      <span className="text-slate-700">{change.change_type}</span>
+      <span className="font-medium text-slate-700">{change.change_type}</span>
+      <span className="text-[11px] text-slate-500">
+        {change.impact_status.replace(/_/g, " ")}
+      </span>
       {primary && (
         <span className="text-slate-500">
           {primary.label}{" "}

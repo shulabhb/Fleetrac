@@ -45,21 +45,21 @@ const SEGMENTS: SegmentDef[] = [
     label: "Rollback candidate",
     group: "attention",
     caption:
-      "Monitored metrics regressed, or Bob has flagged this for rollback. Prepare a rollback request through Action Center."
+      "Immediate evidence lane: monitored metrics regressed, or Bob has flagged this for rollback. Prepare rollback through Action Center."
   },
   {
     id: "follow_up",
     label: "Follow-up required",
     group: "attention",
     caption:
-      "Partial or ambiguous movement. Reviewer sign-off, a narrower fix, or extended monitoring is needed."
+      "Partial or ambiguous movement. Decide whether reviewer sign-off, a narrower fix, or extended monitoring is needed."
   },
   {
     id: "monitoring",
     label: "Under monitoring",
     group: "monitoring",
     caption:
-      "Monitoring window is open. Outcome is not yet stable — Bob is still measuring against the baseline."
+      "Monitoring window is open. Outcome is not yet stable; keep measuring against the baseline before closing."
   },
   {
     id: "improvement",
@@ -229,6 +229,18 @@ export function OutcomesView({
 
   return (
     <section className="space-y-5">
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-medium text-slate-900">
+            Operational job: verify executed changes here; route rollback or
+            follow-up back through governed action.
+          </p>
+          <p className="text-[11px] text-slate-500">
+            Action Center governs → Outcomes measures
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
           label="Rollback candidates"
@@ -344,7 +356,9 @@ export function OutcomesView({
             No outcomes in this view.
           </div>
         ) : (
-          filtered.map((c) => <OutcomeRow key={c.id} change={c} />)
+          filtered.map((c) => (
+            <OutcomeRow key={c.id} change={c} returnTo={returnTo} />
+          ))
         )}
       </div>
     </section>
@@ -408,7 +422,13 @@ function primaryDelta(change: Change): MetricDelta | null {
   return change.metric_deltas[0] ?? null;
 }
 
-export function OutcomeRow({ change }: { change: Change }) {
+export function OutcomeRow({
+  change,
+  returnTo
+}: {
+  change: Change;
+  returnTo?: string;
+}) {
   const d = primaryDelta(change);
   const pct = d ? deltaPct(d) : null;
   const dir = d ? computeDeltaDirection(d) : "flat";
@@ -538,10 +558,10 @@ export function OutcomeRow({ change }: { change: Change }) {
             Next: {step.label}
           </span>
           <Link
-            href={routeToOutcome(change.id)}
+            href={appendReturnTo(routeToOutcome(change.id), returnTo)}
             className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:border-slate-300"
           >
-            Open
+            Measure outcome
             <ArrowRight className="h-3 w-3" />
           </Link>
         </span>

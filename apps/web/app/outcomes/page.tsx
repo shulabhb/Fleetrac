@@ -46,7 +46,7 @@ export default async function OutcomesPage({
             href={routeToSystem(scopedSystem.id)}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
           >
-            Open system · {scopedSystem.use_case}
+            View production context · {scopedSystem.use_case}
           </Link>
         </div>
       ) : null}
@@ -60,8 +60,8 @@ export default async function OutcomesPage({
         title="Outcomes"
         caption={
           scopedSystem
-            ? `Post-remediation impact on ${scopedSystem.use_case}. Expected vs. actual, follow-up, and rollback.`
-            : "Measured post-remediation impact. Expected vs. actual on monitored metrics."
+            ? `Measured post-remediation evidence for ${scopedSystem.use_case}. Close, follow up, or prepare rollback from actual impact.`
+            : "Proof and verification queue for governed changes: measured outcome, follow-up, closure, and rollback evidence."
         }
       />
       <OutcomesView

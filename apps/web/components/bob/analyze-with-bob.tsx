@@ -45,12 +45,12 @@ export function AnalyzeWithBob({
   const text =
     label ??
     (resolved
-      ? "View Bob analysis"
+      ? "Open Bob investigation"
       : targetType === "incident"
-      ? "Analyze with Bob"
+      ? "Start Bob investigation"
       : targetType === "control"
       ? "Analyze control"
-      : "Analyze system");
+      : "Review Bob analysis");
   const href = investigationId
     ? routeToBobInvestigation(investigationId)
     : routeToBobForTarget(targetType as BobTargetType, targetId);

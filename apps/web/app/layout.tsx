@@ -14,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
+      <body suppressHydrationWarning>
         <div className="flex min-h-screen">
           <Sidebar />
           <main className="min-w-0 flex-1">

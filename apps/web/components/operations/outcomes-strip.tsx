@@ -52,7 +52,7 @@ export function OutcomesStrip({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-600">
         <span className="inline-flex items-center gap-1.5 text-slate-700">
           <LineChart className="h-3 w-3 text-slate-500" />
-          <span className="font-medium">Outcomes handoff</span>
+          <span className="font-medium">Measurement handoff</span>
         </span>
         <StatInline label="monitoring" value={monitoring} />
         <StatInline
@@ -69,7 +69,7 @@ export function OutcomesStrip({
           href={routes.outcomes()}
           className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 hover:text-slate-900"
         >
-          View outcomes
+          Measure outcomes
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
@@ -85,8 +85,8 @@ export function OutcomesStrip({
           Measure · Post-remediation review
         </>
       }
-      caption="Measured post-remediation impact."
-      cta={{ label: "Open Outcomes", href: routes.outcomes() }}
+      caption="Verify executed changes, close evidence, or route rollback follow-up."
+      cta={{ label: "Measure outcomes", href: routes.outcomes() }}
       stats={
         <>
           <StripStat

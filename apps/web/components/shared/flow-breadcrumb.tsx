@@ -31,6 +31,9 @@ export function FlowBreadcrumb({ steps }: { steps: Step[] }) {
       aria-label="Governance flow"
       className="flex flex-wrap items-center gap-1 text-[11px] font-medium text-slate-500"
     >
+      <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        Loop
+      </span>
       {steps.map((s, i) => {
         const icon =
           s.icon === "incident" ? (
@@ -44,6 +47,7 @@ export function FlowBreadcrumb({ steps }: { steps: Step[] }) {
           ) : null;
         const content = (
           <span
+            title={stepTitle(s)}
             className={cn(
               "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition",
               s.active
@@ -70,4 +74,10 @@ export function FlowBreadcrumb({ steps }: { steps: Step[] }) {
       })}
     </nav>
   );
+}
+
+function stepTitle(step: Step): string {
+  if (step.active) return `${step.label}: current surface`;
+  if (step.missing) return `${step.label}: not available yet`;
+  return `${step.label}: continue loop here`;
 }

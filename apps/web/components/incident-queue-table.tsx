@@ -173,7 +173,7 @@ export function IncidentQueueTable({ incidents }: Props) {
               href={routeToSystem(systemScope!)}
               className="font-medium text-slate-700 hover:text-slate-900"
             >
-              Open system →
+              View production context →
             </Link>
             <Link
               href={routes.incidents()}
@@ -261,7 +261,7 @@ export function IncidentQueueTable({ incidents }: Props) {
               <th className="px-4 py-2 text-left font-medium">Owner</th>
               <th className="px-4 py-2 text-left font-medium">Severity</th>
               <th className="px-4 py-2 text-left font-medium">Lifecycle</th>
-              <th className="px-4 py-2 text-left font-medium">Next action</th>
+              <th className="px-4 py-2 text-left font-medium">Next lane</th>
               <th className="px-4 py-2 text-left font-medium">Bob</th>
               <th className="px-4 py-2 text-right font-medium">Age</th>
               <th className="w-8 px-2" />
@@ -333,7 +333,7 @@ export function IncidentQueueTable({ incidents }: Props) {
                       targetType="incident"
                       targetId={incident.id}
                       hasInvestigation
-                      label="View Bob"
+                      label="Open Bob investigation"
                     />
                   </td>
                   <td className="px-4 py-2.5 text-right text-[11px] tabular-nums text-slate-500">

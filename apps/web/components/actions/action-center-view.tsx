@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import type { Action, RiskLevel } from "@/lib/action-types";
@@ -41,35 +42,35 @@ const SEGMENTS: SegmentDef[] = [
     label: "Awaiting approval",
     group: "decision",
     caption:
-      "Bob-prepared changes waiting on a human governance decision. Nothing is executed until approved."
+      "Primary inbox: Bob-prepared changes waiting on a human governance decision. Nothing is executed until approved."
   },
   {
     id: "ready",
     label: "Approved",
     group: "decision",
     caption:
-      "Approved within policy. Awaiting the permitted execution window or owner handoff."
+      "Approved within policy. Use this lane to confirm the bounded execution window or owner handoff."
   },
   {
     id: "blocked",
     label: "Policy-blocked",
     group: "decision",
     caption:
-      "Blocked by policy — missing approver, restricted type, maintenance window, or no config access. Kept visible so the blocking reason is auditable."
+      "Blocked by policy: missing approver, restricted type, maintenance window, or no config access. Resolve the block before execution."
   },
   {
     id: "executed",
     label: "Executed",
     group: "post_execution",
     caption:
-      "Executed within approved scope. Post-execution impact is measured in Outcomes."
+      "Executed within approved scope. Use Outcomes for measured post-remediation impact."
   },
   {
     id: "rollback",
     label: "Rollback candidates",
     group: "post_execution",
     caption:
-      "Executed changes that regressed on monitored metrics. Flagged for rollback or scoped review."
+      "Executed changes that regressed on monitored metrics. Review evidence, then prepare rollback through the governed action path."
   },
   {
     id: "closed_rejected",
@@ -231,6 +232,18 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
 
   return (
     <section className="space-y-5">
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-medium text-slate-900">
+            Operational job: decide prepared changes here; verify executed impact
+            in Outcomes.
+          </p>
+          <p className="text-[11px] text-slate-500">
+            Bob drafts → Action Center approves / blocks → Outcomes measures
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
           label="Awaiting approval"
@@ -349,7 +362,10 @@ export function ActionCenterView({ actions, changes = [], defaultTab }: Props) {
                 detailHref={appendReturnTo(routeToAction(a.id), returnTo)}
               />
               {segment === "rollback" && changesByActionId.get(a.id) ? (
-                <RollbackContextRow change={changesByActionId.get(a.id)!} />
+                <RollbackContextRow
+                  change={changesByActionId.get(a.id)!}
+                  returnTo={returnTo}
+                />
               ) : null}
             </div>
           ))
@@ -412,7 +428,13 @@ function SegmentTab({
   );
 }
 
-function RollbackContextRow({ change }: { change: Change }) {
+function RollbackContextRow({
+  change,
+  returnTo
+}: {
+  change: Change;
+  returnTo: string;
+}) {
   const primary = change.metric_deltas[0];
   const pct =
     primary && primary.before != null && primary.after != null && primary.before !== 0
@@ -439,12 +461,12 @@ function RollbackContextRow({ change }: { change: Change }) {
             <span className="font-mono font-semibold">{change.version_before}</span>
           </span>
         ) : null}
-        <a
-          href={routeToOutcome(change.id)}
+        <Link
+          href={appendReturnTo(routeToOutcome(change.id), returnTo)}
           className="ml-auto font-medium text-rose-700 hover:text-rose-900 hover:underline"
         >
-          Open outcome →
-        </a>
+          Measure rollback evidence →
+        </Link>
       </div>
     </div>
   );

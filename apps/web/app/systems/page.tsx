@@ -9,9 +9,9 @@ export default async function SystemsPage() {
   return (
     <section className="space-y-5">
       <SectionTitle
-        eyebrow="Fleet"
+        eyebrow="Production context"
         title="Systems"
-        caption="Every monitored AI system — with posture, ownership, and current governance load."
+        caption="Production truth and posture for monitored AI systems. Use this surface for context, then return to incident, action, or outcome work."
       />
       <SystemsFleetView systems={items} incidents={incidents} />
     </section>

@@ -415,14 +415,14 @@ function IntegrationDetailDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 transition-opacity duration-150 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={`int-title-${i.id}`}
       onClick={onClose}
     >
       <div
-        className="flex max-h-[min(92vh,880px)] w-full max-w-lg flex-col rounded-t-lg border border-slate-200 bg-white shadow-xl sm:rounded-lg"
+        className="flex max-h-[min(92vh,880px)] w-full max-w-lg translate-y-0 flex-col rounded-t-lg border border-slate-200 bg-white shadow-xl transition-transform duration-150 sm:rounded-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 border-b border-slate-100 px-4 py-3">

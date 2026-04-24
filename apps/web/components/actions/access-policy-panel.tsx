@@ -1,13 +1,10 @@
 import {
   CheckCircle2,
   Eye,
-  FileClock,
-  Lock,
   Plug2,
   ShieldCheck,
   ShieldOff,
-  Target,
-  Undo2
+  Target
 } from "lucide-react";
 import type { AccessPolicy } from "@/lib/action-types";
 import { BobOperatingModeBadge, actionTypeLabel } from "./index";
@@ -39,37 +36,18 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
       </header>
 
       {/* Trust summary — the governance contract, at a glance. */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-slate-50/60 px-5 py-3">
-        <TrustChip
-          tone={
-            policy.telemetry_level === "metrics_only" || policy.telemetry_level === "logs_only"
-              ? "neutral"
-              : "ok"
-          }
-          icon={<Eye className="h-3 w-3" />}
-        >
-          {telemetryAccessLabel(policy.telemetry_level)}
-        </TrustChip>
-        <TrustChip
-          tone={
-            policy.action_level === "limited_execution" ? "warn" : "ok"
-          }
-          icon={<Lock className="h-3 w-3" />}
-        >
-          {actionLevelLabel(policy.action_level)}
-        </TrustChip>
-        <TrustChip tone="ok" icon={<ShieldCheck className="h-3 w-3" />}>
-          Approval-gated
-        </TrustChip>
-        <TrustChip tone="ok" icon={<Target className="h-3 w-3" />}>
-          Bounded execution
-        </TrustChip>
-        <TrustChip tone="ok" icon={<Undo2 className="h-3 w-3" />}>
-          Reversible by default
-        </TrustChip>
-        <TrustChip tone="ok" icon={<FileClock className="h-3 w-3" />}>
-          Audit-linked
-        </TrustChip>
+      <div className="border-b border-slate-100 bg-slate-50/60 px-5 py-3 text-[12px] text-slate-600">
+        <p className="leading-relaxed">
+          <span className="font-medium text-slate-800">
+            {telemetryAccessLabel(policy.telemetry_level)}
+          </span>{" "}
+          available; actions are{" "}
+          <span className="font-medium text-slate-800">
+            {actionLevelLabel(policy.action_level)}
+          </span>
+          . Bob remains approval-gated, bounded, audit-linked, and reversible by
+          default where supported.
+        </p>
       </div>
 
       {/* Access / permission grid */}
@@ -164,36 +142,6 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
         </span>
       </footer>
     </section>
-  );
-}
-
-type TrustTone = "ok" | "warn" | "neutral";
-
-function TrustChip({
-  tone,
-  icon,
-  children
-}: {
-  tone: TrustTone;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const cls =
-    tone === "ok"
-      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-      : tone === "warn"
-        ? "bg-amber-50 text-amber-800 ring-amber-200"
-        : "bg-slate-100 text-slate-600 ring-slate-200";
-  return (
-    <span
-      className={
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 " +
-        cls
-      }
-    >
-      {icon}
-      {children}
-    </span>
   );
 }
 

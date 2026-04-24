@@ -281,15 +281,15 @@ export default async function DashboardPage() {
     <section className="space-y-7">
       {/* ============ Overview ============ */}
       <SectionTitle
-        eyebrow="Overview"
+        eyebrow="Observe · orient"
         title="Governance Operations"
-        caption={`${formatInteger(systems.length)} systems · ${formatInteger(openIncidents.length)} open incidents · observe → investigate → act → measure`}
+        caption={`${formatInteger(systems.length)} systems · ${formatInteger(openIncidents.length)} open incidents · Observe issues, investigate with Bob, govern actions, then measure outcomes.`}
         actions={
           <Link
             href={routes.incidents()}
             className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:text-slate-900"
           >
-            Open Incident Queue →
+            Choose incident work →
           </Link>
         }
       />
@@ -344,7 +344,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader
             title="Needs immediate attention"
-            caption="Start here. Ranked by escalation, severity, review urgency."
+            caption="Start here when choosing work. Ranked by escalation, severity, and review urgency."
             action={
               <Link
                 href={routes.incidents()}
@@ -361,7 +361,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader
             title="Top at-risk systems"
-            caption="By posture and open incident pressure."
+            caption="Context for the queue. By posture and open incident pressure."
             action={
               <Link
                 href={routes.systems()}
@@ -380,9 +380,9 @@ export default async function DashboardPage() {
       {/* ============ Investigate → Act → Measure band ============ */}
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <p className="label-eyebrow">Governance control plane</p>
+          <p className="label-eyebrow">Loop continuity</p>
           <p className="hidden text-[11px] text-slate-500 sm:block">
-            Investigate → Act → Measure
+            Bob diagnoses → Action Center governs → Outcomes verifies
           </p>
         </div>
         <BobDashboardStrip investigations={bobRes.items} />
@@ -397,13 +397,13 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader
             title="Recent changes & impact"
-            caption="Measured outcome of the latest governed changes."
+            caption="Latest measured outcomes after governed remediation."
             action={
               <Link
                 href={routes.outcomes()}
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
-                View all outcomes →
+                Measure all outcomes →
               </Link>
             }
           />
@@ -444,7 +444,7 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader
           title="Recent governance activity"
-          caption="Incidents, controls, reviews, and audit events."
+          caption="Audit-linked events across the operating loop."
         />
         <div className="mt-3">
           <ActivityFeed

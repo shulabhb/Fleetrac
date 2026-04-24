@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
 import {
@@ -13,7 +14,6 @@ import { ExecutionConsole } from "@/components/operations/execution-console";
 import {
   ApprovalStateBadge,
   ExecutionStateBadge,
-  MonitoringBadge,
   RiskBadge,
   bobOperatingModeLabel
 } from "@/components/actions";
@@ -21,6 +21,7 @@ import { ExecutionEligibilityCard } from "@/components/actions/execution-eligibi
 import { SafetyBar } from "@/components/actions/safety-bar";
 import { SectionTitle } from "@/components/ui/section-title";
 import { BobIcon } from "@/components/bob/bob-icon";
+import { DisclosureSection } from "@/components/shared/disclosure-section";
 import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
 import {
@@ -75,7 +76,7 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex min-h-8 items-center justify-between">
         <Link
           href={backHref}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
@@ -88,7 +89,7 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
             href={routeToSystem(action.target_system_id)}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
           >
-            Open system · {action.target_system_name ?? action.target_system_id}
+            View production context · {action.target_system_name ?? action.target_system_id}
           </Link>
         ) : null}
       </div>
@@ -121,18 +122,24 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
       />
 
       <SectionTitle
-        eyebrow="Governed action"
+        eyebrow="Immediate decision · Governed action"
         title={action.title}
         caption={action.action_scope}
       />
 
       {/* Hero: status + verdict + what-happens-next + safety bar ------------ */}
-      <div className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="min-h-[240px] rounded-lg border border-slate-200 bg-white p-5">
         <div className="flex flex-wrap items-center gap-1.5">
           <ExecutionStateBadge state={action.execution_status} />
           <ApprovalStateBadge state={action.approval_status} />
-          <RiskBadge risk={action.risk_level} />
-          <MonitoringBadge status={action.monitoring_status} />
+          {action.risk_level === "high" ? (
+            <RiskBadge risk={action.risk_level} />
+          ) : null}
+          {action.monitoring_status !== "not_applicable" ? (
+            <span className="text-[11px] text-slate-500">
+              Monitoring · {action.monitoring_status.replace(/_/g, " ")}
+            </span>
+          ) : null}
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-[1.4fr_1fr]">
@@ -149,6 +156,9 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
             </p>
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 text-[12px] text-slate-700">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Approval checkpoint
+            </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
               <KV label="Required approver" value={action.required_approver} />
               <KV label="Suggested owner" value={action.recommended_owner} />
@@ -161,6 +171,10 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
                 value={action.reversible ? "Reversible" : "Not reversible"}
               />
             </div>
+            <p className="mt-2 border-t border-slate-200 pt-2 text-[11px] leading-relaxed text-slate-500">
+              Decide approve, hold, or block here. If executed, measured impact
+              belongs in Outcomes.
+            </p>
           </div>
         </div>
 
@@ -211,16 +225,12 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
         <div className="space-y-5">
           {investigation ? (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="flex items-center gap-2">
-                <BobIcon size="xs" withBackground={false} />
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Why Bob proposed this
-                </h3>
-              </div>
-              <p className="mt-0.5 text-xs text-slate-500">
-                Bob's hypothesis for why this change could help, drawn from the
-                source investigation.
-              </p>
+              <LayerHeader
+                eyebrow="Decision-support layer"
+                title="Why Bob proposed this"
+                caption="Bob's hypothesis for why this change could help, drawn from the source investigation."
+                icon={<BobIcon size="xs" withBackground={false} />}
+              />
               <p className="mt-2 text-xs leading-relaxed text-slate-700">
                 {investigation.summary}
               </p>
@@ -239,23 +249,19 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
                   href={routeToBobInvestigation(investigation.id)}
                   className="font-medium text-indigo-700 hover:text-indigo-900 hover:underline"
                 >
-                  Open full Bob investigation →
+                  Return to Bob investigation →
                 </Link>
               </div>
             </section>
           ) : null}
 
           <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-semibold text-slate-900">
-                Execution bounds
-              </h3>
-            </div>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Policy-defined limits on this change. Approval-gated, bounded,
-              audit-linked.
-            </p>
+            <LayerHeader
+              eyebrow="Decision-support layer"
+              title="Execution bounds"
+              caption="Policy-defined limits on this change. Approval-gated, bounded, audit-linked."
+              icon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
+            />
             <ul className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-700 md:grid-cols-2">
               <BoundaryRow
                 label="Reversibility"
@@ -292,8 +298,49 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
             action={action}
             bobOperatingMode={policy?.bob_operating_mode ?? null}
           />
+        </div>
+      </div>
 
-          <section className="rounded-lg border border-slate-200 bg-white p-4 text-xs text-slate-600">
+      {change ? (
+        <DisclosureSection
+          eyebrow="Audit / deep-detail layer"
+          title="Measured outcome from this action"
+          summary={`Expected vs actual on monitored metrics · ${change.impact_status.replace(/_/g, " ")}`}
+          defaultOpen={true}
+        >
+          <div className="mb-3 flex justify-end">
+              <Link
+                href={routeToOutcome(change.id)}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-slate-300"
+              >
+                    Measure outcome
+              </Link>
+          </div>
+          <ChangeImpactCard change={change} />
+        </DisclosureSection>
+      ) : null}
+
+      {consoleEntries.length > 0 ? (
+        <DisclosureSection
+          eyebrow="Audit / deep-detail layer"
+          title="Execution record"
+          summary={`${consoleEntries.length} audit-linked execution steps Bob prepared or executed for this action.`}
+        >
+          <ExecutionConsole
+            entries={consoleEntries}
+            title="Execution console · this action"
+            caption="Audit-linked steps Bob prepared or executed."
+          />
+        </DisclosureSection>
+      ) : null}
+
+      <DisclosureSection
+        eyebrow="Audit / deep-detail layer"
+        title="Action lineage and metadata"
+        summary="Object links and timestamps retained for audit and deep review."
+      >
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="rounded-md border border-slate-200 bg-slate-50/40 p-3.5 text-xs text-slate-600">
             <p className="label-eyebrow">Related context</p>
             <p className="mt-0.5 text-[11px] text-slate-500">
               Investigation, incident, control, and system this action was drawn
@@ -338,7 +385,7 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
             </ul>
           </section>
 
-          <section className="rounded-lg border border-slate-200 bg-white p-4 text-xs text-slate-600">
+          <section className="rounded-md border border-slate-200 bg-slate-50/40 p-3.5 text-xs text-slate-600">
             <p className="label-eyebrow">About this action</p>
             <dl className="mt-2 space-y-1.5">
               <Row
@@ -370,35 +417,33 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
             </dl>
           </section>
         </div>
-      </div>
-
-      {change ? (
-        <section className="space-y-2">
-          <SectionTitle
-            eyebrow="Measure · Post-execution"
-            title="Expected vs actual"
-            caption="Expected vs actual on monitored metrics, with follow-up or rollback state."
-            actions={
-              <Link
-                href={routeToOutcome(change.id)}
-                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:border-slate-300"
-              >
-                Open in Outcomes →
-              </Link>
-            }
-          />
-          <ChangeImpactCard change={change} />
-        </section>
-      ) : null}
-
-      {consoleEntries.length > 0 ? (
-        <ExecutionConsole
-          entries={consoleEntries}
-          title="Execution console · this action"
-          caption="Audit-linked steps Bob prepared or executed."
-        />
-      ) : null}
+      </DisclosureSection>
     </section>
+  );
+}
+
+function LayerHeader({
+  eyebrow,
+  title,
+  caption,
+  icon
+}: {
+  eyebrow: string;
+  title: string;
+  caption: string;
+  icon?: ReactNode;
+}) {
+  return (
+    <header className="mb-2 flex flex-wrap items-end justify-between gap-2">
+      <div>
+        <p className="label-eyebrow">{eyebrow}</p>
+        <h3 className="mt-0.5 flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
+          {icon}
+          {title}
+        </h3>
+      </div>
+      <p className="max-w-md text-[11px] text-slate-500">{caption}</p>
+    </header>
   );
 }
 
@@ -451,6 +496,16 @@ function RelatedRow({
   value: string;
   href: string;
 }) {
+  const cta =
+    label === "Bob investigation"
+      ? "Open Bob investigation"
+      : label === "Measured outcome"
+        ? "Measure outcome"
+        : label === "System"
+          ? "View production context"
+          : label === "Incident"
+            ? "Return to incident"
+            : "View related evidence";
   return (
     <li className="flex items-center justify-between gap-2">
       <span className="min-w-0 truncate">
@@ -460,7 +515,7 @@ function RelatedRow({
         href={href}
         className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
       >
-        Open →
+        {cta} →
       </Link>
     </li>
   );

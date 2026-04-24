@@ -96,7 +96,7 @@ export function ExecutionEligibilityCard({
           href={routeToAction(action.id)}
           className="font-medium text-slate-600 hover:text-slate-900 hover:underline"
         >
-          Open action detail →
+          Review governed action →
         </Link>
       </div>
     </div>

@@ -14,7 +14,8 @@ import {
   ApprovalStateBadge,
   ExecutionStateBadge,
   MonitoringBadge,
-  RiskBadge
+  RiskBadge,
+  executionStateLabel
 } from "./index";
 import { SafetyBar } from "./safety-bar";
 
@@ -162,7 +163,7 @@ export function ActionCard({
           href={href}
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
         >
-          Open action
+          Review governed action
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
@@ -292,10 +293,12 @@ export function ActionMiniRow({ action }: { action: Action }) {
         <p className="truncate text-xs font-medium text-slate-800">
           {action.title}
         </p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-          <RiskBadge risk={action.risk_level} />
-          <ExecutionStateBadge state={action.execution_status} />
-          <MonitoringBadge status={action.monitoring_status} />
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500">
+          {action.risk_level === "high" ? <RiskBadge risk={action.risk_level} /> : null}
+          <span>{executionStateLabel(action.execution_status)}</span>
+          {action.monitoring_status !== "not_applicable" ? (
+            <span>· monitored</span>
+          ) : null}
         </div>
       </div>
       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />

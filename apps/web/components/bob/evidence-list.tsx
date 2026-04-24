@@ -39,22 +39,22 @@ export function EvidenceList({
     );
   }
   return (
-    <ul className={cn("space-y-2.5", className)}>
+    <ul className={cn("divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white", className)}>
       {evidence.map((item) => {
         const Icon = ICONS[item.type] ?? Activity;
         return (
           <li
             key={item.id}
-            className="flex gap-3 rounded-md border border-slate-200 bg-white px-3 py-2.5"
+            className="flex gap-3 px-3 py-2.5"
           >
-            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-50 text-slate-500 ring-1 ring-slate-200">
+            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center text-slate-400">
               <Icon className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
                 <p className="text-xs font-semibold text-slate-900">{item.label}</p>
                 {item.value ? (
-                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 tabular-nums">
+                  <span className="shrink-0 text-[10px] font-medium text-slate-500 tabular-nums">
                     {item.value}
                   </span>
                 ) : null}

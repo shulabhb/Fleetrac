@@ -62,7 +62,7 @@ export function SystemHero({
     : (system.name ?? system.id);
 
   return (
-    <Card className="overflow-hidden p-0">
+    <Card className="min-h-[240px] overflow-hidden p-0">
       {/* Line 1 — identity + postures */}
       <div className="flex flex-wrap items-start justify-between gap-4 p-5">
         <div className="min-w-0">

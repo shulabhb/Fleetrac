@@ -37,7 +37,7 @@ export function SystemCard({
     >
       <Link
         href={target}
-        aria-label={`Open ${displayName}`}
+        aria-label={`View production context for ${displayName}`}
         className="absolute inset-0 z-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
       />
       <div className="pointer-events-none relative z-[1]">
@@ -96,7 +96,11 @@ export function SystemCard({
         </div>
       </div>
       <div className="relative z-[2] mt-2.5 flex items-center justify-end">
-        <AnalyzeWithBob targetType="system" targetId={system.id} label="Ask Bob" />
+        <AnalyzeWithBob
+          targetType="system"
+          targetId={system.id}
+          label="Review Bob analysis"
+        />
       </div>
     </div>
   );

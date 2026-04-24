@@ -40,7 +40,7 @@ export default async function ActionCenterPage({
       <SectionTitle
         eyebrow="Act · Governed remediation"
         title="Action Center"
-        caption="Bob drafts. Humans approve. Execution is bounded, audit-linked, and reversible."
+        caption="Governed action inbox for approval, blocked decisions, bounded execution, and rollback preparation."
       />
       <ActionCenterView
         actions={items}

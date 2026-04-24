@@ -45,31 +45,31 @@ const TABS: { id: Tab; label: string; caption: string; icon: any }[] = [
   {
     id: "integrations",
     label: "Integrations",
-    caption: "External systems Fleetrac is connected to.",
+    caption: "Observe, config-read, and governed action capability by connector.",
     icon: Cable
   },
   {
     id: "policies",
     label: "Operations policies",
-    caption: "Fleet-wide governance defaults for Bob and actions.",
+    caption: "Fleet-wide boundaries for Bob, approvals, execution, rollback, and audit.",
     icon: ShieldCheck
   },
   {
     id: "environments",
     label: "Environments",
-    caption: "Per-environment policy differences.",
+    caption: "Production, staging, sandbox, and internal-only operating posture.",
     icon: Globe
   },
   {
     id: "status",
     label: "Platform status",
-    caption: "Connector and service readiness.",
+    caption: "Connector and service readiness for the control plane.",
     icon: HardDrive
   },
   {
     id: "console",
     label: "Execution console",
-    caption: "Governed operational acts Bob has prepared or executed.",
+    caption: "Audit-linked record of governed operational acts prepared or executed.",
     icon: Terminal
   }
 ];
@@ -123,6 +123,17 @@ export function SettingsView(props: Props) {
   return (
     <div className="space-y-5">
       <TabBar tab={tab} onChange={handleTabChange} />
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-medium text-slate-900">
+            Operational job: set the boundaries and integration capability that
+            govern the rest of the loop.
+          </p>
+          <p className="text-[11px] text-slate-500">
+            {TABS.find((t) => t.id === tab)?.caption}
+          </p>
+        </div>
+      </div>
 
       {tab === "integrations" && (
         <SettingsIntegrationsTab integrations={props.integrations} />

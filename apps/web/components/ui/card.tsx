@@ -4,13 +4,24 @@ import { cn } from "@/lib/cn";
 type CardProps = HTMLAttributes<HTMLDivElement> & {
   density?: "default" | "compact";
   interactive?: boolean;
+  surface?: "default" | "decision" | "support" | "evidence" | "audit";
 };
 
-export function Card({ className, density = "default", interactive, ...props }: CardProps) {
+export function Card({
+  className,
+  density = "default",
+  interactive,
+  surface = "default",
+  ...props
+}: CardProps) {
   return (
     <div
       className={cn(
         "rounded-lg border border-slate-200 bg-white shadow-card",
+        surface === "decision" && "border-indigo-200 bg-indigo-50/30 shadow-sm",
+        surface === "support" && "border-slate-200 bg-white shadow-none",
+        surface === "evidence" && "border-slate-200 bg-slate-50/50 shadow-none",
+        surface === "audit" && "border-slate-200 bg-slate-50/40 shadow-none",
         density === "compact" ? "p-3" : "p-4",
         interactive &&
           "transition hover:border-slate-300 hover:shadow-card-hover focus-within:border-slate-400",

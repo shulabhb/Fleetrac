@@ -5,7 +5,6 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   OperationsStateBadge,
-  ReleaseChannelChip,
   VersionChip
 } from "./operations-badges";
 
@@ -23,7 +22,6 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
           <div className="flex flex-wrap items-center gap-2">
             <span>Operations state</span>
             <OperationsStateBadge state={ops.operations_state} />
-            <ReleaseChannelChip channel={ops.release_channel} />
           </div>
         }
         caption={
@@ -65,16 +63,20 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <Card density="compact" className="bg-slate-50">
+        <Card density="compact" surface="support">
           <div className="flex flex-wrap items-center gap-2">
             <Undo2 className="h-4 w-4 text-slate-500" />
             <span className="text-[12px] font-semibold text-slate-800">Rollback</span>
             {ops.rollback_recommended ? (
               <Badge tone="high">Recommended by Bob</Badge>
             ) : ops.rollback_available ? (
-              <Badge tone="low">Available</Badge>
+              <span className="text-[11px] font-medium text-slate-600">
+                Available
+              </span>
             ) : (
-              <Badge tone="neutral">Not available</Badge>
+              <span className="text-[11px] font-medium text-slate-500">
+                Not available
+              </span>
             )}
           </div>
           <div className="mt-2 space-y-1 text-[12px] text-slate-700">
@@ -91,14 +93,14 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
           </div>
         </Card>
 
-        <Card density="compact" className="bg-slate-50">
+        <Card density="compact" surface="support">
           <div className="flex flex-wrap items-center gap-2">
             <Wrench className="h-4 w-4 text-slate-500" />
             <span className="text-[12px] font-semibold text-slate-800">Maintenance</span>
             {ops.maintenance.active ? (
               <Badge tone="info" dot>Window active</Badge>
             ) : (
-              <Badge tone="outline">Off</Badge>
+              <span className="text-[11px] font-medium text-slate-500">Off</span>
             )}
           </div>
           <div className="mt-2 space-y-1 text-[12px] text-slate-700">
@@ -188,10 +190,20 @@ function Row({
  */
 export function OperationsSummaryStrip({ ops }: { ops: SystemOperations }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-slate-600">
       <OperationsStateBadge state={ops.operations_state} />
-      <VersionChip version={ops.current_version} label="live" tone="info" />
-      <ReleaseChannelChip channel={ops.release_channel} />
+      <span>
+        <span className="text-slate-400">Live</span>{" "}
+        <span className="font-mono font-medium text-slate-800">
+          {ops.current_version}
+        </span>
+      </span>
+      <span>
+        <span className="text-slate-400">Channel</span>{" "}
+        <span className="font-medium text-slate-700">
+          {ops.release_channel}
+        </span>
+      </span>
       {ops.maintenance.active ? (
         <Badge tone="info" dot>Maintenance window</Badge>
       ) : null}

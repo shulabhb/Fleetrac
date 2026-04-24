@@ -1,6 +1,7 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ArrowRight, ChevronLeft } from "lucide-react";
 import {
   getAccessPolicy,
   getActions,
@@ -35,6 +36,7 @@ import { EvidenceList } from "@/components/bob/evidence-list";
 import { InvestigationActivity } from "@/components/bob/investigation-activity";
 import { RecommendationCard } from "@/components/bob/recommendation-card";
 import { BobInvestigationWorkflow } from "@/components/bob/bob-workflow-panel";
+import { DisclosureSection } from "@/components/shared/disclosure-section";
 import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
 import { humanizeLabel } from "@/lib/present";
@@ -202,10 +204,12 @@ export default async function BobInvestigationDetailPage({
             label: relatedContext.relatedIncidentTitle ?? ""
           }
         : null;
+  const visibleEvidence = investigation.evidence.slice(0, 3);
+  const hiddenEvidence = investigation.evidence.slice(3);
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex min-h-8 items-center justify-between">
         <Link
           href={backHref}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
@@ -217,7 +221,7 @@ export default async function BobInvestigationDetailPage({
           href={targetHref}
           className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
         >
-          Open {humanizeLabel(investigation.target_type).toLowerCase()} ·{" "}
+          Return to {humanizeLabel(investigation.target_type).toLowerCase()} ·{" "}
           {investigation.target_label}
         </Link>
       </div>
@@ -249,13 +253,13 @@ export default async function BobInvestigationDetailPage({
         ]}
       />
 
-      <div className="relative rounded-lg border border-slate-200 bg-white p-5">
+      <div className="relative min-h-[220px] rounded-lg border border-slate-200 bg-white p-5">
         <span
           aria-hidden
           className="absolute left-0 top-5 bottom-5 w-[3px] rounded-r bg-gradient-to-b from-indigo-400 to-indigo-200"
         />
         <div className="pl-3">
-          <BobEyebrow label="Bob investigation" />
+          <BobEyebrow label="Immediate decision · Bob investigation" />
           <div className="mt-1.5 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-xl font-semibold tracking-tight text-slate-900">
@@ -303,38 +307,23 @@ export default async function BobInvestigationDetailPage({
             {investigation.summary}
           </p>
 
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <DetailField
-              label="Likely root cause"
-              body={investigation.likely_root_cause}
-            />
-            <DetailField
-              label="Why it matters"
-              body={investigation.why_it_matters}
-            />
-          </div>
-
-          {investigation.alternative_hypothesis ? (
-            <div className="mt-3 rounded-md border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-              <p className="label-eyebrow">Alternative hypothesis</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-slate-700">
-                {investigation.alternative_hypothesis}
-              </p>
-            </div>
-          ) : null}
+          <p className="mt-3 text-[12px] text-slate-600">
+            <span className="font-semibold">What happens next · </span>
+            Review the primary remediation path, then hand off any governed
+            change to Action Center for approval-gated execution.
+          </p>
         </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1.45fr_1fr]">
         <div className="space-y-5">
           <section>
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <BobIcon size="xs" withBackground={false} />
-              Recommendations
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Drafted by Bob. Approval-gated, policy-checked, and reversible by default.
-            </p>
+            <LayerHeader
+              eyebrow="Immediate decision layer"
+              title="Remediation paths to consider"
+              caption="Drafted by Bob. Approval-gated, policy-checked, audit-linked, and reversible by default where supported."
+              icon={<BobIcon size="xs" withBackground={false} />}
+            />
             <div className="mt-3 space-y-2.5">
               {top ? (
                 <RecommendationCard key={top.id} recommendation={top} />
@@ -355,19 +344,70 @@ export default async function BobInvestigationDetailPage({
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">
-              Evidence reviewed
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Telemetry, controls, and prior incidents Bob inspected.
-            </p>
+            <LayerHeader
+              eyebrow="Decision-support layer"
+              title="Reasoning summary"
+              caption="Why Bob believes this path is credible before it becomes a governed action."
+              icon={<BobIcon size="xs" withBackground={false} />}
+            />
+            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <DetailField
+                  label="Likely root cause"
+                  body={investigation.likely_root_cause}
+                />
+                <DetailField
+                  label="Why it matters"
+                  body={investigation.why_it_matters}
+                />
+              </div>
+              {investigation.alternative_hypothesis ? (
+                <div className="mt-3 rounded-md border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+                  <p className="label-eyebrow">Alternative hypothesis</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-700">
+                    {investigation.alternative_hypothesis}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section>
+            <LayerHeader
+              eyebrow="Decision-support layer"
+              title="Evidence reviewed"
+              caption={
+                hiddenEvidence.length > 0
+                  ? `Showing ${visibleEvidence.length} highest-value items now; ${hiddenEvidence.length} additional evidence items available.`
+                  : "Telemetry, controls, and prior incidents Bob inspected."
+              }
+            />
             <div className="mt-3">
-              <EvidenceList evidence={investigation.evidence} />
+              <EvidenceList evidence={visibleEvidence} />
+              {hiddenEvidence.length > 0 ? (
+                <DisclosureSection
+                  title={`Additional evidence (${hiddenEvidence.length})`}
+                  summary="Full telemetry, controls, and prior-incident references Bob reviewed."
+                  className="mt-3"
+                >
+                  <EvidenceList evidence={hiddenEvidence} />
+                </DisclosureSection>
+              ) : null}
             </div>
           </section>
         </div>
 
         <div className="space-y-5">
+          <HandoffCard
+            topTitle={top?.title ?? null}
+            actionHref={
+              topAction
+                ? appendReturnTo(routeToAction(topAction.id), here)
+                : routes.actions()
+            }
+            hasAction={Boolean(topAction)}
+          />
+
           {topAction ? (
             <ExecutionEligibilityCard
               action={topAction}
@@ -386,7 +426,7 @@ export default async function BobInvestigationDetailPage({
           ) : null}
 
           {investigationChanges.length > 0 ? (
-            <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <section className="rounded-md border border-slate-200 bg-slate-50/40 p-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">
@@ -400,7 +440,7 @@ export default async function BobInvestigationDetailPage({
                   href={routes.outcomes()}
                   className="text-xs font-medium text-slate-600 hover:text-slate-900"
                 >
-                  View in Outcomes →
+                  Measure in Outcomes →
                 </Link>
               </div>
               <div className="mt-3">
@@ -409,25 +449,31 @@ export default async function BobInvestigationDetailPage({
             </section>
           ) : null}
 
-          <BobInvestigationWorkflow investigation={investigation} />
+          <DisclosureSection
+            eyebrow="Audit / deep-detail layer"
+            title="Investigation state"
+            summary="Review state and local workflow controls for this Bob investigation."
+          >
+            <BobInvestigationWorkflow investigation={investigation} />
+          </DisclosureSection>
 
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Bob activity log
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Ordered, auditable record of Bob&apos;s review.
-            </p>
-            <div className="mt-3">
+          <DisclosureSection
+            eyebrow="Audit / deep-detail layer"
+            title="Bob activity log"
+            summary={`${investigation.activity.length} auditable review events recorded.`}
+          >
               <InvestigationActivity events={investigation.activity} />
-            </div>
-          </section>
+          </DisclosureSection>
 
           {(relatedContext.relatedIncidentId ||
             relatedContext.relatedSystemId ||
             relatedContext.relatedControlId) && (
-            <section className="rounded-lg border border-slate-200 bg-white p-4 text-xs text-slate-600">
-              <p className="label-eyebrow">Related context</p>
+            <DisclosureSection
+              eyebrow="Audit / deep-detail layer"
+              title="Related context"
+              summary="System, incident, control, and sibling Bob reviews linked to this investigation."
+              bodyClassName="text-xs text-slate-600"
+            >
               <ul className="mt-2 space-y-2">
                 {relatedContext.relatedSystemId &&
                 investigation.target_type !== "system" ? (
@@ -441,7 +487,7 @@ export default async function BobInvestigationDetailPage({
                       href={routeToSystem(relatedContext.relatedSystemId)}
                       className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
                     >
-                      Open →
+                      View production context →
                     </Link>
                   </li>
                 ) : null}
@@ -457,7 +503,7 @@ export default async function BobInvestigationDetailPage({
                       href={routeToIncident(relatedContext.relatedIncidentId)}
                       className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
                     >
-                      Open →
+                      Return to incident →
                     </Link>
                   </li>
                 ) : null}
@@ -473,7 +519,7 @@ export default async function BobInvestigationDetailPage({
                       href={routeToControl(relatedContext.relatedControlId)}
                       className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
                     >
-                      Open →
+                      View related evidence →
                     </Link>
                   </li>
                 ) : null}
@@ -494,7 +540,7 @@ export default async function BobInvestigationDetailPage({
                       )}
                       className="shrink-0 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
                     >
-                      Open →
+                      Open Bob investigation →
                     </Link>
                   </li>
                 ) : null}
@@ -515,16 +561,20 @@ export default async function BobInvestigationDetailPage({
                       )}
                       className="shrink-0 text-[11px] font-medium text-indigo-600 hover:text-indigo-800 hover:underline"
                     >
-                      Open →
+                      Open Bob investigation →
                     </Link>
                   </li>
                 ) : null}
               </ul>
-            </section>
+            </DisclosureSection>
           )}
 
-          <section className="rounded-lg border border-slate-200 bg-white p-4 text-xs text-slate-600">
-            <p className="label-eyebrow">About this investigation</p>
+          <DisclosureSection
+            eyebrow="Audit / deep-detail layer"
+            title="About this investigation"
+            summary={`Target ${humanizeLabel(investigation.target_type).toLowerCase()} · updated ${formatShortDateTime(investigation.updated_at)}`}
+            bodyClassName="text-xs text-slate-600"
+          >
             <dl className="mt-2 space-y-1.5">
               <Row label="Suggested owner" value={investigation.suggested_owner} />
               <Row
@@ -548,9 +598,65 @@ export default async function BobInvestigationDetailPage({
                 value={formatShortDateTime(investigation.created_at)}
               />
             </dl>
-          </section>
+          </DisclosureSection>
         </div>
       </div>
+    </section>
+  );
+}
+
+function LayerHeader({
+  eyebrow,
+  title,
+  caption,
+  icon
+}: {
+  eyebrow: string;
+  title: string;
+  caption: string;
+  icon?: ReactNode;
+}) {
+  return (
+    <header className="mb-2 flex flex-wrap items-end justify-between gap-2">
+      <div>
+        <p className="label-eyebrow">{eyebrow}</p>
+        <h2 className="mt-0.5 flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
+          {icon}
+          {title}
+        </h2>
+      </div>
+      <p className="max-w-md text-[11px] text-slate-500">{caption}</p>
+    </header>
+  );
+}
+
+function HandoffCard({
+  topTitle,
+  actionHref,
+  hasAction
+}: {
+  topTitle: string | null;
+  actionHref: string;
+  hasAction: boolean;
+}) {
+  return (
+    <section className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-4 text-xs text-slate-700">
+      <p className="label-eyebrow text-indigo-700">What happens next</p>
+      <h2 className="mt-1 text-sm font-semibold text-slate-900">
+        {hasAction ? "Review the governed action" : "Create the governed handoff"}
+      </h2>
+      <p className="mt-1.5 leading-relaxed">
+        {topTitle
+          ? `Primary path: ${topTitle}. Bob can prepare the recommendation, but approval and execution stay in Action Center.`
+          : "Bob has not selected a primary recommendation yet. Review evidence before routing remediation."}
+      </p>
+      <Link
+        href={actionHref}
+        className="mt-3 inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-700 hover:border-indigo-300 hover:bg-indigo-50"
+      >
+        {hasAction ? "Review governed action" : "Choose incident work"}
+        <ArrowRight className="h-3 w-3" />
+      </Link>
     </section>
   );
 }

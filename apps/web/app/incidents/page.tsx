@@ -9,9 +9,9 @@ export default async function IncidentsPage() {
   return (
     <section className="space-y-5">
       <SectionTitle
-        eyebrow="Triage"
+        eyebrow="Observe · choose work"
         title="Incident Queue"
-        caption="Every incident raised by a governance control."
+        caption="Main intake workbench. Choose an incident, understand the breach, then route to Bob investigation or a governed action."
       />
       <Suspense fallback={null}>
         <IncidentQueueTable incidents={items} />

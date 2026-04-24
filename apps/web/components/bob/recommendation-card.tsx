@@ -40,7 +40,10 @@ export function RecommendationCard({
   return (
     <div
       className={cn(
-        "relative rounded-lg border border-slate-200 bg-white transition hover:border-slate-300",
+        "relative rounded-lg border transition hover:border-slate-300",
+        isCompact
+          ? "border-slate-200 bg-white"
+          : "border-indigo-200 bg-indigo-50/30 shadow-sm",
         isCompact ? "p-3" : "p-4",
         className
       )}
@@ -59,14 +62,18 @@ export function RecommendationCard({
       <div className="flex items-start justify-between gap-3 pl-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-100">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
               {humanizeLabel(recommendation.type)}
             </span>
-            <ConfidenceBadge
-              tier={recommendation.confidence}
-              score={recommendation.confidence_score}
-            />
-            <ApprovalBadge status={status} />
+            {!isCompact ? (
+              <>
+                <ConfidenceBadge
+                  tier={recommendation.confidence}
+                  score={recommendation.confidence_score}
+                />
+                <ApprovalBadge status={status} />
+              </>
+            ) : null}
           </div>
           <h4 className="mt-1.5 text-sm font-semibold tracking-tight text-slate-900">
             {recommendation.title}
@@ -93,11 +100,19 @@ export function RecommendationCard({
                 {humanizeLabel(recommendation.remediation_type)}
               </span>
             </span>
+            {isCompact ? (
+              <span>
+                <span className="text-slate-400">Approval</span>{" "}
+                <span className="font-medium text-slate-700">
+                  {humanizeLabel(status)}
+                </span>
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
       {showActions && recommendation.approval_required ? (
-        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pl-2 pt-2.5">
+        <div className="mt-3 flex items-center justify-between border-t border-indigo-100 pl-2 pt-2.5">
           <p className="text-[11px] text-slate-500">
             Requires governance approval before execution.
           </p>
@@ -121,8 +136,8 @@ export function RecommendationCard({
               className={cn(
                 "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition",
                 status === "approved"
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-emerald-200 hover:text-emerald-700"
+                  ? "border-emerald-500 bg-emerald-600 text-white"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
               )}
             >
               <CheckCircle2 className="h-3 w-3" />

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, FileText, GaugeCircle } from "lucide-react";
+import { ArrowRight, ChevronLeft, FileText, GaugeCircle } from "lucide-react";
 import { IncidentWorkflowPanel } from "@/components/incident-workflow-panel";
 import { ActivityFeed } from "@/components/activity-feed";
 import { TrendChart } from "@/components/charts/trend-chart";
@@ -15,13 +15,13 @@ import {
 } from "@/lib/api";
 import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
 import { LinkedActionsPanel } from "@/components/actions/linked-actions";
+import { DisclosureSection } from "@/components/shared/disclosure-section";
 import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatInteger, formatMetric, formatRelativeTime } from "@/lib/format";
 import {
   humanizeLabel,
   metricLabel,
   severityBadgeClasses,
-  signalColor,
   signalTypeForField,
   telemetryFieldForMetric
 } from "@/lib/present";
@@ -29,6 +29,7 @@ import {
   appendReturnTo,
   routes,
   routeToAction,
+  routeToBobForTarget,
   routeToBobInvestigation,
   routeToControl,
   routeToIncidentsForSystem,
@@ -166,7 +167,7 @@ export default async function IncidentDetailPage({
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+      <div className="flex min-h-8 items-center justify-between gap-2 text-xs text-slate-500">
         <Link
           href={backHref}
           className="inline-flex items-center gap-1 hover:text-slate-900"
@@ -178,7 +179,7 @@ export default async function IncidentDetailPage({
           href={routeToSystem(incident.system_id)}
           className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
         >
-          Open system · {incident.system_name}
+          View production context · {incident.system_name}
         </Link>
       </div>
 
@@ -203,10 +204,10 @@ export default async function IncidentDetailPage({
         ]}
       />
 
-      <Card className="p-0">
+      <Card className="min-h-[220px] p-0">
         <div className="flex flex-wrap items-start justify-between gap-4 p-5">
           <div className="min-w-0">
-            <p className="label-eyebrow">Incident</p>
+            <p className="label-eyebrow">Immediate decision · Incident</p>
             <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
               {incident.title}
             </h2>
@@ -217,22 +218,15 @@ export default async function IncidentDetailPage({
               >
                 {humanizeLabel(incident.severity)}
               </span>
-              <span className={`rounded-full px-1.5 py-0.5 font-medium ${signalColor(signalType)}`}>
-                {signalType}
-              </span>
-              <Badge tone="neutral" size="sm">
-                {humanizeLabel(incident.risk_category)}
-              </Badge>
-              <Badge tone="outline" size="sm">
-                {humanizeLabel(incident.incident_status)}
-              </Badge>
               {incident.review_required ? (
                 <Badge tone="medium" size="sm">
                   Review required
                 </Badge>
               ) : null}
               <span className="text-[11px] text-slate-500">
-                · {formatRelativeTime(incident.created_at)}
+                {signalType} signal · {humanizeLabel(incident.risk_category)} ·{" "}
+                {humanizeLabel(incident.incident_status)} ·{" "}
+                {formatRelativeTime(incident.created_at)}
               </span>
             </div>
           </div>
@@ -268,7 +262,7 @@ export default async function IncidentDetailPage({
                   href={routeToIncidentsForSystem(incident.system_id)}
                   className="text-[10px] font-medium text-slate-500 hover:text-slate-900 hover:underline"
                 >
-                  View →
+                  View related evidence →
                 </Link>
               ) : null}
             </div>
@@ -277,14 +271,70 @@ export default async function IncidentDetailPage({
       </Card>
 
       <section>
-        <header className="mb-2 flex items-center justify-between">
-          <p className="label-eyebrow flex items-center gap-1.5 text-indigo-700">
-            Bob analysis
-          </p>
-          <p className="text-[11px] text-slate-500">
-            Likely root cause and recommended next action.
-          </p>
-        </header>
+        <LayerHeader
+          eyebrow="Immediate decision layer"
+          title="Choose the next lane"
+          caption="Update review state, open Bob's diagnosis, or continue into a governed action."
+        />
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.75fr)]">
+          <IncidentWorkflowPanel
+            incidentId={incident.id}
+            initialIncidentStatus={incident.incident_status}
+            initialEscalationStatus={incident.escalation_status}
+            initialReviewRequired={incident.review_required}
+          />
+          <Card surface="decision" className="space-y-3">
+            <CardHeader
+              title="What happens next"
+              caption="This page frames the issue; Bob owns diagnosis, Action Center owns approval and execution."
+            />
+            <div className="space-y-2 text-[12px] text-slate-700">
+              <NextPathRow
+                label="Diagnosis"
+                body={
+                  investigation
+                    ? "Bob investigation is open with root cause and recommended remediation."
+                    : "No Bob investigation is open yet for this incident."
+                }
+                href={
+                  investigation
+                    ? appendReturnTo(
+                        routeToBobInvestigation(investigation.id),
+                        here
+                      )
+                    : appendReturnTo(
+                        routeToBobForTarget("incident", incident.id),
+                        here
+                      )
+                }
+                cta={investigation ? "Open Bob investigation" : "Start Bob investigation"}
+              />
+              <NextPathRow
+                label="Governed action"
+                body={
+                  firstAction
+                    ? "A drafted action is available for approval, blocking, or execution."
+                    : "No governed action is drafted yet. Bob recommendations will appear here first."
+                }
+                href={
+                  firstAction
+                    ? appendReturnTo(routeToAction(firstAction.id), here)
+                    : routes.actions()
+                }
+                cta={firstAction ? "Review governed action" : "Choose incident work"}
+              />
+            </div>
+          </Card>
+        </div>
+      </section>
+
+      <section>
+        <LayerHeader
+          eyebrow="Decision-support layer"
+          title="Bob analysis"
+          caption="Likely root cause and recommended next action."
+          tone="indigo"
+        />
         {investigation ? (
           <BobSummaryPanel investigation={investigation} variant="compact" />
         ) : (
@@ -292,11 +342,18 @@ export default async function IncidentDetailPage({
         )}
       </section>
 
-      <LinkedActionsPanel
-        actions={incidentActions}
-        title="Governed actions from this incident"
-        caption="Remediations Bob drafted, with approver, eligibility, and monitoring state."
-      />
+      <section>
+        <LayerHeader
+          eyebrow="Decision-support layer"
+          title="Prepared remediation paths"
+          caption="Governed actions Bob drafted from this incident."
+        />
+        <LinkedActionsPanel
+          actions={incidentActions}
+          title="Governed actions from this incident"
+          caption="Remediations Bob drafted, with approver, eligibility, and monitoring state."
+        />
+      </section>
 
       <Card>
         <CardHeader
@@ -310,7 +367,7 @@ export default async function IncidentDetailPage({
         />
 
         <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="label-eyebrow">Triggered metric</p>
@@ -367,7 +424,7 @@ export default async function IncidentDetailPage({
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
               <p className="label-eyebrow">Supporting metrics</p>
               {supportingMetrics.length === 0 ? (
                 <p className="mt-2 text-xs text-slate-500">
@@ -386,7 +443,7 @@ export default async function IncidentDetailPage({
                 </dl>
               )}
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="rounded-md border border-slate-200 bg-slate-50/50 p-3">
               <p className="label-eyebrow">Breach context</p>
               <p className="mt-2 text-sm text-slate-700">{incident.summary}</p>
               <p className="mt-2 text-[11px] text-slate-500">
@@ -400,47 +457,102 @@ export default async function IncidentDetailPage({
         </div>
       </Card>
 
-      <IncidentWorkflowPanel
-        incidentId={incident.id}
-        initialIncidentStatus={incident.incident_status}
-        initialEscalationStatus={incident.escalation_status}
-        initialReviewRequired={incident.review_required}
-      />
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader
-            title="Business & governance context"
-            caption="Organizational exposure if left untreated."
-            action={<FileText className="h-4 w-4 text-slate-400" />}
-          />
-          <p className="mt-3 text-sm leading-relaxed text-slate-700">
-            Affects governance confidence for a production AI workflow owned by{" "}
-            <span className="font-medium text-slate-900">{incident.owner_team}</span>.
-            Untreated, it increases policy exposure, review burden, and stakeholder risk in
-            regulated decision flows.
-          </p>
-          <div className="mt-3 space-y-1.5 text-xs text-slate-600">
-            <p>
-              <span className="text-slate-400">Risk domain:</span>{" "}
-              <span className="font-medium text-slate-800">
-                {humanizeLabel(incident.risk_category)}
-              </span>
+      <DisclosureSection
+        eyebrow="Audit / deep-detail layer"
+        title="Governance context and record"
+        summary={`${activityItems.length} audit entries · ${incident.owner_team} ownership · ${humanizeLabel(incident.risk_category)} risk domain`}
+      >
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <Card surface="audit">
+            <CardHeader
+              title="Business & governance context"
+              caption="Organizational exposure if left untreated."
+              action={<FileText className="h-4 w-4 text-slate-400" />}
+            />
+            <p className="mt-3 text-sm leading-relaxed text-slate-700">
+              Affects governance confidence for a production AI workflow owned by{" "}
+              <span className="font-medium text-slate-900">{incident.owner_team}</span>.
+              Untreated, it increases policy exposure, review burden, and stakeholder risk in
+              regulated decision flows.
             </p>
-            <p>
-              <span className="text-slate-400">Owner team:</span>{" "}
-              <span className="font-medium text-slate-800">{incident.owner_team}</span>
-            </p>
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Audit trail" caption="Actions recorded for this incident." />
-          <div className="mt-3">
-            <ActivityFeed items={activityItems} emptyLabel="No audit entries yet." />
-          </div>
-        </Card>
-      </div>
+            <div className="mt-3 space-y-1.5 text-xs text-slate-600">
+              <p>
+                <span className="text-slate-400">Risk domain:</span>{" "}
+                <span className="font-medium text-slate-800">
+                  {humanizeLabel(incident.risk_category)}
+                </span>
+              </p>
+              <p>
+                <span className="text-slate-400">Owner team:</span>{" "}
+                <span className="font-medium text-slate-800">{incident.owner_team}</span>
+              </p>
+            </div>
+          </Card>
+          <Card surface="audit">
+            <CardHeader title="Audit trail" caption="Actions recorded for this incident." />
+            <div className="mt-3">
+              <ActivityFeed items={activityItems} emptyLabel="No audit entries yet." />
+            </div>
+          </Card>
+        </div>
+      </DisclosureSection>
     </section>
+  );
+}
+
+function LayerHeader({
+  eyebrow,
+  title,
+  caption,
+  tone = "slate"
+}: {
+  eyebrow: string;
+  title: string;
+  caption: string;
+  tone?: "slate" | "indigo";
+}) {
+  return (
+    <header className="mb-2 flex flex-wrap items-end justify-between gap-2">
+      <div>
+        <p
+          className={`label-eyebrow ${tone === "indigo" ? "text-indigo-700" : ""}`}
+        >
+          {eyebrow}
+        </p>
+        <h3 className="mt-0.5 text-sm font-semibold tracking-tight text-slate-900">
+          {title}
+        </h3>
+      </div>
+      <p className="max-w-md text-[11px] text-slate-500">{caption}</p>
+    </header>
+  );
+}
+
+function NextPathRow({
+  label,
+  body,
+  href,
+  cta
+}: {
+  label: string;
+  body: string;
+  href: string;
+  cta: string;
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 leading-relaxed text-slate-700">{body}</p>
+      <Link
+        href={href}
+        className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:underline"
+      >
+        {cta}
+        <ArrowRight className="h-3 w-3" />
+      </Link>
+    </div>
   );
 }
 

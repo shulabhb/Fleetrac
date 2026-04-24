@@ -7,11 +7,11 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   ChangeStateBadge,
-  EnvironmentChip,
   VersionChip
 } from "@/components/operations/operations-badges";
 import { MetricDeltaRow } from "@/components/operations/change-impact";
 import { ExecutionConsole } from "@/components/operations/execution-console";
+import { DisclosureSection } from "@/components/shared/disclosure-section";
 import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
 import {
@@ -68,7 +68,7 @@ export default async function OutcomeDetailPage({ params, searchParams }: Props)
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex min-h-8 items-center justify-between">
         <Link
           href={backHref}
           className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
@@ -81,14 +81,14 @@ export default async function OutcomeDetailPage({ params, searchParams }: Props)
             href={routeToSystem(change.target_system_id)}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
           >
-            Open system · {change.target_system_name}
+            View production context · {change.target_system_name}
           </Link>
           {change.source_action_id ? (
             <Link
               href={routeToAction(change.source_action_id)}
               className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
             >
-              Open action
+              Review governed action
             </Link>
           ) : null}
         </div>
@@ -125,16 +125,17 @@ export default async function OutcomeDetailPage({ params, searchParams }: Props)
       />
 
       <SectionTitle
-        eyebrow="Measured outcome"
+        eyebrow="Immediate decision · Measured outcome"
         title={change.change_type}
         caption={change.change_summary}
       />
 
       {/* Verdict + context hero --------------------------------------------- */}
-      <Card>
+      <Card className="min-h-[220px]">
         <div className="flex flex-wrap items-center gap-2">
-          <ChangeStateBadge state={change.impact_status} />
-          <EnvironmentChip env={change.environment} />
+          <span className="text-[11px] font-medium text-slate-600">
+            {change.impact_status.replace(/_/g, " ")} · {change.environment}
+          </span>
           {change.rollback_recommended ? (
             <Badge tone="high">Rollback recommended</Badge>
           ) : null}
@@ -174,11 +175,14 @@ export default async function OutcomeDetailPage({ params, searchParams }: Props)
               {verdict.sentence}
             </p>
             <p className="mt-2 text-[12px] text-slate-600">
-              <span className="font-semibold">What happens next · </span>
+            <span className="font-semibold">What happens next · </span>
               {nextStepSentence(nextStep.label, change)}
             </p>
           </div>
           <div className="rounded-md border border-slate-200 bg-slate-50/60 p-3 text-[12px] text-slate-700">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Measurement checkpoint
+            </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
               <KV label="Monitoring window" value={change.monitoring_window} />
               <KV label="Baseline window" value={change.baseline_window} />
@@ -209,57 +213,7 @@ export default async function OutcomeDetailPage({ params, searchParams }: Props)
         <div className="space-y-5">
           <Card>
             <CardHeader
-              title="Change executed"
-              caption="What changed, between which versions or configurations."
-            />
-            <div className="mt-3 space-y-2 text-[12px] text-slate-700">
-              <p>{change.change_summary}</p>
-              {(change.version_before || change.version_after) && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {change.version_before && (
-                    <VersionChip version={change.version_before} label="prev" />
-                  )}
-                  <ArrowRight className="h-3 w-3 text-slate-400" />
-                  {change.version_after && (
-                    <VersionChip version={change.version_after} label="now" tone="info" />
-                  )}
-                </div>
-              )}
-              {change.config_before || change.config_after ? (
-                <div className="grid gap-2 rounded-md border border-slate-200 bg-white p-2.5 md:grid-cols-2">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Before
-                    </p>
-                    <p className="mt-0.5 font-mono text-[11px] text-slate-700">
-                      {change.config_before ?? "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      After
-                    </p>
-                    <p className="mt-0.5 font-mono text-[11px] text-slate-700">
-                      {change.config_after ?? "—"}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-              {(change.maintenance_state_before ||
-                change.maintenance_state_after) && (
-                <p className="text-[11px] text-slate-500">
-                  Maintenance: {change.maintenance_state_before ?? "—"} →{" "}
-                  <span className="font-medium text-slate-700">
-                    {change.maintenance_state_after ?? "—"}
-                  </span>
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Expected vs actual"
+              title="Decision-support · expected vs actual"
               caption="Bob&apos;s hypothesis vs measured result on watched metrics."
             />
             <div className="mt-3 grid gap-3 rounded-md border border-slate-200 bg-slate-50/50 p-3 md:grid-cols-2">
@@ -297,18 +251,77 @@ export default async function OutcomeDetailPage({ params, searchParams }: Props)
             )}
           </Card>
 
-          {consoleEntries.length > 0 && (
-            <ExecutionConsole
-              entries={consoleEntries}
-              title="Execution console · this outcome"
-              caption="Audit-linked steps tied to the producing action."
+          <Card>
+            <CardHeader
+              title="Decision-support · change executed"
+              caption="What changed, between which versions or configurations."
             />
-          )}
+            <div className="mt-3 space-y-2 text-[12px] text-slate-700">
+              <p>{change.change_summary}</p>
+              {(change.version_before || change.version_after) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {change.version_before && (
+                    <VersionChip version={change.version_before} label="prev" />
+                  )}
+                  <ArrowRight className="h-3 w-3 text-slate-400" />
+                  {change.version_after && (
+                    <VersionChip version={change.version_after} label="now" tone="info" />
+                  )}
+                </div>
+              )}
+              {change.config_before || change.config_after ? (
+                <div className="grid gap-2 rounded-md border border-slate-200 bg-white p-2.5 md:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      Before
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-slate-700">
+                      {change.config_before ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      After
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-slate-700">
+                      {change.config_after ?? "—"}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+              {(change.maintenance_state_before ||
+                change.maintenance_state_after) && (
+                  <p className="text-[11px] text-slate-500">
+                    Maintenance: {change.maintenance_state_before ?? "—"} →{" "}
+                    <span className="font-medium text-slate-700">
+                      {change.maintenance_state_after ?? "—"}
+                    </span>
+                  </p>
+              )}
+            </div>
+          </Card>
+
+          {consoleEntries.length > 0 ? (
+            <DisclosureSection
+              eyebrow="Audit / deep-detail layer"
+              title="Execution console"
+              summary={`${consoleEntries.length} producing-action steps available for audit review.`}
+            >
+              <ExecutionConsole
+                entries={consoleEntries}
+                title="Execution console · this outcome"
+                caption="Audit / deep-detail layer. Steps tied to the producing action."
+              />
+            </DisclosureSection>
+          ) : null}
         </div>
 
         <div className="space-y-5">
           <Card>
-            <CardHeader title="Outcome summary" />
+            <CardHeader
+              title="Decision-support · outcome summary"
+              caption="Compact measurement facts supporting the current verdict."
+            />
             <dl className="mt-3 space-y-1.5 text-[12px]">
               <Row label="Status" value={<ChangeStateBadge state={change.impact_status} />} />
               <Row
@@ -345,47 +358,48 @@ export default async function OutcomeDetailPage({ params, searchParams }: Props)
             </dl>
           </Card>
 
-          <Card>
-            <CardHeader
-              title="Related context"
-              caption="System, investigation, incident, and action."
-            />
-            <ul className="mt-2 space-y-2 text-[12px] text-slate-700">
-              <RelatedRow
-                label="System"
-                value={change.target_system_name}
-                href={routeToSystem(change.target_system_id)}
-              />
-              {change.source_action_id ? (
-                <RelatedRow
-                  label="Action"
-                  value={action?.title ?? change.source_action_id}
-                  href={routeToAction(change.source_action_id)}
-                />
-              ) : null}
-              {change.source_investigation_id ? (
-                <RelatedRow
-                  label="Bob investigation"
-                  value={change.source_investigation_id}
-                  href={routeToBobInvestigation(change.source_investigation_id)}
-                />
-              ) : null}
-              {change.source_incident_id ? (
-                <RelatedRow
-                  label="Incident"
-                  value={change.source_incident_id}
-                  href={routeToIncident(change.source_incident_id)}
-                />
-              ) : null}
-              <RelatedRow
-                label="All outcomes for this system"
-                value="View"
-                href={routeToOutcomesForSystem(change.target_system_id)}
-              />
-            </ul>
-          </Card>
         </div>
       </div>
+
+      <DisclosureSection
+        eyebrow="Audit / deep-detail layer"
+        title="Related context"
+        summary="System, investigation, incident, action, and scoped outcomes links."
+      >
+        <ul className="mt-2 grid gap-2 text-[12px] text-slate-700 md:grid-cols-2">
+          <RelatedRow
+            label="System"
+            value={change.target_system_name}
+            href={routeToSystem(change.target_system_id)}
+          />
+          {change.source_action_id ? (
+            <RelatedRow
+              label="Action"
+              value={action?.title ?? change.source_action_id}
+              href={routeToAction(change.source_action_id)}
+            />
+          ) : null}
+          {change.source_investigation_id ? (
+            <RelatedRow
+              label="Bob investigation"
+              value={change.source_investigation_id}
+              href={routeToBobInvestigation(change.source_investigation_id)}
+            />
+          ) : null}
+          {change.source_incident_id ? (
+            <RelatedRow
+              label="Incident"
+              value={change.source_incident_id}
+              href={routeToIncident(change.source_incident_id)}
+            />
+          ) : null}
+          <RelatedRow
+            label="All outcomes for this system"
+            value="Measure outcomes"
+            href={routeToOutcomesForSystem(change.target_system_id)}
+          />
+        </ul>
+      </DisclosureSection>
     </section>
   );
 }
@@ -425,6 +439,16 @@ function RelatedRow({
   value: string;
   href: string;
 }) {
+  const cta =
+    label === "System"
+      ? "View production context"
+      : label === "Action"
+        ? "Review governed action"
+        : label === "Bob investigation"
+          ? "Open Bob investigation"
+          : label === "Incident"
+            ? "Return to incident"
+            : "Measure outcome";
   return (
     <li className="flex items-center justify-between gap-2">
       <span className="min-w-0 truncate">
@@ -434,7 +458,7 @@ function RelatedRow({
         href={href}
         className="shrink-0 text-[11px] font-medium text-slate-600 hover:text-slate-900 hover:underline"
       >
-        Open →
+        {cta} →
       </Link>
     </li>
   );
@@ -448,10 +472,10 @@ function nextStepSentence(
   switch (label) {
     case "Prepare rollback request":
       return c.rollback_available
-        ? "Prepare a rollback request in Action Center; dual approval required before execution."
+        ? "Route rollback preparation to Action Center; dual approval required before execution."
         : "Prepare a rollback request in Action Center; rollback is not currently available without restoring a prior version.";
     case "Review regression with control owner":
-      return "Review the regression with the control owner; consider rollback or scope narrowing.";
+      return "Review the regression with the control owner; route rollback or scope narrowing through Action Center.";
     case "Open follow-up monitoring window":
       return "Open a follow-up monitoring window and re-evaluate at the next cycle.";
     case "Close outcome with reviewer sign-off":

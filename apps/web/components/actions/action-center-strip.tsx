@@ -41,8 +41,8 @@ export function ActionCenterStrip({ actions }: { actions: Action[] }) {
       accent="slate"
       icon={<PlayCircle className="h-3.5 w-3.5" />}
       eyebrow="Act · Governed action queue"
-      caption="Approval-gated, policy-checked, bounded execution."
-      cta={{ label: "Open Action Center", href: routes.actions() }}
+      caption="Approve, block, or route policy-checked changes into execution."
+      cta={{ label: "Decide governed actions", href: routes.actions() }}
       stats={
         <>
           <StripStat
