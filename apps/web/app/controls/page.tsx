@@ -16,7 +16,7 @@ export default async function ControlsPage() {
       <SectionTitle
         eyebrow="Policy · Control operations"
         title="Governance Controls"
-        caption="Firing rate, ownership, and Bob review state across the control fleet. Use buckets to scope: active, recurring, Bob-flagged, or quiet."
+        caption="Scope with buckets, then drill by signal or owner. Actions surface only when there is something to open."
       />
       <ControlsBrowser
         rules={rulesRes.items}

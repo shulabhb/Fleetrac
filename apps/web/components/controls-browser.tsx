@@ -3,13 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import {
-  ChevronRight,
-  LayoutGrid,
-  List,
-  Search,
-  ShieldCheck
-} from "lucide-react";
+import { ChevronRight, LayoutGrid, List, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -23,7 +17,6 @@ import {
   signalColor,
   signalTypeForField
 } from "@/lib/present";
-import { AnalyzeWithBob } from "@/components/bob/analyze-with-bob";
 import { BobIcon } from "@/components/bob/bob-icon";
 import { routeToBobInvestigation, routeToIncident } from "@/lib/routes";
 
@@ -78,12 +71,9 @@ const SORT_LABELS: Record<SortKey, string> = {
 /**
  * Governance Controls operator surface.
  *
- * Design intent: this page is an operating surface, not a catalog. It must
- * answer, at a glance, "which controls are firing most, which are quiet,
- * which has Bob flagged, and where do I go to investigate?" To keep the
- * density high we default to a compact row view and offer a cards view for
- * narrative review; both are driven by the same filter/sort state so the
- * operator never loses context when switching.
+ * Design intent: operator surface — buckets and counts first, dense rows,
+ * actions only when a review or incident exists to open. Secondary filters
+ * stay tucked behind a disclosure so the default chrome stays calm.
  */
 export function ControlsBrowser({
   rules,
@@ -265,58 +255,19 @@ export function ControlsBrowser({
         onChange={setBucket}
       />
 
-      {/* Filter + search + view toggle bar */}
-      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-card">
+      {/* Search, sort, view — refinements behind disclosure */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
+          <div className="relative min-w-[min(100%,220px)] flex-1">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search controls…"
+              placeholder="Search by name or rule id…"
               className="h-8 w-full rounded-md border border-slate-200 bg-white pl-7 pr-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
             />
           </div>
-          <Select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-            <option value="all">All severities</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </Select>
-          <Select
-            value={signalType}
-            onChange={(e) => setSignalType(e.target.value)}
-          >
-            <option value="all">All signal types</option>
-            {signalTypes.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={riskDomain}
-            onChange={(e) => setRiskDomain(e.target.value)}
-          >
-            <option value="all">All risk domains</option>
-            {riskDomains.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </Select>
-          <Select
-            value={ownerTeam}
-            onChange={(e) => setOwnerTeam(e.target.value)}
-          >
-            <option value="all">All owner teams</option>
-            {ownerTeams.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </Select>
           <Select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
@@ -324,28 +275,76 @@ export function ControlsBrowser({
           >
             {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
               <option key={k} value={k}>
-                Sort · {SORT_LABELS[k]}
+                {SORT_LABELS[k]}
               </option>
             ))}
           </Select>
           <ViewToggle view={view} onChange={setView} />
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-500">
-          <span>
-            <span className="font-semibold tabular-nums text-slate-900">
-              {filtered.length}
-            </span>{" "}
-            of {rules.length} controls
+        <details className="group/filters mt-2 border-t border-slate-100 pt-2">
+          <summary className="cursor-pointer list-none text-[11px] font-medium text-slate-600 marker:content-none [&::-webkit-details-marker]:hidden hover:text-slate-900">
+            <span className="inline-flex items-center gap-1">
+              <ChevronRight className="h-3 w-3 shrink-0 transition group-open/filters:rotate-90" />
+              Refine (severity, signal, risk, owner)
+            </span>
+          </summary>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Select value={severity} onChange={(e) => setSeverity(e.target.value)}>
+              <option value="all">All severities</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </Select>
+            <Select value={signalType} onChange={(e) => setSignalType(e.target.value)}>
+              <option value="all">All signals</option>
+              {signalTypes.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+            <Select value={riskDomain} onChange={(e) => setRiskDomain(e.target.value)}>
+              <option value="all">All risk domains</option>
+              {riskDomains.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </Select>
+            <Select value={ownerTeam} onChange={(e) => setOwnerTeam(e.target.value)}>
+              <option value="all">All owners</option>
+              {ownerTeams.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </details>
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+          <span className="tabular-nums text-slate-700">
+            <span className="font-semibold text-slate-900">{filtered.length}</span>
+            <span className="text-slate-400"> / {rules.length}</span>
+            <span className="ml-1.5 text-slate-500">controls</span>
           </span>
-          <span>{formatInteger(totalRecent)} incidents · last 7d</span>
+          <span className="text-slate-400">·</span>
+          <span>
+            <span className="font-medium tabular-nums text-slate-800">
+              {formatInteger(totalRecent)}
+            </span>{" "}
+            incidents (7d)
+          </span>
           {bucket !== "all" ? (
-            <button
-              type="button"
-              onClick={() => setBucket("all")}
-              className="font-medium text-slate-600 hover:text-slate-900"
-            >
-              Clear bucket filter
-            </button>
+            <>
+              <span className="text-slate-400">·</span>
+              <button
+                type="button"
+                onClick={() => setBucket("all")}
+                className="font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+              >
+                Reset bucket
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -358,7 +357,7 @@ export function ControlsBrowser({
       ) : view === "compact" ? (
         <CompactList rows={filtered} />
       ) : (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {filtered.map((c) => (
             <ControlCard key={c.rule.id} control={c} />
           ))}
@@ -481,7 +480,7 @@ function BucketStrip({
               "group flex items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-left transition",
               isActive
                 ? "border-slate-900 shadow-sm"
-                : "border-slate-200 hover:border-slate-300 hover:shadow-card-hover"
+                : "border-slate-200 hover:border-slate-300"
             )}
           >
             <div className="min-w-0">
@@ -597,17 +596,17 @@ function ToggleButton({
 
 function CompactList({ rows }: { rows: EnrichedControl[] }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card">
-      <div className="hidden grid-cols-[minmax(0,1.5fr)_110px_110px_minmax(0,1fr)_56px_56px_56px_110px_140px] items-center gap-3 border-b border-slate-200 bg-slate-50/70 px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-slate-500 md:grid">
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="hidden grid-cols-[minmax(0,1.45fr)_100px_100px_minmax(0,0.9fr)_52px_52px_52px_88px_120px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-slate-500 md:grid">
         <span>Control</span>
         <span>Signal</span>
         <span>Risk</span>
         <span>Owner</span>
         <span className="text-right">Sys</span>
         <span className="text-right">7d</span>
-        <span className="text-right">Total</span>
+        <span className="text-right">Tot</span>
         <span>Last</span>
-        <span className="text-right">Actions</span>
+        <span className="text-right">Open</span>
       </div>
       <ul className="divide-y divide-slate-100">
         {rows.map((c) => (
@@ -633,38 +632,26 @@ function CompactRow({ control }: { control: EnrichedControl }) {
   const latestIncident = triggered[0];
 
   return (
-    <li className="grid grid-cols-1 items-center gap-2 px-3 py-2.5 text-[12px] transition hover:bg-slate-50/60 md:grid-cols-[minmax(0,1.5fr)_110px_110px_minmax(0,1fr)_56px_56px_56px_110px_140px] md:gap-3">
+    <li className="grid grid-cols-1 items-center gap-2 px-3 py-2 text-[12px] transition hover:bg-slate-50/80 md:grid-cols-[minmax(0,1.45fr)_100px_100px_minmax(0,0.9fr)_52px_52px_52px_88px_120px] md:gap-2">
       {/* Col 1 — Control identity */}
-      <div className="min-w-0">
+      <div
+        className="min-w-0"
+        title={[rule.description, bob?.summary].filter(Boolean).join("\n\n") || undefined}
+      >
         <div className="flex min-w-0 items-center gap-2">
           <SeverityDot severity={rule.severity} />
-          <span className="truncate font-semibold text-slate-900">
-            {rule.name}
-          </span>
+          <span className="truncate font-semibold text-slate-900">{rule.name}</span>
           {bob ? (
             <span
-              className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-indigo-200"
-              title={`Bob review: ${bob.summary}`}
+              className="inline-flex shrink-0 items-center gap-0.5 rounded bg-indigo-50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-800 ring-1 ring-indigo-200/80"
+              title={bob.summary}
             >
               <BobIcon size="xs" withBackground={false} />
-              Bob flagged
+              Bob
             </span>
           ) : null}
         </div>
-        <p
-          className="mt-0.5 truncate text-[11px] text-slate-500"
-          title={rule.description}
-        >
-          <span className="font-mono text-[10px] text-slate-400">
-            {rule.id}
-          </span>
-          {rule.description ? (
-            <>
-              {" · "}
-              {rule.description}
-            </>
-          ) : null}
-        </p>
+        <p className="mt-0.5 truncate font-mono text-[10px] text-slate-400">{rule.id}</p>
       </div>
 
       {/* Col 2 — Signal */}
@@ -711,30 +698,34 @@ function CompactRow({ control }: { control: EnrichedControl }) {
         {lastTriggered ? formatRelativeTime(lastTriggered) : "Quiet"}
       </div>
 
-      {/* Col 9 — Actions */}
-      <div className="flex items-center justify-end gap-1.5">
+      {/* Col 9 — Open only when there is a target */}
+      <div className="flex flex-col items-end justify-center gap-1 md:flex-row md:items-center">
         {bob ? (
           <Link
             href={routeToBobInvestigation(bob.id)}
-            className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-[11px] font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50"
+            className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50/50 px-2 py-0.5 text-[11px] font-semibold text-indigo-900 transition hover:border-indigo-300 hover:bg-indigo-50"
           >
             <BobIcon size="xs" withBackground={false} />
-            Open review
+            Review
           </Link>
         ) : null}
         {latestIncident ? (
           <Link
             href={routeToIncident(latestIncident.id)}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-            aria-label="Open latest incident"
-            title="Open latest incident"
+            className={cn(
+              "inline-flex items-center gap-0.5 text-[11px] font-medium transition",
+              bob
+                ? "text-slate-600 hover:text-slate-900"
+                : "rounded border border-slate-200 bg-white px-2 py-0.5 text-slate-800 hover:border-slate-300 hover:bg-slate-50"
+            )}
+            title="Latest incident for this control"
           >
-            Latest
-            <ChevronRight className="h-3 w-3" />
+            {bob ? "Incident" : "Latest"}
+            <ChevronRight className="h-3 w-3 opacity-60" />
           </Link>
-        ) : (
-          <span className="text-[11px] text-slate-400">—</span>
-        )}
+        ) : !bob ? (
+          <span className="text-[11px] tabular-nums text-slate-300">—</span>
+        ) : null}
       </div>
     </li>
   );
@@ -795,180 +786,117 @@ function ControlCard({ control }: { control: EnrichedControl }) {
     ownerTeam: team,
     signal,
     risk,
-    consequence,
     bob,
-    isActive,
-    isRecurring,
-    isQuiet
+    isRecurring
   } = control;
+  const latest = triggered[0];
 
   return (
-    <Card className="p-3.5">
-      <div className="flex items-start justify-between gap-3">
+    <Card className="border-slate-200 p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-slate-400" />
-            <h3 className="truncate text-sm font-semibold text-slate-900">
-              {rule.name}
-            </h3>
-            {bob ? (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-indigo-200">
-                <BobIcon size="xs" withBackground={false} />
-                Bob flagged
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-1 line-clamp-2 text-xs text-slate-600">
-            {rule.description}
-          </p>
+          <h3 className="truncate text-[13px] font-semibold leading-snug text-slate-900">
+            {rule.name}
+          </h3>
+          <p className="mt-0.5 truncate font-mono text-[10px] text-slate-400">{rule.id}</p>
         </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-            severityBadgeClasses(rule.severity)
-          )}
-        >
-          {humanizeLabel(rule.severity)}
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+              severityBadgeClasses(rule.severity)
+            )}
+          >
+            {humanizeLabel(rule.severity)}
+          </span>
+          {bob ? (
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-800">
+              <BobIcon size="xs" withBackground={false} />
+              Bob
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="mt-2 line-clamp-2 text-[11px] leading-snug text-slate-600" title={rule.description}>
+        {rule.description || "—"}
+      </p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+        <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", signalColor(signal))}>
+          {signal}
+        </span>
+        <Badge tone="neutral" size="xs" className="font-normal">
+          {risk}
+        </Badge>
+        <span className="min-w-0 truncate text-slate-600" title={team}>
+          {team}
         </span>
       </div>
 
-      {/* Chip row */}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-[10px] font-medium",
-            signalColor(signal)
-          )}
-        >
-          Signal · {signal}
-        </span>
-        <Badge tone="neutral" size="xs">
-          Risk · {risk}
-        </Badge>
-        <Badge tone="outline" size="xs">
-          Owner · {team}
-        </Badge>
-      </div>
-
-      {/* Inline stat strip — no more 4-up dl grid */}
-      <div className="mt-2.5 flex flex-wrap items-baseline gap-x-5 gap-y-1 rounded-md border border-slate-100 bg-slate-50/60 px-3 py-2 text-[11px]">
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-[11px]">
         <StatInline label="Systems" value={formatInteger(systemsCovered)} />
-        <StatInline
-          label="7d"
-          value={formatInteger(recentCount)}
-          emphasize={recentCount > 0}
-        />
+        <StatInline label="7d" value={formatInteger(recentCount)} emphasize={recentCount > 0} />
         <StatInline label="Total" value={formatInteger(triggered.length)} />
         <StatInline
           label="Last"
-          value={lastTriggered ? formatRelativeTime(lastTriggered) : "Quiet"}
+          value={lastTriggered ? formatRelativeTime(lastTriggered) : "—"}
           muted={!lastTriggered}
         />
       </div>
 
-      {/* State-aware callout */}
-      {isActive ? (
-        <div className="mt-2.5 rounded-md border border-amber-100 bg-amber-50 px-3 py-2">
-          <p className="label-eyebrow text-amber-700">Recommended action</p>
-          <p className="mt-0.5 text-xs text-amber-900">{consequence}</p>
-        </div>
-      ) : (
-        <div className="mt-2.5 rounded-md border border-emerald-100 bg-emerald-50/60 px-3 py-2">
-          <p className="label-eyebrow text-emerald-700">Quiet in window</p>
-          <p className="mt-0.5 text-xs text-emerald-900">
-            No fires in the last 7 days. Coverage still enforced across{" "}
-            {systemsCovered || "monitored"} system
-            {systemsCovered === 1 ? "" : "s"}.
-          </p>
-        </div>
-      )}
-
-      {/* Bob block — only when meaningful */}
       {bob ? (
-        <div className="mt-2.5 rounded-md border border-indigo-100 bg-indigo-50/50 px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-indigo-700">
-              <BobIcon size="xs" withBackground={false} />
-              Bob control review
-            </span>
-            <AnalyzeWithBob
-              targetType="control"
-              targetId={rule.id}
-              investigationId={bob.id}
-              hasInvestigation
-              label="Open Bob review"
-            />
-          </div>
-          <p className="mt-1 text-xs leading-snug text-slate-700">
-            {bob.summary}
+        <div className="mt-2 border-t border-slate-100 pt-2">
+          <p className="text-[11px] leading-snug text-slate-700">{bob.summary}</p>
+          <p className="mt-1 text-[10px] text-slate-500">
+            <span className="capitalize">{bob.confidence}</span>
+            {bob.suggested_owner ? (
+              <>
+                {" "}
+                · Owner: <span className="text-slate-700">{bob.suggested_owner}</span>
+              </>
+            ) : null}
           </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
-            <span>
-              Confidence:{" "}
-              <span className="font-medium capitalize text-slate-700">
-                {bob.confidence}
-              </span>
-            </span>
-            <span>
-              Suggested owner:{" "}
-              <span className="font-medium text-slate-700">
-                {bob.suggested_owner}
-              </span>
-            </span>
-          </div>
         </div>
       ) : isRecurring ? (
-        <div className="mt-2.5 rounded-md border border-indigo-100 bg-indigo-50/40 px-3 py-2 text-[11px] text-slate-700">
-          <span className="inline-flex items-center gap-1.5 font-semibold text-indigo-700">
-            <BobIcon size="xs" withBackground={false} />
-            Bob tuning candidate
-          </span>
-          <span className="ml-1.5 text-slate-600">
-            · {recentCount} fires across {systemsCovered} system
-            {systemsCovered === 1 ? "" : "s"} in 7d. Queued for next review
-            window.
-          </span>
-        </div>
+        <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-600">
+          Recurring: {recentCount} fires (7d) · consider Bob review when ready.
+        </p>
       ) : null}
 
-      {/* Footer row — logic disclosure + primary op actions */}
-      <details className="group/logic mt-2.5 rounded-md border border-slate-200 bg-white">
-        <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-[11px] font-medium text-slate-600 hover:text-slate-900">
-          <span className="inline-flex items-center gap-1.5">
-            <ChevronRight className="h-3.5 w-3.5 transition group-open/logic:rotate-90" />
-            Logic · <span className="font-mono text-slate-500">{rule.id}</span>
+      <details className="group/rule mt-2 border-t border-slate-100 pt-2">
+        <summary className="cursor-pointer list-none text-[10px] font-medium uppercase tracking-wide text-slate-500 marker:content-none [&::-webkit-details-marker]:hidden hover:text-slate-800">
+          <span className="inline-flex items-center gap-0.5">
+            <ChevronRight className="h-3 w-3 transition group-open/rule:rotate-90" />
+            Rule definition
           </span>
         </summary>
-        <div className="border-t border-slate-100 px-3 py-2">
-          <code className="block break-all font-mono text-[11px] text-slate-600">
-            {rule.observed_field} {rule.comparator} {rule.threshold_field}
-          </code>
-        </div>
+        <code className="mt-1.5 block break-all rounded border border-slate-100 bg-slate-50/80 px-2 py-1.5 font-mono text-[10px] text-slate-600">
+          {rule.observed_field} {rule.comparator} {rule.threshold_field}
+        </code>
       </details>
 
-      <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5 text-[11px]">
-        {triggered[0] ? (
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-2">
+        {bob ? (
           <Link
-            href={routeToIncident(triggered[0].id)}
-            className="inline-flex items-center gap-1 font-medium text-slate-600 hover:text-slate-900"
+            href={routeToBobInvestigation(bob.id)}
+            className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50/40 px-2 py-1 text-[11px] font-semibold text-indigo-900 hover:border-indigo-300 hover:bg-indigo-50"
           >
-            View latest incident
-            <ChevronRight className="h-3 w-3" />
+            <BobIcon size="xs" withBackground={false} />
+            Review
           </Link>
-        ) : (
-          <span className="text-slate-400">
-            {isQuiet
-              ? "No incidents in window · coverage still enforced"
-              : "No incidents in window"}
-          </span>
-        )}
-        {!bob && !isRecurring ? (
-          <span
-            className="text-slate-400"
-            title="Bob has not opened a review for this control in the current window."
+        ) : null}
+        {latest ? (
+          <Link
+            href={routeToIncident(latest.id)}
+            className={cn(
+              "inline-flex items-center gap-0.5 text-[11px] font-medium",
+              bob ? "text-slate-600 hover:text-slate-900" : "rounded border border-slate-200 px-2 py-1 text-slate-800 hover:bg-slate-50"
+            )}
           >
-            No Bob review in window
-          </span>
+            {bob ? "Incident" : "Latest"}
+            <ChevronRight className="h-3 w-3 opacity-60" />
+          </Link>
         ) : null}
       </div>
     </Card>

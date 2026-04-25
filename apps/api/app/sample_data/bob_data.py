@@ -806,16 +806,14 @@ def _status_for_incident(
         return rng.choice(
             ["approved", "executed", "monitoring_outcome", "rejected"]
         )
-    if incident.incident_status == "mitigated":
-        return rng.choice(["approved", "monitoring_outcome", "executed"])
     # Low-confidence investigations tend to stay in draft/ready_for_review
     if confidence_score < 0.5:
         return rng.choice(["draft", "ready_for_review"])
-    if incident.incident_status == "escalated" or incident.severity == "high":
+    if incident.escalation_status == "escalated" or incident.severity == "high":
         if age_hours < 48:
             return rng.choice(["awaiting_approval", "awaiting_approval", "ready_for_review"])
         return rng.choice(["approved", "monitoring_outcome"])
-    if incident.incident_status == "under_review":
+    if incident.incident_status == "pending":
         return rng.choice(["ready_for_review", "awaiting_approval"])
     if age_hours < 6:
         return "draft"
@@ -1137,7 +1135,7 @@ def _confidence_for_incident(incident, similar_count: int, seed_key: str) -> flo
         base -= 0.04
     if incident.escalation_status == "escalated":
         base += 0.05
-    if incident.incident_status in ("mitigated", "closed"):
+    if incident.incident_status == "closed":
         base += 0.08
     base += rng.uniform(-0.06, 0.06)
     return max(0.28, min(0.92, round(base, 2)))

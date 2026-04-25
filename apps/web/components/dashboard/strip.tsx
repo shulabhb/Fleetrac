@@ -14,6 +14,10 @@ type StripProps = {
   stats: ReactNode;
   cta?: { label: string; href: string };
   tone?: "default" | "tinted";
+  /** Nest inside a parent shell: no outer border/radius, top divider only. */
+  embedded?: boolean;
+  /** Inline stats beside header vs full-width grid row below (clearer for many metrics). */
+  layout?: "inline" | "stacked";
 };
 
 const accentClass: Record<Accent, string> = {
@@ -40,39 +44,71 @@ export function DashboardStrip({
   eyebrow,
   caption,
   stats,
-  cta
+  cta,
+  embedded = false,
+  layout = "inline"
 }: StripProps) {
+  const stacked = layout === "stacked";
   return (
     <div
       className={cn(
-        "relative flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-white px-4 py-3",
-        borderClass[accent]
+        "relative flex gap-x-5 gap-y-2 bg-white px-4 py-3",
+        embedded
+          ? "rounded-none border-0 border-t border-slate-100 shadow-none"
+          : cn("rounded-lg border shadow-card", borderClass[accent]),
+        stacked ? "flex-col items-stretch" : "flex-wrap items-center"
       )}
     >
       <span
         aria-hidden
         className={cn(
-          "absolute left-0 top-3 bottom-3 w-[3px] rounded-r bg-gradient-to-b",
+          "absolute left-0 w-[3px] rounded-r bg-gradient-to-b",
+          embedded ? "top-2 bottom-2" : "top-3 bottom-3",
           accentClass[accent]
         )}
       />
-      <div className="flex min-w-0 items-center gap-2 pl-2">
-        <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-900 text-white">
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-700">
-            {eyebrow}
-          </p>
-          {caption ? (
-            <p className="truncate text-[11px] text-slate-500">{caption}</p>
-          ) : null}
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-2 pl-2",
+          stacked && "w-full justify-between gap-3"
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-900 text-white">
+            {icon}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+              {eyebrow}
+            </p>
+            {caption ? (
+              <p className="line-clamp-2 text-[11px] text-slate-500 sm:truncate">
+                {caption}
+              </p>
+            ) : null}
+          </div>
         </div>
+        {stacked && cta ? (
+          <Link
+            href={cta.href}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            {cta.label}
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        ) : null}
       </div>
 
-      <div className="ml-auto flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-4 gap-y-2 text-xs",
+          stacked
+            ? "w-full border-t border-slate-100 pt-2.5"
+            : "ml-auto gap-x-5 gap-y-1.5"
+        )}
+      >
         {stats}
-        {cta ? (
+        {!stacked && cta ? (
           <Link
             href={cta.href}
             className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"

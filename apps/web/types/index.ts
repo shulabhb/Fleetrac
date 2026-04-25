@@ -1,10 +1,5 @@
 export type Severity = "low" | "medium" | "high";
-export type IncidentStatus =
-  | "detected"
-  | "under_review"
-  | "escalated"
-  | "mitigated"
-  | "closed";
+export type IncidentStatus = "open" | "pending" | "closed";
 export type RiskPosture = "healthy" | "watch" | "at_risk" | "critical";
 export type RiskCategory =
   | "technology risk"

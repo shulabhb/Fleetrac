@@ -25,7 +25,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { Card, CardHeader } from "@/components/ui/card";
 import { SectionTitle } from "@/components/ui/section-title";
 import { aggregateByDay, sumSeries } from "@/lib/analytics";
-import { humanizeLabel, postureRank, severityRank } from "@/lib/present";
+import { humanizeLabel, postureRank } from "@/lib/present";
 import { formatInteger, formatMetric } from "@/lib/format";
 import {
   routes,
@@ -67,12 +67,9 @@ export default async function DashboardPage() {
   const openIncidents = incidents.filter((i) => i.incident_status !== "closed");
   const highSeverityIncidents = openIncidents.filter((i) => i.severity === "high");
   const pendingHumanReviews = incidents.filter(
-    (i) =>
-      i.review_required && ["detected", "under_review"].includes(i.incident_status)
+    (i) => i.review_required && i.incident_status === "pending"
   );
-  const escalatedIncidents = incidents.filter(
-    (i) => i.escalation_status === "escalated" || i.incident_status === "escalated"
-  );
+  const escalatedIncidents = incidents.filter((i) => i.escalation_status === "escalated");
   const latestBySystem = new Map<string, any>();
   for (const event of telemetry) {
     if (!latestBySystem.has(event.system_id)) {
@@ -104,21 +101,6 @@ export default async function DashboardPage() {
       if (pr !== 0) return pr;
       return b.openCount - a.openCount;
     })
-    .slice(0, 5);
-
-  // ---- Urgent queue
-  const urgentRanked = incidents
-    .map((incident) => {
-      const score =
-        (incident.escalation_status === "escalated" ? 8 : 0) +
-        (incident.incident_status === "escalated" ? 5 : 0) +
-        severityRank(incident.severity) * 3 +
-        (incident.review_required ? 2 : 0) +
-        (incident.incident_status === "closed" ? -10 : 0);
-      return { incident, score };
-    })
-    .filter((i) => i.incident.incident_status !== "closed")
-    .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
   // ---- Distributions
@@ -162,7 +144,7 @@ export default async function DashboardPage() {
   const escalationTrend = aggregateByDay(incidents, {
     valueFn: () => 1,
     reducer: "count",
-    filter: (i) => i.escalation_status === "escalated" || i.incident_status === "escalated",
+    filter: (i) => i.escalation_status === "escalated",
     days: 7,
     timestampKey: "created_at"
   });
@@ -170,7 +152,7 @@ export default async function DashboardPage() {
     valueFn: () => 1,
     reducer: "count",
     filter: (i) =>
-      i.review_required && ["detected", "under_review"].includes(i.incident_status),
+      i.review_required && i.incident_status === "pending",
     days: 7,
     timestampKey: "created_at"
   });
@@ -341,23 +323,28 @@ export default async function DashboardPage() {
 
       {/* ============ Needs Immediate Attention + Top at-risk ============ */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader
-            title="Needs immediate attention"
-            caption="Start here when choosing work. Ranked by escalation, severity, and review urgency."
-            action={
-              <Link
-                href={routes.incidents()}
-                className="text-xs font-medium text-slate-600 hover:text-slate-900"
-              >
-                Open incident queue →
-              </Link>
-            }
-          />
-          <div className="mt-1">
-            <NeedsAttentionList rows={urgentRanked} />
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card">
+          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-3 py-2.5 sm:px-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                Operator command surface
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Same default open queue as Incident Queue · new / not triaged rows are highlighted.
+              </p>
+            </div>
+            <Link
+              href={routes.incidents()}
+              className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+            >
+              Full queue
+            </Link>
           </div>
-        </Card>
+          <div className="max-h-[min(55vh,28rem)] overflow-y-auto overscroll-contain px-1 sm:px-2">
+            <NeedsAttentionList incidents={incidents} />
+          </div>
+          <ActionCenterStrip embedded actions={actionsRes.items} />
+        </div>
         <Card>
           <CardHeader
             title="Top at-risk systems"
@@ -382,11 +369,10 @@ export default async function DashboardPage() {
         <div className="flex items-center justify-between gap-3">
           <p className="label-eyebrow">Loop continuity</p>
           <p className="hidden text-[11px] text-slate-500 sm:block">
-            Bob diagnoses → Action Center governs → Outcomes verifies
+            Bob diagnoses → Outcomes verifies
           </p>
         </div>
         <BobDashboardStrip investigations={bobRes.items} />
-        <ActionCenterStrip actions={actionsRes.items} />
         {allChanges.length > 0 ? (
           <OutcomesStrip changes={allChanges} bobImpact={impactRes?.item} />
         ) : null}

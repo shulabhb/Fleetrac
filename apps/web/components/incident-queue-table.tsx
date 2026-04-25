@@ -89,8 +89,8 @@ export function IncidentQueueTable({ incidents }: Props) {
         return true;
       })
       .sort((a, b) => {
-        const escA = a.incident_status === "escalated" || a.escalation_status === "escalated" ? 1 : 0;
-        const escB = b.incident_status === "escalated" || b.escalation_status === "escalated" ? 1 : 0;
+        const escA = a.escalation_status === "escalated" ? 1 : 0;
+        const escB = b.escalation_status === "escalated" ? 1 : 0;
         if (escB !== escA) return escB - escA;
         const sev = severityRank(b.severity) - severityRank(a.severity);
         if (sev !== 0) return sev;
@@ -142,11 +142,9 @@ export function IncidentQueueTable({ incidents }: Props) {
   const counts = useMemo(() => {
     const high = filtered.filter((i) => i.severity === "high").length;
     const escalated = filtered.filter(
-      (i) => i.escalation_status === "escalated" || i.incident_status === "escalated"
+      (i) => i.escalation_status === "escalated"
     ).length;
-    const reviews = filtered.filter(
-      (i) => i.review_required && ["detected", "under_review"].includes(i.incident_status)
-    ).length;
+    const reviews = filtered.filter((i) => i.incident_status === "pending").length;
     return { total: filtered.length, high, escalated, reviews };
   }, [filtered]);
 
@@ -269,9 +267,7 @@ export function IncidentQueueTable({ incidents }: Props) {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.map((incident) => {
-              const escalated =
-                incident.escalation_status === "escalated" ||
-                incident.incident_status === "escalated";
+              const escalated = incident.escalation_status === "escalated";
               return (
                 <tr
                   key={incident.id}

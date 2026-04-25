@@ -206,3 +206,8 @@ export const canonicalParent = {
   bob: () => routes.bob(),
   settings: () => routes.settings()
 } as const;
+
+/** True on `/incidents/[id]` (detail), not `/incidents` queue. */
+export function isIncidentDetailPath(pathname: string): boolean {
+  return /^\/incidents\/[^/]+\/?$/.test(pathname);
+}

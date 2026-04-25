@@ -263,12 +263,12 @@ def _breached(observed: float | int | None, threshold: float | int | None, compa
 
 def _incident_lifecycle(severity: str, risk_category: str) -> tuple[str, str, bool]:
     if risk_category == "cyber risk":
-        return ("escalated", "escalated", True)
+        return ("open", "escalated", True)
     if severity == "high":
-        return ("under_review", "pending", True)
+        return ("pending", "pending", True)
     if severity == "medium":
-        return ("under_review", "not_escalated", True)
-    return ("detected", "not_escalated", False)
+        return ("pending", "not_escalated", True)
+    return ("open", "not_escalated", False)
 
 
 def _build_incidents(
@@ -350,14 +350,10 @@ def _recalculate_system_posture(systems: list[System], incidents: list[Incident]
         open_incidents = [item for item in scoped if item.incident_status != "closed"]
         high_incidents = [item for item in open_incidents if item.severity == "high"]
         escalated = [
-            item
-            for item in open_incidents
-            if item.incident_status == "escalated" or item.escalation_status == "escalated"
+            item for item in open_incidents if item.escalation_status == "escalated"
         ]
         pending_review = [
-            item
-            for item in open_incidents
-            if item.review_required and item.incident_status in {"detected", "under_review"}
+            item for item in open_incidents if item.incident_status == "pending"
         ]
 
         if len(escalated) >= 1 or len(high_incidents) >= 2 or len(open_incidents) >= 4:
@@ -473,7 +469,7 @@ def _build_audit_logs(incidents: list[Incident], telemetry_events: list[Telemetr
         )
 
         # 6. Lifecycle-specific events
-        if incident.escalation_status == "escalated" or incident.incident_status == "escalated":
+        if incident.escalation_status == "escalated":
             logs.append(
                 AuditLogEntry(
                     id=f"audit_escalated_{idx}",
@@ -500,30 +496,6 @@ def _build_audit_logs(incidents: list[Incident], telemetry_events: list[Telemetr
                         "Bob suggested escalation after correlating recurrence and severity signals."
                     ),
                     timestamp=_jittered(incident.created_at, 20, 60),
-                )
-            )
-
-        if incident.incident_status == "mitigated":
-            logs.append(
-                AuditLogEntry(
-                    id=f"audit_mitigated_{idx}",
-                    actor=incident.owner_team,
-                    action="incident.mitigated",
-                    target_type="incident",
-                    target_id=incident.id,
-                    details=f"{incident.title} mitigated. Monitoring outcome on next telemetry window.",
-                    timestamp=_jittered(incident.created_at, 120, 1440),
-                )
-            )
-            logs.append(
-                AuditLogEntry(
-                    id=f"audit_rec_approved_{idx}",
-                    actor=incident.owner_team,
-                    action="bob.recommendation_approved",
-                    target_type="incident",
-                    target_id=incident.id,
-                    details="Bob recommendation approved and queued for execution.",
-                    timestamp=_jittered(incident.created_at, 60, 360),
                 )
             )
 

@@ -8,9 +8,13 @@ import {
   FileSignature,
   Flag,
   GitPullRequestArrow,
+  Send,
   ShieldAlert,
   Sparkles,
+  Ticket,
   ThumbsUp,
+  UserRound,
+  Waypoints,
   XCircle
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -32,6 +36,15 @@ type IconSpec = { icon: LucideIcon; tone: string };
 
 function iconFor(action: string): IconSpec {
   const a = action.toLowerCase();
+  if (a.startsWith("outreach.")) {
+    if (a.includes("jira"))
+      return { icon: Ticket, tone: "text-blue-700 bg-blue-50 ring-blue-100" };
+    return { icon: Send, tone: "text-violet-700 bg-violet-50 ring-violet-100" };
+  }
+  if (a.startsWith("routing."))
+    return { icon: Waypoints, tone: "text-indigo-700 bg-indigo-50 ring-indigo-100" };
+  if (a === "owner.assigned" || a.startsWith("owner."))
+    return { icon: UserRound, tone: "text-slate-700 bg-slate-100 ring-slate-200" };
   // Bob-specific events get the Sparkles icon family (indigo) for quick scan.
   if (a.startsWith("bob.")) {
     if (a.includes("approved"))
@@ -58,7 +71,7 @@ function iconFor(action: string): IconSpec {
 }
 
 const EVENT_LABELS: Record<string, string> = {
-  "incident.created": "Incident created",
+  "incident.created": "Incident detected",
   "incident.review_required": "Review required",
   "incident.escalated": "Escalated to owner team",
   "incident.mitigated": "Incident mitigated",
@@ -74,7 +87,18 @@ const EVENT_LABELS: Record<string, string> = {
   "bob.escalation_suggested": "Bob suggested escalation",
   "bob.control_tuning_suggested": "Bob suggested control tuning",
   "followup.scheduled": "Follow-up scheduled",
-  "telemetry.processed": "Telemetry processed"
+  "telemetry.processed": "Telemetry processed",
+  "outreach.slack": "Slack alert sent",
+  "outreach.jira": "Jira recorded",
+  "routing.bob_queue": "Response routed to Bob queue",
+  "owner.assigned": "Assignment updated",
+  "bridge.opened": "Incident bridge opened",
+  "tool.logs.opened": "Logs opened",
+  "tool.debugger.opened": "Debugger opened",
+  "tool.traces.opened": "Traces opened",
+  "tool.metrics.opened": "Metrics opened",
+  "tool.cloud_console.opened": "Cloud console opened",
+  "tool.runbook.opened": "Runbook opened"
 };
 
 function labelFor(action: string): string {
@@ -86,56 +110,91 @@ type ActivityFeedProps = {
   emptyLabel?: string;
   hrefFor?: (item: ActivityItem) => string | null;
   className?: string;
+  /** Denser timeline for side panels (e.g. incident command column). */
+  compact?: boolean;
 };
 
-export function ActivityFeed({ items, emptyLabel, hrefFor, className }: ActivityFeedProps) {
+export function ActivityFeed({
+  items,
+  emptyLabel,
+  hrefFor,
+  className,
+  compact = false
+}: ActivityFeedProps) {
   if (!items.length) {
     return (
-      <p className="text-sm text-slate-500">
+      <p className={cn("text-slate-500", compact ? "text-xs leading-relaxed" : "text-sm")}>
         {emptyLabel ?? "No recent governance activity."}
       </p>
     );
   }
 
   return (
-    <ol className={cn("relative space-y-1", className)}>
+    <ol className={cn("relative", compact ? "space-y-0.5" : "space-y-1", className)}>
       {items.map((item, idx) => {
         const { icon: Icon, tone } = iconFor(item.action);
         const href = hrefFor ? hrefFor(item) : null;
         const Content = (
           <div
             className={cn(
-              "relative flex items-start gap-3 rounded-md px-2 py-2",
+              "relative flex items-start gap-2 rounded-md",
+              compact ? "px-1.5 py-1.5" : "gap-3 px-2 py-2",
               href && "transition hover:bg-slate-50"
             )}
           >
             {idx !== items.length - 1 ? (
               <span
                 aria-hidden
-                className="absolute left-[19px] top-9 h-[calc(100%-1.25rem)] w-px bg-slate-200"
+                className={cn(
+                  "absolute w-px bg-slate-200",
+                  compact
+                    ? "left-[11px] top-6 h-[calc(100%-0.35rem)]"
+                    : "left-[19px] top-9 h-[calc(100%-1.25rem)]"
+                )}
               />
             ) : null}
             <span
               className={cn(
-                "relative z-[1] flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-1",
+                "relative z-[1] flex shrink-0 items-center justify-center rounded-full ring-1",
+                compact ? "h-6 w-6" : "h-7 w-7",
                 tone
               )}
             >
-              <Icon className="h-3.5 w-3.5" />
+              <Icon className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
             </span>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-3">
-                <p className="truncate text-sm font-medium text-slate-900">
+              <div className="flex items-center justify-between gap-2">
+                <p
+                  className={cn(
+                    "truncate font-medium text-slate-900",
+                    compact ? "text-xs" : "text-sm"
+                  )}
+                >
                   {labelFor(item.action)}
                 </p>
-                <span className="shrink-0 text-[11px] text-slate-500">
+                <span
+                  suppressHydrationWarning
+                  className={cn("shrink-0 text-slate-500", compact ? "text-[10px]" : "text-[11px]")}
+                >
                   {formatRelativeTime(item.timestamp)}
                 </span>
               </div>
-              <p className="line-clamp-2 text-xs text-slate-600">{item.details}</p>
+              <p
+                className={cn(
+                  "line-clamp-2 text-slate-600",
+                  compact ? "text-[11px] leading-snug" : "text-xs"
+                )}
+              >
+                {item.details}
+              </p>
             </div>
             {href ? (
-              <ArrowUpRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-400 transition group-hover:text-slate-700" />
+              <ArrowUpRight
+                className={cn(
+                  "shrink-0 text-slate-400 transition group-hover:text-slate-700",
+                  compact ? "mt-0.5 h-3 w-3" : "mt-1 h-3.5 w-3.5"
+                )}
+              />
             ) : null}
           </div>
         );

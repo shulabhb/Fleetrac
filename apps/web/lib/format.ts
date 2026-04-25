@@ -1,3 +1,6 @@
+/** Fixed locale so server-rendered strings match the browser during hydration. */
+const DISPLAY_LOCALE = "en-US";
+
 export function formatRelativeTime(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
@@ -11,14 +14,14 @@ export function formatRelativeTime(value: string | number | Date | null | undefi
   if (abs < hour) return `${Math.round(abs / minute)}m ago`;
   if (abs < day) return `${Math.round(abs / hour)}h ago`;
   if (abs < 7 * day) return `${Math.round(abs / day)}d ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return date.toLocaleDateString(DISPLAY_LOCALE, { month: "short", day: "numeric" });
 }
 
 export function formatShortDateTime(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(DISPLAY_LOCALE, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -35,5 +38,5 @@ export function formatMetric(value: number | null | undefined, opts?: { unit?: s
 
 export function formatInteger(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
-  return new Intl.NumberFormat().format(Math.round(value));
+  return new Intl.NumberFormat(DISPLAY_LOCALE).format(Math.round(value));
 }

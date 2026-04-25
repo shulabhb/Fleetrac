@@ -62,7 +62,7 @@ export function TrendChart({
 
   return (
     <div style={{ width: "100%", minWidth: 0, height, minHeight: height }}>
-      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={height}>
         <LineChart data={formatted} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="#eef2f6" strokeDasharray="3 3" vertical={false} />
           <XAxis
@@ -74,7 +74,7 @@ export function TrendChart({
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) =>
-              new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+              new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })
             }
             minTickGap={28}
           />

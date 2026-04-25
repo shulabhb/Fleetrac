@@ -33,13 +33,7 @@ class Incident(BaseModel):
         "governance / compliance risk",
         "output reliability risk",
     ]
-    incident_status: Literal[
-        "detected",
-        "under_review",
-        "escalated",
-        "mitigated",
-        "closed",
-    ] = "detected"
+    incident_status: Literal["open", "pending", "closed"] = "open"
     escalation_status: Literal["not_escalated", "pending", "escalated"] = "not_escalated"
     review_required: bool = True
     severity: Literal["low", "medium", "high"]

@@ -28,7 +28,7 @@ export function Sparkline({ points, tone = "accent", height = 44 }: SparklinePro
   const { stroke, fill } = tones[tone];
   return (
     <div className="w-full" style={{ height }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={height}>
         <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id={`spark-${tone}`} x1="0" x2="0" y1="0" y2="1">

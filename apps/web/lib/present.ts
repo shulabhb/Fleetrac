@@ -1,3 +1,5 @@
+import { migrateLegacyIncidentStatus } from "@/lib/incident-lifecycle";
+
 export function humanizeLabel(value: string | null | undefined): string {
   if (!value) return "—";
   return value
@@ -31,10 +33,9 @@ export function postureBadgeClasses(posture: string): string {
 }
 
 export function lifecycleBadgeClasses(status: string): string {
-  if (status === "escalated") return "bg-rose-50 text-rose-700 ring-1 ring-rose-200";
-  if (status === "under_review") return "bg-amber-50 text-amber-800 ring-1 ring-amber-200";
-  if (status === "mitigated") return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
-  if (status === "closed") return "bg-slate-100 text-slate-600 ring-1 ring-slate-200";
+  const s = migrateLegacyIncidentStatus(status);
+  if (s === "pending") return "bg-amber-50 text-amber-800 ring-1 ring-amber-200";
+  if (s === "closed") return "bg-slate-100 text-slate-600 ring-1 ring-slate-200";
   return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
 }
 
