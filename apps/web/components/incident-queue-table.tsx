@@ -18,6 +18,7 @@ import { formatRelativeTime } from "@/lib/format";
 import {
   appendReturnTo,
   routes,
+  routeToControl,
   routeToIncident,
   routeToSystem
 } from "@/lib/routes";
@@ -31,6 +32,9 @@ export function IncidentQueueTable({ incidents }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const systemScope = params?.get("system") ?? null;
+  const ruleScope = params?.get("rule") ?? null;
+  const returnTo =
+    params?.toString() ? `${pathname}?${params.toString()}` : pathname;
   const [severityFilter, setSeverityFilter] = useState(
     params?.get("severity") ?? "all"
   );
@@ -63,6 +67,7 @@ export function IncidentQueueTable({ incidents }: Props) {
     return overlaid
       .filter((incident) => {
         if (systemScope && incident.system_id !== systemScope) return false;
+        if (ruleScope && incident.rule_id !== ruleScope) return false;
         if (severityFilter !== "all" && incident.severity !== severityFilter) return false;
         if (riskCategoryFilter !== "all" && incident.risk_category !== riskCategoryFilter) return false;
         if (ownerTeamFilter !== "all" && incident.owner_team !== ownerTeamFilter) return false;
@@ -99,6 +104,7 @@ export function IncidentQueueTable({ incidents }: Props) {
   }, [
     overlaid,
     systemScope,
+    ruleScope,
     severityFilter,
     riskCategoryFilter,
     ownerTeamFilter,
@@ -118,6 +124,8 @@ export function IncidentQueueTable({ incidents }: Props) {
     else next.set("lifecycle", lifecycleFilter);
     if (query.trim()) next.set("q", query.trim());
     else next.delete("q");
+    if (ruleScope) next.set("rule", ruleScope);
+    else next.delete("rule");
 
     const current = params?.toString() ?? "";
     const target = next.toString();
@@ -134,10 +142,9 @@ export function IncidentQueueTable({ incidents }: Props) {
     riskCategoryFilter,
     ownerTeamFilter,
     lifecycleFilter,
-    query
+    query,
+    ruleScope
   ]);
-
-  const returnTo = params?.toString() ? `${pathname}?${params.toString()}` : pathname;
 
   const counts = useMemo(() => {
     const high = filtered.filter((i) => i.severity === "high").length;
@@ -172,6 +179,30 @@ export function IncidentQueueTable({ incidents }: Props) {
               className="font-medium text-slate-700 hover:text-slate-900"
             >
               View production context →
+            </Link>
+            <Link
+              href={routes.incidents()}
+              className="font-medium text-slate-500 hover:text-slate-900"
+            >
+              Clear scope
+            </Link>
+          </div>
+        </div>
+      ) : null}
+      {ruleScope ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-600">
+          <span>
+            Scoped to governance control ·{" "}
+            <span className="font-mono text-[10px] font-medium text-slate-800">
+              {ruleScope}
+            </span>
+          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href={appendReturnTo(routeToControl(ruleScope), returnTo)}
+              className="font-medium text-slate-700 hover:text-slate-900"
+            >
+              View control health →
             </Link>
             <Link
               href={routes.incidents()}
@@ -280,6 +311,9 @@ export function IncidentQueueTable({ incidents }: Props) {
                     >
                       {incident.title}
                     </Link>
+                    <p className="mt-0.5 truncate font-mono text-[10px] text-slate-400">
+                      {incident.id}
+                    </p>
                     {escalated ? (
                       <span className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-medium text-rose-700">
                         <Flag className="h-3 w-3" />

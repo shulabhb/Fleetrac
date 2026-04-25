@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ChevronRight, LayoutGrid, List, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,12 @@ import {
   signalTypeForField
 } from "@/lib/present";
 import { BobIcon } from "@/components/bob/bob-icon";
-import { routeToBobInvestigation, routeToIncident } from "@/lib/routes";
+import {
+  appendReturnTo,
+  routeToBobInvestigation,
+  routeToControl,
+  routeToIncidentsForControl
+} from "@/lib/routes";
 
 type Props = {
   rules: any[];
@@ -80,7 +85,11 @@ export function ControlsBrowser({
   incidents,
   bobControlReviews = []
 }: Props) {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const listReturnTo = `${pathname ?? "/controls"}${
+    searchParams?.toString() ? `?${searchParams.toString()}` : ""
+  }`;
   const initialQuery = searchParams?.get("q") ?? "";
 
   const [view, setView] = useState<ViewMode>("compact");
@@ -355,11 +364,11 @@ export function ControlsBrowser({
           No controls match the current filters.
         </div>
       ) : view === "compact" ? (
-        <CompactList rows={filtered} />
+        <CompactList rows={filtered} listReturnTo={listReturnTo} />
       ) : (
         <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
           {filtered.map((c) => (
-            <ControlCard key={c.rule.id} control={c} />
+            <ControlCard key={c.rule.id} control={c} listReturnTo={listReturnTo} />
           ))}
         </div>
       )}
@@ -594,10 +603,16 @@ function ToggleButton({
 // Compact list mode
 // ---------------------------------------------------------------------------
 
-function CompactList({ rows }: { rows: EnrichedControl[] }) {
+function CompactList({
+  rows,
+  listReturnTo
+}: {
+  rows: EnrichedControl[];
+  listReturnTo: string;
+}) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="hidden grid-cols-[minmax(0,1.45fr)_100px_100px_minmax(0,0.9fr)_52px_52px_52px_88px_120px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-slate-500 md:grid">
+      <div className="hidden grid-cols-[minmax(0,1.35fr)_92px_92px_minmax(0,0.85fr)_48px_48px_48px_72px_minmax(132px,1fr)] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-slate-500 md:grid">
         <span>Control</span>
         <span>Signal</span>
         <span>Risk</span>
@@ -606,18 +621,24 @@ function CompactList({ rows }: { rows: EnrichedControl[] }) {
         <span className="text-right">7d</span>
         <span className="text-right">Tot</span>
         <span>Last</span>
-        <span className="text-right">Open</span>
+        <span className="text-right">Actions</span>
       </div>
       <ul className="divide-y divide-slate-100">
         {rows.map((c) => (
-          <CompactRow key={c.rule.id} control={c} />
+          <CompactRow key={c.rule.id} control={c} listReturnTo={listReturnTo} />
         ))}
       </ul>
     </div>
   );
 }
 
-function CompactRow({ control }: { control: EnrichedControl }) {
+function CompactRow({
+  control,
+  listReturnTo
+}: {
+  control: EnrichedControl;
+  listReturnTo: string;
+}) {
   const {
     rule,
     triggered,
@@ -629,10 +650,13 @@ function CompactRow({ control }: { control: EnrichedControl }) {
     risk,
     bob
   } = control;
-  const latestIncident = triggered[0];
+  const openIncidents = triggered.filter(
+    (i: any) => i.incident_status !== "closed"
+  ).length;
+  const controlHref = appendReturnTo(routeToControl(rule.id), listReturnTo);
 
   return (
-    <li className="grid grid-cols-1 items-center gap-2 px-3 py-2 text-[12px] transition hover:bg-slate-50/80 md:grid-cols-[minmax(0,1.45fr)_100px_100px_minmax(0,0.9fr)_52px_52px_52px_88px_120px] md:gap-2">
+    <li className="grid grid-cols-1 items-center gap-2 px-3 py-2 text-[12px] transition hover:bg-slate-50/80 md:grid-cols-[minmax(0,1.35fr)_92px_92px_minmax(0,0.85fr)_48px_48px_48px_72px_minmax(132px,1fr)] md:gap-2">
       {/* Col 1 — Control identity */}
       <div
         className="min-w-0"
@@ -640,7 +664,12 @@ function CompactRow({ control }: { control: EnrichedControl }) {
       >
         <div className="flex min-w-0 items-center gap-2">
           <SeverityDot severity={rule.severity} />
-          <span className="truncate font-semibold text-slate-900">{rule.name}</span>
+          <Link
+            href={controlHref}
+            className="min-w-0 truncate font-semibold text-slate-900 hover:text-indigo-900 hover:underline"
+          >
+            {rule.name}
+          </Link>
           {bob ? (
             <span
               className="inline-flex shrink-0 items-center gap-0.5 rounded bg-indigo-50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-800 ring-1 ring-indigo-200/80"
@@ -698,34 +727,46 @@ function CompactRow({ control }: { control: EnrichedControl }) {
         {lastTriggered ? formatRelativeTime(lastTriggered) : "Quiet"}
       </div>
 
-      {/* Col 9 — Open only when there is a target */}
-      <div className="flex flex-col items-end justify-center gap-1 md:flex-row md:items-center">
-        {bob ? (
-          <Link
-            href={routeToBobInvestigation(bob.id)}
-            className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50/50 px-2 py-0.5 text-[11px] font-semibold text-indigo-900 transition hover:border-indigo-300 hover:bg-indigo-50"
-          >
-            <BobIcon size="xs" withBackground={false} />
-            Review
-          </Link>
-        ) : null}
-        {latestIncident ? (
-          <Link
-            href={routeToIncident(latestIncident.id)}
-            className={cn(
-              "inline-flex items-center gap-0.5 text-[11px] font-medium transition",
-              bob
-                ? "text-slate-600 hover:text-slate-900"
-                : "rounded border border-slate-200 bg-white px-2 py-0.5 text-slate-800 hover:border-slate-300 hover:bg-slate-50"
-            )}
-            title="Latest incident for this control"
-          >
-            {bob ? "Incident" : "Latest"}
-            <ChevronRight className="h-3 w-3 opacity-60" />
-          </Link>
-        ) : !bob ? (
-          <span className="text-[11px] tabular-nums text-slate-300">—</span>
-        ) : null}
+      {/* Col 9 — Control-first actions */}
+      <div className="flex flex-col items-end justify-end gap-1.5 md:min-h-[44px]">
+        <Link
+          href={controlHref}
+          className="inline-flex w-full items-center justify-center rounded border border-slate-900 bg-slate-900 px-2 py-0.5 text-center text-[11px] font-semibold text-white transition hover:bg-slate-800 md:w-auto md:min-w-[5.5rem]"
+        >
+          View control
+        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5">
+          {openIncidents > 0 ? (
+            <Link
+              href={appendReturnTo(
+                routeToIncidentsForControl(rule.id),
+                listReturnTo
+              )}
+              className="text-[11px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+            >
+              Open incidents ({formatInteger(openIncidents)})
+            </Link>
+          ) : triggered.length > 0 ? (
+            <Link
+              href={appendReturnTo(
+                routeToIncidentsForControl(rule.id),
+                listReturnTo
+              )}
+              className="text-[10px] font-medium text-slate-400 hover:text-slate-600"
+            >
+              Incident history
+            </Link>
+          ) : null}
+          {bob ? (
+            <Link
+              href={appendReturnTo(routeToBobInvestigation(bob.id), listReturnTo)}
+              className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-800 hover:text-indigo-950"
+            >
+              <BobIcon size="xs" withBackground={false} />
+              Bob review
+            </Link>
+          ) : null}
+        </div>
       </div>
     </li>
   );
@@ -776,7 +817,13 @@ function SeverityDot({ severity }: { severity: string }) {
 // Card mode — denser than before
 // ---------------------------------------------------------------------------
 
-function ControlCard({ control }: { control: EnrichedControl }) {
+function ControlCard({
+  control,
+  listReturnTo
+}: {
+  control: EnrichedControl;
+  listReturnTo: string;
+}) {
   const {
     rule,
     triggered,
@@ -789,14 +836,19 @@ function ControlCard({ control }: { control: EnrichedControl }) {
     bob,
     isRecurring
   } = control;
-  const latest = triggered[0];
+  const openIncidents = triggered.filter(
+    (i: any) => i.incident_status !== "closed"
+  ).length;
+  const controlHref = appendReturnTo(routeToControl(rule.id), listReturnTo);
 
   return (
     <Card className="border-slate-200 p-3 shadow-sm">
       <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
         <div className="min-w-0">
           <h3 className="truncate text-[13px] font-semibold leading-snug text-slate-900">
-            {rule.name}
+            <Link href={controlHref} className="hover:text-indigo-900 hover:underline">
+              {rule.name}
+            </Link>
           </h3>
           <p className="mt-0.5 truncate font-mono text-[10px] text-slate-400">{rule.id}</p>
         </div>
@@ -876,28 +928,45 @@ function ControlCard({ control }: { control: EnrichedControl }) {
         </code>
       </details>
 
-      <div className="mt-2 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-2">
-        {bob ? (
-          <Link
-            href={routeToBobInvestigation(bob.id)}
-            className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50/40 px-2 py-1 text-[11px] font-semibold text-indigo-900 hover:border-indigo-300 hover:bg-indigo-50"
-          >
-            <BobIcon size="xs" withBackground={false} />
-            Review
-          </Link>
-        ) : null}
-        {latest ? (
-          <Link
-            href={routeToIncident(latest.id)}
-            className={cn(
-              "inline-flex items-center gap-0.5 text-[11px] font-medium",
-              bob ? "text-slate-600 hover:text-slate-900" : "rounded border border-slate-200 px-2 py-1 text-slate-800 hover:bg-slate-50"
-            )}
-          >
-            {bob ? "Incident" : "Latest"}
-            <ChevronRight className="h-3 w-3 opacity-60" />
-          </Link>
-        ) : null}
+      <div className="mt-2 flex flex-col items-stretch gap-2 border-t border-slate-100 pt-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+        <Link
+          href={controlHref}
+          className="inline-flex items-center justify-center rounded border border-slate-900 bg-slate-900 px-2 py-1 text-center text-[11px] font-semibold text-white hover:bg-slate-800"
+        >
+          View control
+        </Link>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {openIncidents > 0 ? (
+            <Link
+              href={appendReturnTo(
+                routeToIncidentsForControl(rule.id),
+                listReturnTo
+              )}
+              className="text-[11px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+            >
+              Open incidents ({formatInteger(openIncidents)})
+            </Link>
+          ) : triggered.length > 0 ? (
+            <Link
+              href={appendReturnTo(
+                routeToIncidentsForControl(rule.id),
+                listReturnTo
+              )}
+              className="text-[10px] font-medium text-slate-400 hover:text-slate-600"
+            >
+              Incident history
+            </Link>
+          ) : null}
+          {bob ? (
+            <Link
+              href={appendReturnTo(routeToBobInvestigation(bob.id), listReturnTo)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-800 hover:text-indigo-950"
+            >
+              <BobIcon size="xs" withBackground={false} />
+              Bob review
+            </Link>
+          ) : null}
+        </div>
       </div>
     </Card>
   );

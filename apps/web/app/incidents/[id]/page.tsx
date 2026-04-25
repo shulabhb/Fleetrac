@@ -1,6 +1,4 @@
-import { FileText, GaugeCircle } from "lucide-react";
-import { TrendChart } from "@/components/charts/trend-chart";
-import { Card, CardHeader } from "@/components/ui/card";
+import { FileText } from "lucide-react";
 import {
   getActions,
   getBobInvestigationForTarget,
@@ -8,21 +6,19 @@ import {
   getTelemetryEvents
 } from "@/lib/api";
 import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
-import { LinkedActionsPanel } from "@/components/actions/linked-actions";
+import { Card, CardHeader } from "@/components/ui/card";
 import { DisclosureSection } from "@/components/shared/disclosure-section";
-import { IncidentDetailHero } from "@/components/incident-detail-hero";
-import { IncidentDetailDecisionLayer } from "@/components/incident-detail-decision-layer";
+import { IncidentDetailEvidencePanel } from "@/components/incident-detail-evidence-panel";
 import { IncidentDetailActivityFeed } from "@/components/incident-detail-activity-feed";
-import { IncidentOperatorSurface } from "@/components/incident-operator-surface";
-import { formatMetric, formatRelativeTime } from "@/lib/format";
+import { IncidentDetailHero } from "@/components/incident-detail-hero";
+import { cn } from "@/lib/cn";
 import { humanizeLabel, metricLabel, signalTypeForField, telemetryFieldForMetric } from "@/lib/present";
 import {
   appendReturnTo,
   routes,
   routeToAction,
   routeToBobForTarget,
-  routeToBobInvestigation,
-  routeToControl
+  routeToBobInvestigation
 } from "@/lib/routes";
 
 type IncidentDetailPageProps = {
@@ -36,6 +32,12 @@ function parseThreshold(value: string | number | null | undefined): number | nul
   if (!match) return null;
   const parsed = Number(match[0]);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function incidentSeverityDotClass(severity: string): string {
+  if (severity === "high") return "bg-rose-500";
+  if (severity === "medium") return "bg-amber-500";
+  return "bg-emerald-500";
 }
 
 function metricColor(signal: string): string {
@@ -127,6 +129,7 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
         ].filter((m) => metricField !== m.key && m.value != null)
       : [];
 
+  const firstAction = incidentActions[0] ?? null;
   const activityItems = (audit_entries ?? []).map((entry: any) => ({
     id: entry.id,
     action: entry.action,
@@ -136,20 +139,34 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
     targetId: entry.target_id
   }));
 
-  const firstAction = incidentActions[0] ?? null;
+  const chartYDigits =
+    metricField === "latency_p95_ms"
+      ? 0
+      : metricField === "audit_coverage_pct"
+        ? 1
+        : 3;
+
+  const evidenceCaption =
+    metricField
+      ? `${metricLabel(metricField)} · ${incident.system_name}`
+      : "Breach evidence and supporting metrics.";
 
   return (
     <section className="space-y-5">
-      <IncidentOperatorSurface
-        incidentId={incident.id}
-        systemId={incident.system_id}
-        ruleId={incident.rule_id}
-        showWorkspaceShortcuts={false}
-      />
-
-      <h1 className="text-lg font-semibold leading-snug text-slate-900">{incident.title}</h1>
+      <div className="flex items-center gap-2.5">
+        <span
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            incidentSeverityDotClass(incident.severity)
+          )}
+          aria-label={`Severity ${humanizeLabel(incident.severity)}`}
+          title={`Severity · ${humanizeLabel(incident.severity)}`}
+        />
+        <h1 className="text-lg font-semibold leading-snug text-slate-900">{incident.title}</h1>
+      </div>
 
       <IncidentDetailHero
+        investigation={investigation}
         recommendedAction={incident.recommended_action}
         investigationHref={
           investigation
@@ -168,161 +185,49 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
       />
 
       <div className="space-y-4">
-        <IncidentDetailDecisionLayer
-            incident={{
-              id: incident.id,
-              title: incident.title,
-              owner_team: incident.owner_team,
-              system_id: incident.system_id
-            }}
-            initialIncidentStatus={incident.incident_status}
-            initialEscalationStatus={incident.escalation_status}
-            initialReviewRequired={incident.review_required}
-            investigationHref={
-              investigation
-                ? appendReturnTo(routeToBobInvestigation(investigation.id), here)
-                : appendReturnTo(routeToBobForTarget("incident", incident.id), here)
+        <IncidentDetailEvidencePanel
+            incidentId={incident.id}
+            incidentTitle={incident.title}
+            summary={incident.summary}
+            systemName={incident.system_name}
+            triggerMetric={incident.trigger_metric}
+            thresholdDisplay={incident.threshold}
+            observedNumber={observedNumber}
+            thresholdNumber={thresholdNumber}
+            expectedValue={
+              incident.expected_value != null && typeof incident.expected_value === "number"
+                ? incident.expected_value
+                : null
             }
-            actionHref={
-              firstAction ? appendReturnTo(routeToAction(firstAction.id), here) : routes.actions()
-            }
-            activityInitialItems={activityItems}
+            metricField={metricField}
+            series={series}
+            metricColor={metricColor(signalType)}
+            yDigits={chartYDigits}
+            supportingMetrics={supportingMetrics}
+            telemetryTimestamp={telemetry_context?.timestamp ?? null}
+            evidenceCaption={evidenceCaption}
           />
 
           <DisclosureSection
             defaultOpen
             eyebrow="Investigate · Act"
-            title="Bob analysis and governed actions"
+            title="Bob analysis"
             summary={
               investigation
-                ? "Bob investigation available with root-cause support and governed action links."
+                ? "Bob investigation available with root-cause support and recommendation context."
                 : "No Bob investigation yet. Start analysis when operator triage is complete."
             }
           >
-            <div className="space-y-3">
-              {investigation ? (
-                <BobSummaryPanel investigation={investigation} variant="compact" className="shadow-none" />
-              ) : (
-                <BobEmptyPanel targetType="incident" targetId={incident.id} />
-              )}
-              <LinkedActionsPanel
-                actions={incidentActions}
-                title="Governed actions from this incident"
-                caption="Remediations Bob drafted, with approver, eligibility, and monitoring state."
+            {investigation ? (
+              <BobSummaryPanel
+                investigation={investigation}
+                variant="compact"
+                className="shadow-none border-slate-300 bg-slate-100/70 ring-1 ring-slate-400/10"
               />
-            </div>
+            ) : (
+              <BobEmptyPanel targetType="incident" targetId={incident.id} />
+            )}
           </DisclosureSection>
-
-          <Card surface="evidence" className="border-slate-200">
-            <CardHeader
-              title="Evidence"
-              caption={
-                metricField
-                  ? `${metricLabel(metricField)} · ${incident.system_name}`
-                  : "Breach evidence and supporting metrics."
-              }
-              action={<GaugeCircle className="h-4 w-4 text-slate-400" />}
-            />
-
-          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-          <div className="rounded-md border border-slate-200 bg-white p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="label-eyebrow">Triggered metric</p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-900">
-                  {metricLabel(metricField)}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 text-right text-xs">
-                <div>
-                  <p className="label-eyebrow">Observed</p>
-                  <p className="tabular-nums text-base font-semibold text-rose-700">
-                    {observedNumber != null ? formatMetric(observedNumber, { digits: 3 }) : "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="label-eyebrow">Threshold</p>
-                  <p className="tabular-nums text-base font-semibold text-slate-700">
-                    {thresholdNumber != null
-                      ? formatMetric(thresholdNumber, { digits: 3 })
-                      : incident.threshold ?? "—"}
-                  </p>
-                </div>
-                {incident.expected_value != null ? (
-                  <div>
-                    <p className="label-eyebrow">Expected</p>
-                    <p className="tabular-nums text-base font-semibold text-slate-700">
-                      {formatMetric(incident.expected_value, { digits: 3 })}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            <div className="mt-3">
-              <TrendChart
-                data={series}
-                threshold={thresholdNumber ?? undefined}
-                thresholdLabel={
-                  thresholdNumber != null ? `Threshold ${formatMetric(thresholdNumber, { digits: 3 })}` : undefined
-                }
-                color={metricColor(signalType)}
-                height={200}
-                yDigits={
-                  metricField === "latency_p95_ms"
-                    ? 0
-                    : metricField === "audit_coverage_pct"
-                      ? 1
-                      : 3
-                }
-              />
-            </div>
-            <p className="mt-2 text-[11px] text-slate-500">
-              Dashed line is the governance threshold. The latest value triggered this incident.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-md border border-slate-200 bg-white p-3">
-              <p className="label-eyebrow">Breach context</p>
-              <p className="mt-2 text-sm text-slate-700">{incident.summary}</p>
-              <p className="mt-2 text-[11px] text-slate-500">
-                Event timestamp:{" "}
-                {telemetry_context
-                  ? formatRelativeTime(telemetry_context.timestamp)
-                  : "—"}
-              </p>
-            </div>
-            <DisclosureSection
-              title="Supporting metrics"
-              summary={
-                supportingMetrics.length > 0
-                  ? `${supportingMetrics.length} additional telemetry signals`
-                  : "No additional telemetry captured in this window."
-              }
-              className="border-slate-200 bg-white"
-              bodyClassName="p-3"
-            >
-              {supportingMetrics.length > 0 ? (
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
-                  {supportingMetrics.map((metric) => (
-                    <div key={metric.key} className="min-w-0">
-                      <dt className="truncate text-[11px] text-slate-500">{metric.label}</dt>
-                      <dd className="tabular-nums text-sm font-semibold text-slate-900">
-                        {formatMetric(metric.value, {
-                          digits: 2,
-                          unit: metric.unit ? ` ${metric.unit}` : ""
-                        })}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="text-xs text-slate-500">No additional telemetry captured in this window.</p>
-              )}
-            </DisclosureSection>
-          </div>
-        </div>
-          </Card>
 
           <DisclosureSection
             eyebrow="Audit · deep detail"

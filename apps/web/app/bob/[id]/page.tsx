@@ -152,10 +152,10 @@ export default async function BobInvestigationDetailPage({
 
   const targetHref =
     investigation.target_type === "incident"
-      ? routeToIncident(investigation.target_id)
+      ? appendReturnTo(routeToIncident(investigation.target_id), here)
       : investigation.target_type === "system"
-      ? routeToSystem(investigation.target_id)
-      : routeToControl(investigation.target_id);
+      ? appendReturnTo(routeToSystem(investigation.target_id), here)
+      : appendReturnTo(routeToControl(investigation.target_id), here);
 
   const top = investigation.recommendations.find(
     (r) => r.id === investigation.top_recommendation_id

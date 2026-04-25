@@ -16,7 +16,7 @@ export default async function ControlsPage() {
       <SectionTitle
         eyebrow="Policy · Control operations"
         title="Governance Controls"
-        caption="Scope with buckets, then drill by signal or owner. Actions surface only when there is something to open."
+        caption="Govern the health, calibration, and burden of controls themselves — not just downstream incidents. Open a control to review fleet impact, Bob signal, and tuning posture."
       />
       <ControlsBrowser
         rules={rulesRes.items}

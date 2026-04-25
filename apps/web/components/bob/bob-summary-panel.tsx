@@ -48,7 +48,7 @@ export function BobSummaryPanel({
     >
       <span
         aria-hidden
-        className="absolute left-0 top-4 bottom-4 w-[3px] rounded-r bg-gradient-to-b from-indigo-400 to-indigo-200"
+        className="absolute left-0 top-4 bottom-4 w-[3px] rounded-r bg-gradient-to-b from-indigo-300 to-indigo-100"
       />
       <div className="p-4 pl-5">
         <div className="flex items-start justify-between gap-3">
@@ -64,7 +64,7 @@ export function BobSummaryPanel({
                 score={investigation.confidence_score}
               />
               {investigation.recurring_issue_flag ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200">
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300">
                   Recurring pattern
                 </span>
               ) : null}
@@ -80,22 +80,28 @@ export function BobSummaryPanel({
           </div>
         </div>
 
-        <p className="mt-3 text-sm leading-relaxed text-slate-700">
-          {investigation.summary}
-        </p>
+        {variant === "compact" ? (
+          <CompactInvestigationSummary investigation={investigation} />
+        ) : (
+          <p className="mt-3 text-sm leading-relaxed text-slate-700">
+            {investigation.summary}
+          </p>
+        )}
 
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <SummaryField
-            label="Likely root cause"
-            body={investigation.likely_root_cause}
-          />
-          <SummaryField
-            label="Why it matters"
-            body={investigation.why_it_matters}
-          />
-        </div>
+        {variant === "compact" ? null : (
+          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <SummaryField
+              label="Likely root cause"
+              body={investigation.likely_root_cause}
+            />
+            <SummaryField
+              label="Why it matters"
+              body={investigation.why_it_matters}
+            />
+          </div>
+        )}
 
-        {investigation.alternative_hypothesis ? (
+        {variant === "compact" ? null : investigation.alternative_hypothesis ? (
           <div className="mt-3 rounded-md border border-slate-200 bg-slate-50/70 px-3 py-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
               Alternative hypothesis
@@ -106,32 +112,34 @@ export function BobSummaryPanel({
           </div>
         ) : null}
 
-        {top ? (
-          <div className="mt-3 rounded-md border border-indigo-100 bg-indigo-50/50 px-3 py-2.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
-                  Top recommendation
-                </p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-900">
-                  {top.title}
-                </p>
-                <p className="mt-1 text-xs leading-snug text-slate-600">
-                  {top.rationale_summary}
-                </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
-                  <span>
-                    <span className="text-slate-400">Owner</span>{" "}
-                    <span className="font-medium text-slate-700">
-                      {top.owner_team}
-                    </span>
-                  </span>
-                  <ApprovalBadge status={top.approval_status} />
+        {variant === "compact"
+          ? null
+          : top ? (
+              <div className="mt-3 rounded-md border border-indigo-100 bg-indigo-50/50 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+                      Top recommendation
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold text-slate-900">
+                      {top.title}
+                    </p>
+                    <p className="mt-1 text-xs leading-snug text-slate-600">
+                      {top.rationale_summary}
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+                      <span>
+                        <span className="text-slate-400">Owner</span>{" "}
+                        <span className="font-medium text-slate-700">
+                          {top.owner_team}
+                        </span>
+                      </span>
+                      <ApprovalBadge status={top.approval_status} />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        ) : null}
+            ) : null}
 
         {variant === "full" && investigation.evidence.length > 0 ? (
           <div className="mt-4">
@@ -155,7 +163,7 @@ export function BobSummaryPanel({
           </div>
           <Link
             href={detailHref}
-            className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-50"
+            className="inline-flex items-center gap-1 rounded-md border border-[#4A154B] bg-[#4A154B] px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm transition hover:bg-[#3E1140] hover:border-[#3E1140]"
           >
             Open Bob investigation
             <ArrowRight className="h-3 w-3" />
@@ -171,6 +179,127 @@ function SummaryField({ label, body }: { label: string; body: string }) {
     <div>
       <p className="label-eyebrow mb-1">{label}</p>
       <p className="text-xs leading-relaxed text-slate-700">{body}</p>
+    </div>
+  );
+}
+
+function CompactInvestigationSummary({
+  investigation
+}: {
+  investigation: BobInvestigation;
+}) {
+  const top = investigation.recommendations.find(
+    (r) => r.id === investigation.top_recommendation_id
+  );
+  const status =
+    investigation.status === "draft"
+      ? {
+          label: "Investigating",
+          tone: "bg-slate-50 text-slate-700 ring-slate-200"
+        }
+      : investigation.status === "ready_for_review"
+        ? {
+            label: "Report generated",
+            tone: "bg-sky-50 text-sky-800 ring-sky-200"
+          }
+        : investigation.status === "awaiting_approval"
+          ? {
+              label: "Action pending",
+              tone: "bg-amber-50 text-amber-900 ring-amber-200"
+            }
+          : investigation.status === "approved" || investigation.status === "executed"
+            ? {
+                label: "Approved / executing",
+                tone: "bg-emerald-50 text-emerald-800 ring-emerald-200"
+              }
+            : investigation.status === "monitoring_outcome"
+              ? {
+                  label: "Monitoring outcome",
+                  tone: "bg-violet-50 text-violet-800 ring-violet-200"
+                }
+              : {
+                  label: "Review required",
+                  tone: "bg-rose-50 text-rose-800 ring-rose-200"
+                };
+
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="rounded-md border border-slate-200 bg-slate-50/70 px-3 py-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Problem Bob flagged
+        </p>
+        <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-900">
+          {investigation.summary}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Bob status
+          </p>
+          <p
+            className={cn(
+              "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
+              status.tone
+            )}
+          >
+            {status.label}
+          </p>
+        </div>
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-2 md:col-span-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">
+            Likely root cause
+          </p>
+          <p className="mt-0.5 text-[12px] font-semibold leading-relaxed text-slate-900">
+            {investigation.likely_root_cause}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+            Control / risk posture
+          </p>
+          <p className="mt-0.5 text-[12px] font-semibold leading-relaxed text-slate-900">
+            {investigation.risk_domain
+              ? `${investigation.risk_domain} risk domain`
+              : "Risk domain not provided"}
+            {investigation.signal_type ? ` · ${investigation.signal_type} signal` : ""}
+          </p>
+          <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-900">
+            {investigation.why_it_matters}
+          </p>
+        </div>
+        <div className="rounded-md border border-sky-200 bg-sky-50/50 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700">
+            Alternative hypothesis
+          </p>
+          <p className="mt-0.5 text-[12px] font-semibold leading-relaxed text-slate-900">
+            {investigation.alternative_hypothesis || "None recorded."}
+          </p>
+        </div>
+      </div>
+
+      {top ? (
+        <div className="rounded-md border border-slate-200 bg-white px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+            Top recommendation
+          </p>
+          <p className="mt-0.5 text-sm font-semibold text-slate-900">{top.title}</p>
+          <p className="mt-1 text-xs leading-relaxed text-slate-600">
+            {top.rationale_summary}
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+            <span>
+              <span className="text-slate-400">Owner</span>{" "}
+              <span className="font-medium text-slate-700">{top.owner_team}</span>
+            </span>
+            <ApprovalBadge status={top.approval_status} />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

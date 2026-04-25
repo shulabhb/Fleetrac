@@ -32,7 +32,7 @@ Core workflow loop: Observe -> Investigate -> Act -> Measure.
   - Actions: `tab`, `q`, `risk`, `type`
   - Outcomes: `tab`, `q`, `env`, `type`, optional `system`
   - Bob: `status`, `target`, `confidence`, `sort`, `q`, `missing`
-  - Incidents: `system`, `severity`, `risk`, `owner`, `lifecycle`, `q`
+  - Incidents: `system`, `severity`, `risk`, `owner`, `lifecycle`, `q`, `rule` (control / `rule_id` scope)
   - Settings: `tab`, `integration`
 
 ## Canonical Terminology and Status Rules

@@ -301,7 +301,7 @@ export function IncidentWorkflowPanel({
   return (
     <Card surface="decision" className="border-indigo-200">
       <CardHeader
-        title="Operator command surface"
+        title="Incident triage"
         caption="Apply the triage decision. Changes are bounded to this demo session."
       />
       {body}

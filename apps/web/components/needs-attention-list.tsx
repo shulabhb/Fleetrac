@@ -88,11 +88,13 @@ export function NeedsAttentionList({ incidents }: { incidents: any[] }) {
             >
               <span
                 className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-semibold tabular-nums text-white",
-                  fresh ? "bg-indigo-700" : "bg-slate-900"
+                  "shrink-0 rounded border px-1.5 py-1 font-mono text-[10px] font-semibold tabular-nums",
+                  fresh
+                    ? "border-indigo-200 bg-indigo-50 text-indigo-900"
+                    : "border-slate-200 bg-white text-slate-700"
                 )}
               >
-                {idx + 1}
+                {String(incident.id).slice(-6)}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">

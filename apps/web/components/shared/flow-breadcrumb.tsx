@@ -4,6 +4,7 @@ import {
   ChevronRight,
   LineChart,
   PlayCircle,
+  Scale,
   Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -11,7 +12,7 @@ import { cn } from "@/lib/cn";
 type Step = {
   label: string;
   href?: string;
-  icon?: "incident" | "bob" | "action" | "outcome";
+  icon?: "incident" | "bob" | "action" | "outcome" | "control";
   active?: boolean;
   missing?: boolean;
 };
@@ -44,6 +45,8 @@ export function FlowBreadcrumb({ steps }: { steps: Step[] }) {
             <PlayCircle className="h-3 w-3" />
           ) : s.icon === "outcome" ? (
             <LineChart className="h-3 w-3" />
+          ) : s.icon === "control" ? (
+            <Scale className="h-3 w-3" />
           ) : null;
         const content = (
           <span

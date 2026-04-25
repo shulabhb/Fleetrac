@@ -18,9 +18,9 @@ export function ConfidenceBadge({
   className?: string;
 }) {
   const tone: Record<ConfidenceTier, string> = {
-    high: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    medium: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
-    low: "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+    high: "bg-white text-emerald-800 ring-1 ring-emerald-300",
+    medium: "bg-white text-amber-900 ring-1 ring-amber-300",
+    low: "bg-white text-slate-700 ring-1 ring-slate-300"
   };
   const label: Record<ConfidenceTier, string> = {
     high: "High confidence",
@@ -69,7 +69,7 @@ export function ApprovalBadge({
   };
   const c = config[status];
   return (
-    <Badge tone={c.tone} size="sm" dot className={className}>
+    <Badge tone={c.tone} size="sm" dot className={cn("bg-white", className)}>
       {c.label}
     </Badge>
   );
@@ -81,31 +81,31 @@ const investigationStatusConfig: Record<
 > = {
   draft: {
     label: "Draft",
-    className: "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+    className: "bg-white text-slate-700 ring-1 ring-slate-300"
   },
   ready_for_review: {
     label: "Ready for review",
-    className: "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
+    className: "bg-white text-sky-800 ring-1 ring-sky-300"
   },
   awaiting_approval: {
     label: "Awaiting approval",
-    className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
+    className: "bg-white text-amber-900 ring-1 ring-amber-300"
   },
   approved: {
     label: "Approved",
-    className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+    className: "bg-white text-emerald-800 ring-1 ring-emerald-300"
   },
   rejected: {
     label: "Rejected",
-    className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+    className: "bg-white text-rose-800 ring-1 ring-rose-300"
   },
   executed: {
     label: "Executed",
-    className: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
+    className: "bg-white text-indigo-800 ring-1 ring-indigo-300"
   },
   monitoring_outcome: {
     label: "Monitoring outcome",
-    className: "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
+    className: "bg-white text-violet-800 ring-1 ring-violet-300"
   }
 };
 

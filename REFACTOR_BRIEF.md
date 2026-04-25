@@ -69,7 +69,7 @@ The app is functionally rich, but day-to-day operation has friction due to compe
 - Segment/tab constants duplicated across files (risk of mismatch).
 - Settings `tab` + `integration` interplay can produce subtle behavior drift.
 - API schema vs frontend type duplication risks contract drift.
-- Controls detail is a filter route (`/controls?q=`), not a dedicated object route.
+- Controls detail is the object route `/controls/[id]` (list search remains `?q=` on `/controls`).
 - Mixed URL-state bootstrapping patterns in some client views.
 
 ## Recommended Implementation Order

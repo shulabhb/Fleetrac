@@ -372,7 +372,10 @@ export default async function ActionDetailPage({ params, searchParams }: Props) 
                 <RelatedRow
                   label="Control"
                   value={action.related_control_id}
-                  href={routeToControl(action.related_control_id)}
+                  href={appendReturnTo(
+                    routeToControl(action.related_control_id),
+                    here
+                  )}
                 />
               ) : null}
               {change ? (

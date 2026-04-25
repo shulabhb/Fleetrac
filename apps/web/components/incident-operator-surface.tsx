@@ -37,7 +37,7 @@ export function IncidentOperatorSurface({
         <Server className="h-3.5 w-3.5 shrink-0 text-slate-500" />
         System
       </Link>
-      <Link href={routeToControl(ruleId)} className={btn}>
+      <Link href={appendReturnTo(routeToControl(ruleId), here)} className={btn}>
         <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-500" />
         Control
       </Link>
