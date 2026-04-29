@@ -1,68 +1,102 @@
 import Link from "next/link";
 import {
-  getActions,
-  getAuditLogs,
   getBobImpactSummary,
   getBobInvestigations,
   getChanges,
   getIncidents,
-  getSystems,
-  getTelemetryEvents
+  getSystems
 } from "@/lib/api";
 import { BobDashboardStrip } from "@/components/bob/bob-dashboard-strip";
-import { ActionCenterStrip } from "@/components/actions/action-center-strip";
 import { OutcomesStrip } from "@/components/operations/outcomes-strip";
-import { OutcomeMiniRow } from "@/components/operations/outcomes-view";
-import {
-  AnalyticsStrip,
-  type AnalyticsView
-} from "@/components/charts/analytics-strip";
-import { ActivityFeed } from "@/components/activity-feed";
-import { AtRiskList } from "@/components/at-risk-list";
-import { NeedsAttentionList } from "@/components/needs-attention-list";
 import { BarList } from "@/components/charts/bar-list";
 import { KpiCard } from "@/components/kpi-card";
 import { Card, CardHeader } from "@/components/ui/card";
 import { SectionTitle } from "@/components/ui/section-title";
-import { aggregateByDay, sumSeries } from "@/lib/analytics";
-import { humanizeLabel, postureRank } from "@/lib/present";
-import { formatInteger, formatMetric } from "@/lib/format";
-import {
-  routes,
-  routeToBobForTarget,
-  routeToControl,
-  routeToIncident,
-  routeToSystem
-} from "@/lib/routes";
+import { humanizeLabel } from "@/lib/present";
+import { formatInteger } from "@/lib/format";
+import { normalizeAiScope, systemMatchesScope, withAiScope } from "@/lib/ai-scope";
+import { routes } from "@/lib/routes";
+import { ModelRiskPivot } from "@/components/dashboard/model-risk-pivot";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ scope?: string }>;
+}) {
+  const ageBuckets = (items: any[]) => {
+    const now = Date.now();
+    return items.reduce(
+      (acc, incident) => {
+        const created = new Date(incident.created_at).getTime();
+        const ageDays = Number.isFinite(created)
+          ? Math.floor((now - created) / (1000 * 60 * 60 * 24))
+          : 0;
+        if (ageDays > 60) acc.gt60 += 1;
+        else if (ageDays >= 30) acc.gte30 += 1;
+        else acc.lt30 += 1;
+        return acc;
+      },
+      { lt30: 0, gte30: 0, gt60: 0 }
+    );
+  };
+
+  const agingLine = (buckets: { lt30: number; gte30: number; gt60: number }) => (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <span className="font-semibold text-emerald-700">
+        &lt;30d {formatInteger(buckets.lt30)}
+      </span>
+      <span className="text-slate-300">·</span>
+      <span className="font-semibold text-amber-700">
+        30-60d {formatInteger(buckets.gte30)}
+      </span>
+      <span className="text-slate-300">·</span>
+      <span className="font-semibold text-rose-700">
+        &gt;60d {formatInteger(buckets.gt60)}
+      </span>
+    </span>
+  );
+
+  const sp = (await searchParams) ?? {};
+  const scope = normalizeAiScope(sp.scope);
   const [
     systemsRes,
     incidentsRes,
-    telemetryRes,
-    auditRes,
     bobRes,
-    actionsRes,
     impactRes,
     changesRes
   ] = await Promise.all([
     getSystems(),
     getIncidents(),
-    getTelemetryEvents("?limit=500"),
-    getAuditLogs(),
     getBobInvestigations().catch(() => ({ items: [] as any[] })),
-    getActions().catch(() => ({ items: [] as any[] })),
     getBobImpactSummary().catch(() => null),
     getChanges().catch(() => ({ items: [] as any[] }))
   ]);
 
   const allChanges = changesRes.items;
-  const recentChanges = allChanges.slice(0, 6);
+  const outcomesMetrics = {
+    monitoring: allChanges.filter(
+      (c: any) => c.impact_status === "monitoring" || c.impact_status === "executed"
+    ).length,
+    improvement: allChanges.filter((c: any) => c.impact_status === "improvement_observed").length,
+    followUp: allChanges.filter(
+      (c: any) => c.impact_status === "follow_up_required" || c.follow_up_required
+    ).length,
+    rollback: allChanges.filter(
+      (c: any) =>
+        c.impact_status === "regression_detected" ||
+        c.impact_status === "rollback_candidate" ||
+        c.rollback_recommended
+    ).length,
+    closed: allChanges.filter(
+      (c: any) => c.impact_status === "closed" || c.impact_status === "no_material_change"
+    ).length
+  };
 
-  const systems = systemsRes.items;
-  const incidents = incidentsRes.items;
-  const telemetry = telemetryRes.items;
-  const auditLogs = auditRes.items;
+  const allSystems = systemsRes.items;
+  const matchingSystems = allSystems.filter((s) => systemMatchesScope(s, scope));
+  const matchingIds = new Set(matchingSystems.map((s) => s.id));
+  const systems = matchingSystems;
+  const incidents = incidentsRes.items.filter((i) => matchingIds.has(i.system_id));
 
   const openIncidents = incidents.filter((i) => i.incident_status !== "closed");
   const highSeverityIncidents = openIncidents.filter((i) => i.severity === "high");
@@ -70,38 +104,12 @@ export default async function DashboardPage() {
     (i) => i.review_required && i.incident_status === "pending"
   );
   const escalatedIncidents = incidents.filter((i) => i.escalation_status === "escalated");
-  const latestBySystem = new Map<string, any>();
-  for (const event of telemetry) {
-    if (!latestBySystem.has(event.system_id)) {
-      latestBySystem.set(event.system_id, event);
-    }
-  }
-  const systemsBelowAuditThreshold = Array.from(latestBySystem.values()).filter(
-    (e) => (e.audit_coverage_pct ?? 100) < 95
-  ).length;
-
-  // ---- At-risk list (top 5 by posture + open incidents)
-  const incidentsBySystem: Record<string, any[]> = {};
-  for (const inc of incidents) {
-    (incidentsBySystem[inc.system_id] ??= []).push(inc);
-  }
-  const atRiskSystems = [...systems]
-    .filter((s) => ["at_risk", "critical", "watch"].includes(s.risk_posture))
-    .map((system) => {
-      const open = (incidentsBySystem[system.id] ?? []).filter(
-        (i) => i.incident_status !== "closed"
-      );
-      const highestSeverity = ["high", "medium", "low"].find((sev) =>
-        open.some((i) => i.severity === sev)
-      ) as "high" | "medium" | "low" | undefined;
-      return { system, openCount: open.length, highestSeverity };
-    })
-    .sort((a, b) => {
-      const pr = postureRank(b.system.risk_posture) - postureRank(a.system.risk_posture);
-      if (pr !== 0) return pr;
-      return b.openCount - a.openCount;
-    })
-    .slice(0, 5);
+  const resolvedIncidents = incidents.filter((i) => i.incident_status === "closed");
+  const openAging = ageBuckets(openIncidents);
+  const highAging = ageBuckets(highSeverityIncidents);
+  const reviewAging = ageBuckets(pendingHumanReviews);
+  const escalatedAging = ageBuckets(escalatedIncidents);
+  const resolvedAging = ageBuckets(resolvedIncidents);
 
   // ---- Distributions
   const byRisk = incidents.reduce((acc: Record<string, number>, i) => {
@@ -116,7 +124,7 @@ export default async function DashboardPage() {
     .map(([label, value]) => ({
       label: humanizeLabel(label),
       value,
-      href: `/incidents?risk=${encodeURIComponent(label)}`
+      href: withAiScope(`/incidents?risk=${encodeURIComponent(label)}`, scope)
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
@@ -124,151 +132,25 @@ export default async function DashboardPage() {
     .map(([label, value]) => ({
       label,
       value,
-      href: `/incidents?owner=${encodeURIComponent(label)}`
+      href: withAiScope(`/incidents?owner=${encodeURIComponent(label)}`, scope)
     }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
-  // ---- Analytics strip time-series
-  const driftTrend = aggregateByDay(telemetry, {
-    valueFn: (e) => e.drift_index,
-    reducer: "avg",
-    days: 7
-  });
-  const incidentVolumeTrend = aggregateByDay(incidents, {
-    valueFn: () => 1,
-    reducer: "count",
-    days: 7,
-    timestampKey: "created_at"
-  });
-  const escalationTrend = aggregateByDay(incidents, {
-    valueFn: () => 1,
-    reducer: "count",
-    filter: (i) => i.escalation_status === "escalated",
-    days: 7,
-    timestampKey: "created_at"
-  });
-  const reviewBacklogTrend = aggregateByDay(incidents, {
-    valueFn: () => 1,
-    reducer: "count",
-    filter: (i) =>
-      i.review_required && i.incident_status === "pending",
-    days: 7,
-    timestampKey: "created_at"
-  });
-  const auditBreachTrend = aggregateByDay(telemetry, {
-    valueFn: (e) => e.audit_coverage_pct,
-    reducer: "below_threshold_count",
-    thresholdBelow: 95,
-    days: 7
-  });
-
-  const analyticsViews: AnalyticsView[] = [
-    {
-      id: "drift",
-      label: "Drift index",
-      caption: "7-day fleet average.",
-      info: "Distance from validated baseline. Above 0.25 typically correlates with reviewer-flagged regressions.",
-      data: driftTrend,
-      unit: "",
-      threshold: 0.25,
-      thresholdLabel: "Review threshold",
-      color: "#0f172a",
-      yDigits: 3,
-      summary: `Peak ${formatMetric(
-        Math.max(...driftTrend.map((p) => p.v ?? 0)),
-        { digits: 3 }
-      )}`
-    },
-    {
-      id: "incidents",
-      label: "Incident volume",
-      caption: "Incidents detected per day.",
-      info: "Every incident raised by the rule engine. Spikes indicate either an upstream regression or a noisy control.",
-      data: incidentVolumeTrend,
-      unit: "",
-      color: "#be123c",
-      yDigits: 0,
-      summary: `${formatInteger(sumSeries(incidentVolumeTrend))} total · 7d`
-    },
-    {
-      id: "escalations",
-      label: "Escalations",
-      caption: "Routed to leadership or specialists, per day.",
-      info: "Trailing indicator of severity. A sustained climb means playbooks aren't resolving issues fast enough.",
-      data: escalationTrend,
-      unit: "",
-      color: "#b45309",
-      yDigits: 0,
-      summary: `${formatInteger(sumSeries(escalationTrend))} total · 7d`
-    },
-    {
-      id: "review",
-      label: "Review backlog",
-      caption: "Incidents awaiting human review, per day.",
-      info: "Inflow into the reviewer queue. Pair with escalations to distinguish triage load from severity load.",
-      data: reviewBacklogTrend,
-      unit: "",
-      color: "#0f766e",
-      yDigits: 0,
-      summary: `${formatInteger(sumSeries(reviewBacklogTrend))} total · 7d`
-    },
-    {
-      id: "audit",
-      label: "Audit coverage breaches",
-      caption: "Events below the 95% floor, per day.",
-      info: "Below 95% we cannot reconstruct a decision trail on a material share of events — a regulated-AI red flag.",
-      data: auditBreachTrend,
-      unit: "",
-      color: "#0369a1",
-      yDigits: 0,
-      summary: `${formatInteger(sumSeries(auditBreachTrend))} events · 7d`
-    }
-  ];
-
-  // ---- Activity feed
-  // The audit log is the source of truth; the backend now emits a rich mix of
-  // governance, control, Bob, and follow-up events with jittered timestamps.
-  // We lightly de-dup so near-identical lines don't stack in the feed.
-  const seenLabels = new Set<string>();
-  const activityItems = auditLogs
-    .map((entry: any) => ({
-      id: entry.id,
-      action: entry.action,
-      details: entry.details,
-      timestamp: entry.timestamp,
-      targetId: entry.target_id,
-      targetType: entry.target_type,
-      actor: entry.actor
-    }))
-    .filter((item) => item.action !== "telemetry.processed")
-    .filter((item) => {
-      const key = `${item.action}::${item.targetId}::${(item.details ?? "").slice(0, 60)}`;
-      if (seenLabels.has(key)) return false;
-      seenLabels.add(key);
-      return true;
-    })
-    .sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    )
-    .slice(0, 12);
-
   // ---- KPI captions (short, operational)
   const reviewTone: "neutral" | "warning" =
     pendingHumanReviews.length > 3 ? "warning" : "neutral";
-  const auditTone: "ok" | "warning" =
-    systemsBelowAuditThreshold > 0 ? "warning" : "ok";
 
   return (
     <section className="space-y-7">
       {/* ============ Overview ============ */}
       <SectionTitle
         eyebrow="Observe · orient"
-        title="Governance Operations"
-        caption={`${formatInteger(systems.length)} systems · ${formatInteger(openIncidents.length)} open incidents · Observe issues, investigate with Bob, govern actions, then measure outcomes.`}
+        title="Governance Insights"
+        caption={`Total systems being governed: ${formatInteger(systems.length)} · Total open incidents: ${formatInteger(openIncidents.length)}`}
         actions={
           <Link
-            href={routes.incidents()}
+            href={withAiScope(routes.incidents(), scope)}
             className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:text-slate-900"
           >
             Choose incident work →
@@ -281,85 +163,48 @@ export default async function DashboardPage() {
         <KpiCard
           label="Open incidents"
           value={formatInteger(openIncidents.length)}
-          caption="Unresolved queue"
+          caption={agingLine(openAging)}
           tooltip="Incidents not yet mitigated, closed as false positive, or resolved."
-          href={routes.incidents()}
+          href={withAiScope(routes.incidents(), scope)}
         />
         <KpiCard
           label="High severity"
           value={formatInteger(highSeverityIncidents.length)}
-          caption="Requires immediate ownership"
+          caption={agingLine(highAging)}
           tone="urgent"
           highlight={highSeverityIncidents.length > 0}
           tooltip="Open incidents classified as high severity by their triggering control."
-          href={routes.incidents()}
+          href={withAiScope(routes.incidents(), scope)}
         />
         <KpiCard
           label="Pending reviews"
           value={formatInteger(pendingHumanReviews.length)}
-          caption="Awaiting reviewer decision"
+          caption={agingLine(reviewAging)}
           tone={reviewTone}
           highlight={pendingHumanReviews.length > 3}
           tooltip="Flagged for human review and not yet dispositioned."
-          href={routes.incidents()}
+          href={withAiScope(routes.incidents(), scope)}
         />
         <KpiCard
           label="Escalated"
           value={formatInteger(escalatedIncidents.length)}
-          caption="Routed to leadership or specialists"
+          caption={agingLine(escalatedAging)}
           tone={escalatedIncidents.length > 0 ? "urgent" : "neutral"}
           tooltip="Incidents promoted above standard review to a named escalation path."
-          href={routes.incidents()}
+          href={withAiScope(routes.incidents(), scope)}
         />
         <KpiCard
-          label="Audit gaps"
-          value={formatInteger(systemsBelowAuditThreshold)}
-          caption="Systems below 95% coverage"
-          tone={auditTone}
-          tooltip="Systems whose latest telemetry event is under the 95% audit coverage floor."
-          href={routes.systems()}
+          label="Resolved incidents"
+          value={formatInteger(resolvedIncidents.length)}
+          caption={agingLine(resolvedAging)}
+          tone="ok"
+          tooltip="Incidents closed as resolved or solved after remediation verification."
+          href={withAiScope(routes.incidents(), scope)}
         />
       </div>
 
       {/* ============ Needs Immediate Attention + Top at-risk ============ */}
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-card">
-          <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 px-3 py-2.5 sm:px-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">
-                Incidents
-              </p>
-            </div>
-            <Link
-              href={routes.incidents()}
-              className="shrink-0 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
-            >
-              Full queue
-            </Link>
-          </div>
-          <div className="max-h-[min(55vh,28rem)] overflow-y-auto overscroll-contain px-1 sm:px-2">
-            <NeedsAttentionList incidents={incidents} />
-          </div>
-          <ActionCenterStrip embedded actions={actionsRes.items} />
-        </div>
-        <Card>
-          <CardHeader
-            title="Top at-risk systems"
-            caption="Context for the queue. By posture and open incident pressure."
-            action={
-              <Link
-                href={routes.systems()}
-                className="text-xs font-medium text-slate-600 hover:text-slate-900"
-              >
-                All systems →
-              </Link>
-            }
-          />
-          <div className="mt-1">
-            <AtRiskList items={atRiskSystems} />
-          </div>
-        </Card>
-      </div>
+      <ModelRiskPivot systems={systems} incidents={incidents} changes={allChanges} scope={scope} />
 
       {/* ============ Investigate → Act → Measure band ============ */}
       <div className="space-y-3">
@@ -375,31 +220,63 @@ export default async function DashboardPage() {
         ) : null}
       </div>
 
-      {/* ============ Recent Changes & Impact ============ */}
-      {recentChanges.length > 0 && (
-        <Card>
-          <CardHeader
-            title="Recent changes & impact"
-            caption="Latest measured outcomes after governed remediation."
-            action={
-              <Link
-                href={routes.outcomes()}
-                className="text-xs font-medium text-slate-600 hover:text-slate-900"
-              >
-                Measure all outcomes →
-              </Link>
-            }
-          />
-          <div className="mt-3 space-y-1.5">
-            {recentChanges.map((c: any) => (
-              <OutcomeMiniRow key={c.id} change={c} />
-            ))}
+      {/* ============ Change impact analysis ============ */}
+      {allChanges.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="label-eyebrow">Recent changes & impact</p>
+            <Link
+              href={withAiScope(routes.outcomes(), scope)}
+              className="text-[11px] font-medium text-slate-600 hover:text-slate-900"
+            >
+              Measure all outcomes →
+            </Link>
           </div>
-        </Card>
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[11px] md:grid-cols-5">
+              <div>
+                <p className="text-slate-500">Under monitoring</p>
+                <p className="text-[15px] font-semibold tabular-nums text-slate-900">
+                  {formatInteger(outcomesMetrics.monitoring)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Improvement observed</p>
+                <p className="text-[15px] font-semibold tabular-nums text-emerald-700">
+                  {formatInteger(outcomesMetrics.improvement)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Follow-up required</p>
+                <p className="text-[15px] font-semibold tabular-nums text-amber-700">
+                  {formatInteger(outcomesMetrics.followUp)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Rollback candidates</p>
+                <p className="text-[15px] font-semibold tabular-nums text-rose-700">
+                  {formatInteger(outcomesMetrics.rollback)}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Closed / no material change</p>
+                <p className="text-[15px] font-semibold tabular-nums text-slate-900">
+                  {formatInteger(outcomesMetrics.closed)}
+                </p>
+              </div>
+            </div>
+            {impactRes?.item ? (
+              <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-600">
+                <span className="font-medium text-slate-700">{impactRes.item.window_label}</span>
+                <span className="mx-1 text-slate-300">·</span>
+                Recurrence reduced {formatInteger(impactRes.item.recurrence_reduced)}
+                <span className="mx-1 text-slate-300">·</span>
+                Reviewer burden reduced {formatInteger(impactRes.item.reviewer_burden_reduced)}
+              </p>
+            ) : null}
+          </div>
+        </div>
       )}
-
-      {/* ============ Fleet analytics ============ */}
-      <AnalyticsStrip views={analyticsViews} defaultViewId="drift" />
 
       {/* ============ Pressure distribution ============ */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -423,31 +300,7 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      {/* ============ Activity ============ */}
-      <Card>
-        <CardHeader
-          title="Recent governance activity"
-          caption="Audit-linked events across the operating loop."
-        />
-        <div className="mt-3">
-          <ActivityFeed
-            items={activityItems}
-            hrefFor={(item) => {
-              if (!item.targetId) return null;
-              if (item.action?.startsWith("bob.") && item.targetType === "control") {
-                return routeToBobForTarget("control", item.targetId);
-              }
-              if (item.action?.startsWith("bob.") && item.targetType === "incident") {
-                return routeToBobForTarget("incident", item.targetId);
-              }
-              if (item.targetId.startsWith("inc_")) return routeToIncident(item.targetId);
-              if (item.targetId.startsWith("sys_")) return routeToSystem(item.targetId);
-              if (item.targetId.startsWith("rule_")) return routeToControl(item.targetId);
-              return null;
-            }}
-          />
-        </div>
-      </Card>
+      {/* Activity feed moved to dedicated Governance Activity view */}
     </section>
   );
 }

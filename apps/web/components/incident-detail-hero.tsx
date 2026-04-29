@@ -21,6 +21,9 @@ type Props = {
   incidentStatus: string | null | undefined;
   reviewRequired?: boolean | null;
   escalationStatus?: string | null;
+  systemHref: string;
+  systemName?: string | null;
+  modelBadge?: string | null;
 };
 
 export function IncidentDetailHero({
@@ -33,7 +36,10 @@ export function IncidentDetailHero({
   createdAt,
   incidentStatus,
   reviewRequired,
-  escalationStatus
+  escalationStatus,
+  systemHref,
+  systemName,
+  modelBadge
 }: Props) {
   const statusBadges = incidentHeroStatusBadges({
     incident_status: incidentStatus,
@@ -79,17 +85,24 @@ export function IncidentDetailHero({
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href={investigationHref}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-indigo-300 bg-indigo-600 px-4 text-[12px] font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-gradient-to-b from-slate-100 to-slate-200 px-4 text-[12px] font-semibold text-slate-950 shadow-sm transition hover:border-slate-900 hover:bg-gradient-to-b hover:from-slate-900 hover:to-black hover:text-white"
             >
               <SiOpenai className="h-4 w-4 shrink-0" />
               {hasInvestigation ? "Open Bob investigation" : "Start Bob investigation"}
             </Link>
             <Link
               href={actionHref}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-[12px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              className="group inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-[12px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-900 hover:bg-slate-900 hover:text-white"
             >
-              <BriefcaseBusiness className="h-4 w-4 shrink-0 text-slate-600" />
+              <BriefcaseBusiness className="h-4 w-4 shrink-0 text-slate-600 transition group-hover:text-white" />
               {hasGovernedAction ? "Review governed action" : "Open Action Center"}
+            </Link>
+            <Link
+              href={systemHref}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-slate-50 px-3 text-[12px] font-semibold text-slate-900 shadow-sm transition hover:border-slate-900 hover:bg-slate-900 hover:text-white"
+              title={systemName ? `Open system · ${systemName}` : "Open model system"}
+            >
+              {(modelBadge && modelBadge.trim()) || "M1"}
             </Link>
           </div>
         </div>
@@ -171,9 +184,7 @@ export function IncidentDetailHero({
         </div>
         {quickStatus ? (
           <p className="text-[10px] font-medium text-indigo-700">{quickStatus}</p>
-        ) : (
-          <span className="text-[10px] text-slate-400">Quick actions</span>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -195,7 +206,7 @@ function BobIncidentOpsList({ investigation }: { investigation: BobInvestigation
     <div className="min-w-[220px] rounded-md border border-slate-200 bg-white px-3 py-2">
       <div className="grid grid-cols-1 gap-2 text-[11px]">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">
             Pinged to
           </p>
           <ul className="mt-1 space-y-0.5 text-slate-700">
@@ -207,7 +218,7 @@ function BobIncidentOpsList({ investigation }: { investigation: BobInvestigation
           </ul>
         </div>
         <div className="border-t border-slate-100 pt-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
             Tickets
           </p>
           {tickets.length > 0 ? (
@@ -242,10 +253,10 @@ function QuickActionHover({
 }) {
   const toneCls =
     tone === "slack"
-      ? "border-[#4A154B]/35 bg-[#4A154B]/5 text-[#4A154B] hover:border-[#4A154B]/55 hover:bg-[#4A154B]/10"
+      ? "border-[#4A154B] bg-[#4A154B] text-white hover:border-[#3f1240] hover:bg-[#3f1240] hover:text-white"
       : tone === "jira"
-        ? "border-[#0052CC]/30 bg-[#0052CC]/5 text-[#0052CC] hover:border-[#0052CC]/50 hover:bg-[#0052CC]/10"
-        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50";
+        ? "border-[#0052CC] bg-[#0052CC] text-white hover:border-[#0047b3] hover:bg-[#0047b3] hover:text-white"
+        : "border-slate-200 bg-white text-slate-700 hover:border-slate-900 hover:bg-slate-900 hover:text-white";
   return (
     <div className="group relative">
       <button
@@ -254,11 +265,11 @@ function QuickActionHover({
       >
         {icon ? <span className="shrink-0">{icon}</span> : null}
         {label}
-        <ChevronDown className="h-3 w-3 text-slate-400" />
+        <ChevronDown className="h-3 w-3 text-slate-400 transition group-hover:text-white" />
       </button>
       <div
         className={`pointer-events-none absolute left-0 z-20 min-w-[180px] rounded-md border border-slate-200 bg-white p-1.5 opacity-0 shadow-lg transition group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${
-          placement === "up" ? "bottom-[calc(100%+6px)]" : "top-[calc(100%+4px)]"
+          placement === "up" ? "bottom-full mb-0.5" : "top-full mt-0.5"
         }`}
       >
         {items}

@@ -36,6 +36,7 @@ import { EvidenceList } from "@/components/bob/evidence-list";
 import { InvestigationActivity } from "@/components/bob/investigation-activity";
 import { RecommendationCard } from "@/components/bob/recommendation-card";
 import { BobInvestigationWorkflow } from "@/components/bob/bob-workflow-panel";
+import { BobInvestigationOpsConsole } from "@/components/bob/bob-investigation-ops-console";
 import { DisclosureSection } from "@/components/shared/disclosure-section";
 import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { formatRelativeTime, formatShortDateTime } from "@/lib/format";
@@ -314,6 +315,15 @@ export default async function BobInvestigationDetailPage({
           </p>
         </div>
       </div>
+
+      <BobInvestigationOpsConsole
+        investigationId={investigation.id}
+        title={investigation.title}
+        targetLabel={investigation.target_label}
+        initialStatus={investigation.status}
+        activity={investigation.activity}
+        recommendations={investigation.recommendations}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[1.45fr_1fr]">
         <div className="space-y-5">

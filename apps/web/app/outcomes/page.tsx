@@ -4,10 +4,17 @@ import { SectionTitle } from "@/components/ui/section-title";
 import { OutcomesView } from "@/components/operations/outcomes-view";
 import { getChanges, getSystems } from "@/lib/api";
 import { routes, routeToSystem } from "@/lib/routes";
+import {
+  AI_SCOPE_OPTIONS,
+  normalizeAiScope,
+  systemMatchesScope,
+  withAiScope
+} from "@/lib/ai-scope";
 
 type SearchParams = {
   system?: string;
   tab?: string;
+  scope?: string;
 };
 
 export default async function OutcomesPage({
@@ -17,18 +24,26 @@ export default async function OutcomesPage({
 }) {
   const params = (await searchParams) ?? {};
   const systemFilter = params.system ?? null;
+  const scope = normalizeAiScope(params.scope);
+  const scopeLabel =
+    AI_SCOPE_OPTIONS.find((opt) => opt.id === scope)?.label ?? "All";
 
   const [changesRes, systemsRes] = await Promise.all([
     getChanges(
       systemFilter ? { target_system_id: systemFilter } : undefined
     ),
-    systemFilter
-      ? getSystems().catch(() => ({ items: [] as any[] }))
-      : Promise.resolve({ items: [] as any[] })
+    getSystems().catch(() => ({ items: [] as any[] }))
   ]);
+  const scopedSystems = (systemsRes.items ?? []).filter((s: any) =>
+    systemMatchesScope(s, scope)
+  );
+  const scopedSystemIds = new Set(scopedSystems.map((s: any) => s.id));
+  const scopedChanges = (changesRes.items ?? []).filter((change: any) =>
+    scopedSystemIds.has(change.target_system_id)
+  );
 
   const scopedSystem = systemFilter
-    ? systemsRes.items.find((s: any) => s.id === systemFilter)
+    ? scopedSystems.find((s: any) => s.id === systemFilter)
     : null;
 
   return (
@@ -36,7 +51,7 @@ export default async function OutcomesPage({
       {scopedSystem ? (
         <div className="flex items-center justify-between">
           <Link
-            href={routes.outcomes()}
+            href={withAiScope(routes.outcomes(), scope)}
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
@@ -61,11 +76,11 @@ export default async function OutcomesPage({
         caption={
           scopedSystem
             ? `Measured post-remediation evidence for ${scopedSystem.use_case}. Close, follow up, or prepare rollback from actual impact.`
-            : "Proof and verification queue for governed changes: measured outcome, follow-up, closure, and rollback evidence."
+            : `Proof and verification queue for governed changes: measured outcome, follow-up, closure, and rollback evidence. Profile scope: ${scopeLabel}.`
         }
       />
       <OutcomesView
-        changes={changesRes.items}
+        changes={scopedChanges}
         systemFilter={systemFilter}
       />
     </section>

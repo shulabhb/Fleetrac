@@ -3,6 +3,7 @@ import {
   getActions,
   getBobInvestigationForTarget,
   getIncidentDetail,
+  getSystems,
   getTelemetryEvents
 } from "@/lib/api";
 import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
@@ -18,7 +19,8 @@ import {
   routes,
   routeToAction,
   routeToBobForTarget,
-  routeToBobInvestigation
+  routeToBobInvestigation,
+  routeToSystem
 } from "@/lib/routes";
 
 type IncidentDetailPageProps = {
@@ -66,14 +68,21 @@ function metricColor(signal: string): string {
 export default async function IncidentDetailPage({ params }: IncidentDetailPageProps) {
   const { id } = await params;
   const here = `/incidents/${id}`;
-  const [detail, bobRes, actionsRes] = await Promise.all([
+  const [detail, bobRes, actionsRes, systemsRes] = await Promise.all([
     getIncidentDetail(id),
     getBobInvestigationForTarget("incident", id).catch(() => ({ item: null })),
-    getActions({ related_incident_id: id }).catch(() => ({ items: [] as any[] }))
+    getActions({ related_incident_id: id }).catch(() => ({ items: [] as any[] })),
+    getSystems().catch(() => ({ items: [] as any[] }))
   ]);
   const investigation = bobRes?.item ?? null;
   const incidentActions = actionsRes?.items ?? [];
+  const systems = systemsRes?.items ?? [];
   const { incident, telemetry_context, audit_entries } = detail;
+  const scopedSystems = systems
+    .slice()
+    .sort((a: any, b: any) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+  const systemIndex = scopedSystems.findIndex((s: any) => s.id === incident.system_id);
+  const modelBadge = `M${systemIndex >= 0 ? systemIndex + 1 : 1}`;
   const telemetryRes = await getTelemetryEvents(
     `?system_id=${incident.system_id}&limit=80`
   );
@@ -153,16 +162,20 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center gap-2.5">
-        <span
-          className={cn(
-            "h-2 w-2 shrink-0 rounded-full",
-            incidentSeverityDotClass(incident.severity)
-          )}
-          aria-label={`Severity ${humanizeLabel(incident.severity)}`}
-          title={`Severity · ${humanizeLabel(incident.severity)}`}
-        />
-        <h1 className="text-lg font-semibold leading-snug text-slate-900">{incident.title}</h1>
+      <div className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <span
+            className={cn(
+              "h-2 w-2 shrink-0 rounded-full ring-2 ring-white",
+              incidentSeverityDotClass(incident.severity)
+            )}
+            aria-label={`Severity ${humanizeLabel(incident.severity)}`}
+            title={`Severity · ${humanizeLabel(incident.severity)}`}
+          />
+          <h1 className="truncate text-[15px] font-semibold leading-snug text-slate-900 md:text-base">
+            {incident.title}
+          </h1>
+        </div>
       </div>
 
       <IncidentDetailHero
@@ -182,6 +195,9 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
         incidentStatus={incident.incident_status}
         reviewRequired={incident.review_required}
         escalationStatus={incident.escalation_status}
+        systemHref={appendReturnTo(routeToSystem(incident.system_id), here)}
+        systemName={incident.system_name}
+        modelBadge={modelBadge}
       />
 
       <div className="space-y-4">

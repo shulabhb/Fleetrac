@@ -84,6 +84,49 @@ def _compute_risk_posture(row: dict) -> str:
     return "healthy"
 
 
+def _normalized_model_type(row: dict) -> str:
+    source = str(row.get("model_type", "")).strip().lower()
+    model = str(row.get("model", "")).strip().lower()
+    use_case = str(row.get("use_case", "")).strip().lower()
+    if any(token in source for token in ("copilot", "assistant")) or "copilot" in use_case:
+        return "copilot"
+    if any(token in source for token in ("agent", "orchestrator")) or "agent" in use_case:
+        return "agent"
+    if any(token in source for token in ("classifier", "moderation", "detector")):
+        return "classifier"
+    if any(token in source for token in ("embedding", "retrieval")):
+        return "retrieval"
+    if any(token in model for token in ("gpt", "claude", "gemini", "llama", "mistral")):
+        return "foundation_model"
+    return source or "foundation_model"
+
+
+def _normalized_deployment_scope(row: dict) -> str:
+    raw = str(row.get("deployment_scope", "")).strip().lower().replace("-", " ").replace("_", " ")
+    use_case = str(row.get("use_case", "")).strip().lower()
+    if any(token in raw for token in ("customer", "external", "public")):
+        return "customer_facing"
+    if any(token in raw for token in ("internal", "employee", "backoffice", "ops")):
+        return "internal"
+    if "copilot" in use_case:
+        return "internal"
+    if "agent" in use_case:
+        return "customer_facing"
+    return "hybrid"
+
+
+def _normalized_regulatory_sensitivity(row: dict) -> str:
+    raw = str(row.get("regulatory_sensitivity", "")).strip().lower().replace("-", " ").replace("_", " ")
+    biz = str(row.get("business_function", "")).strip().lower()
+    if any(token in raw for token in ("critical", "high", "regulated", "pii", "hipaa", "pci", "sox")):
+        return "high_regulated"
+    if any(token in biz for token in ("security", "risk", "fraud", "compliance", "finance")):
+        return "high_regulated"
+    if any(token in raw for token in ("medium", "watch")):
+        return "medium"
+    return "standard"
+
+
 _HOSTING_ENVIRONMENTS = (
     "AWS us-east-1",
     "AWS us-west-2",
@@ -113,18 +156,24 @@ def _build_system(row: dict) -> System:
         connection = "stale" if (h % 5) == 0 else "connected"
     else:
         connection = "connected"
+    deployment_scope = _normalized_deployment_scope(row)
+    environment = (
+        "staging"
+        if (h % 9 == 0 or (deployment_scope == "internal" and (h % 5 == 0)))
+        else "production"
+    )
     return System(
         id=sys_id,
         name=f"{row.get('model')} - {row.get('use_case')}",
         owner=str(row.get("model_owner", "unknown")),
-        environment="production",
+        environment=environment,
         model=str(row.get("model", "unknown")),
-        model_type=str(row.get("model_type", "unknown")),
+        model_type=_normalized_model_type(row),
         use_case=str(row.get("use_case", "unknown")),
         telemetry_archetype=str(row.get("telemetry_archetype", "unknown")),
         business_function=str(row.get("business_function", "unknown")),
-        deployment_scope=str(row.get("deployment_scope", "unknown")),
-        regulatory_sensitivity=str(row.get("regulatory_sensitivity", "unknown")),
+        deployment_scope=deployment_scope,
+        regulatory_sensitivity=_normalized_regulatory_sensitivity(row),
         control_owner=str(row.get("control_owner", "unknown")),
         risk_posture=posture,
         hosting_environment=hosting,

@@ -1,5 +1,7 @@
 import {
+  Activity,
   AlertTriangle,
+  BarChart3,
   LayoutDashboard,
   LineChart,
   PlayCircle,
@@ -21,10 +23,12 @@ export type NavItem = {
 export const navItems: NavItem[] = [
   { label: "Dashboard", href: routes.dashboard(), icon: LayoutDashboard },
   { label: "Incident Queue", href: routes.incidents(), icon: AlertTriangle },
+  { label: "Governance Activity", href: routes.activity(), icon: Activity },
   { label: "Governance Controls", href: routes.controls(), icon: ShieldCheck },
   { label: "Systems", href: routes.systems(), icon: Server },
   { label: "Action Center", href: routes.actions(), icon: PlayCircle },
   { label: "Outcomes", href: routes.outcomes(), icon: LineChart },
+  { label: "Usage", href: routes.usage(), icon: BarChart3 },
   { label: "Bob Copilot", href: routes.bob(), icon: Sparkles },
   { label: "Settings", href: routes.settings(), icon: Settings }
 ];

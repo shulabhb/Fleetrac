@@ -1,8 +1,9 @@
 import { Info } from "lucide-react";
 import { BobCopilotView } from "@/components/bob/bob-copilot-view";
 import { SectionTitle } from "@/components/ui/section-title";
-import { getBobInvestigations } from "@/lib/api";
+import { getBobInvestigations, getIncidents, getSystems } from "@/lib/api";
 import { humanizeLabel } from "@/lib/present";
+import { AI_SCOPE_OPTIONS, normalizeAiScope, systemMatchesScope } from "@/lib/ai-scope";
 
 type MissingTarget = {
   type: string;
@@ -20,10 +21,33 @@ function parseMissing(raw?: string): MissingTarget | null {
 export default async function BobCopilotPage({
   searchParams
 }: {
-  searchParams?: Promise<{ status?: string; missing?: string }>;
+  searchParams?: Promise<{ status?: string; missing?: string; scope?: string }>;
 }) {
   const params = (await searchParams) ?? {};
-  const { items } = await getBobInvestigations();
+  const scope = normalizeAiScope(params.scope);
+  const scopeLabel =
+    AI_SCOPE_OPTIONS.find((opt) => opt.id === scope)?.label ?? "All";
+  const [{ items }, incidentsRes, systemsRes] = await Promise.all([
+    getBobInvestigations(),
+    getIncidents().catch(() => ({ items: [] as any[] })),
+    getSystems().catch(() => ({ items: [] as any[] }))
+  ]);
+  const scopedSystemIds = new Set(
+    (systemsRes.items ?? [])
+      .filter((system: any) => systemMatchesScope(system, scope))
+      .map((system: any) => system.id)
+  );
+  const scopedIncidents = (incidentsRes.items ?? []).filter((incident: any) =>
+    scopedSystemIds.has(incident.system_id)
+  );
+  const scopedIncidentIds = new Set(scopedIncidents.map((incident: any) => incident.id));
+  const scopedRuleIds = new Set(scopedIncidents.map((incident: any) => incident.rule_id));
+  const scopedInvestigations = (items ?? []).filter((inv: any) => {
+    if (inv.target_type === "system") return scopedSystemIds.has(inv.target_id);
+    if (inv.target_type === "incident") return scopedIncidentIds.has(inv.target_id);
+    if (inv.target_type === "control") return scopedRuleIds.has(inv.target_id);
+    return true;
+  });
   const missing = parseMissing(params.missing);
 
   return (
@@ -31,7 +55,7 @@ export default async function BobCopilotPage({
       <SectionTitle
         eyebrow="Investigate · Governance copilot"
         title="Bob Copilot"
-        caption="Investigations and recommendations awaiting review, approval, or follow-up."
+        caption={`Investigations and recommendations awaiting review, approval, or follow-up. Profile scope: ${scopeLabel}.`}
       />
 
       {missing ? (
@@ -51,7 +75,7 @@ export default async function BobCopilotPage({
       ) : null}
 
       <BobCopilotView
-        investigations={items}
+        investigations={scopedInvestigations}
         defaultStatusFilter={params.status}
       />
     </section>

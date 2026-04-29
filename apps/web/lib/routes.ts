@@ -57,10 +57,12 @@ export type BobStatusFilter =
 export const routes = {
   dashboard: () => "/",
   incidents: () => "/incidents",
+  activity: () => "/activity",
   systems: () => "/systems",
   controls: () => "/controls",
   actions: () => "/actions",
   outcomes: () => "/outcomes",
+  usage: () => "/usage",
   bob: () => "/bob",
   settings: () => "/settings"
 } as const;
@@ -201,10 +203,12 @@ export function safeReturnTo(
  */
 export const canonicalParent = {
   incident: () => routes.incidents(),
+  activity: () => routes.activity(),
   system: () => routes.systems(),
   control: () => routes.controls(),
   action: () => routes.actions(),
   outcome: () => routes.outcomes(),
+  usage: () => routes.usage(),
   bob: () => routes.bob(),
   settings: () => routes.settings()
 } as const;
