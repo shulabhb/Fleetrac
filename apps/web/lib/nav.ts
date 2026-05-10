@@ -1,14 +1,11 @@
 import {
   Activity,
   AlertTriangle,
-  BarChart3,
   LayoutDashboard,
   LineChart,
   PlayCircle,
   Server,
-  Settings,
-  ShieldCheck,
-  Sparkles
+  Settings
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { routes } from "./routes";
@@ -20,15 +17,13 @@ export type NavItem = {
   caption?: string;
 };
 
+/** Product IA — calm, governance-first navigation (dashboard workflow is primary). */
 export const navItems: NavItem[] = [
   { label: "Dashboard", href: routes.dashboard(), icon: LayoutDashboard },
+  { label: "Live Signals", href: routes.liveSignals(), icon: Activity },
   { label: "Incident Queue", href: routes.incidents(), icon: AlertTriangle },
-  { label: "Governance Activity", href: routes.activity(), icon: Activity },
-  { label: "Governance Controls", href: routes.controls(), icon: ShieldCheck },
-  { label: "Systems", href: routes.systems(), icon: Server },
+  { label: "System Registry", href: routes.systems(), icon: Server },
   { label: "Action Center", href: routes.actions(), icon: PlayCircle },
-  { label: "Outcomes", href: routes.outcomes(), icon: LineChart },
-  { label: "Usage", href: routes.usage(), icon: BarChart3 },
-  { label: "Bob Copilot", href: routes.bob(), icon: Sparkles },
-  { label: "Settings", href: routes.settings(), icon: Settings }
+  { label: "Evidence Library", href: routes.outcomes(), icon: LineChart },
+  { label: "Settings / Connectors", href: routes.settings(), icon: Settings }
 ];

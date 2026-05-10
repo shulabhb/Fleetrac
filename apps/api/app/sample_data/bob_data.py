@@ -719,8 +719,8 @@ VARIANTS_BY_SIGNAL: dict[str, list[Variant]] = {
 
 
 OWNER_OVERRIDES = {
-    "Drift": ["Model Risk Engineering", "AI Governance Office"],
-    "Latency": ["Platform Reliability", "Model Risk Engineering"],
+    "Drift": ["Model Risk Management", "AI Governance Office"],
+    "Latency": ["Platform Reliability", "Model Risk Management"],
     "Grounding": ["Knowledge Systems Team", "LLM Quality Operations"],
     "Quality": ["LLM Quality Operations", "Responsible AI Review Board"],
     "Audit": ["AI Governance Office"],

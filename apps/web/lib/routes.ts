@@ -56,6 +56,7 @@ export type BobStatusFilter =
 
 export const routes = {
   dashboard: () => "/",
+  liveSignals: () => "/live-signals",
   incidents: () => "/incidents",
   activity: () => "/activity",
   systems: () => "/systems",
@@ -124,6 +125,11 @@ export function routeToIncidentsForSystem(systemId: string): string {
   return `/incidents?system=${encodeURIComponent(systemId)}`;
 }
 
+/** Incident queue scoped to systems owned by an accountable team (dashboard owner pivot). */
+export function routeToIncidentsForOwner(ownerTeam: string): string {
+  return `/incidents?owner=${encodeURIComponent(ownerTeam)}`;
+}
+
 export function routeToOutcomesForSystem(
   systemId: string,
   tab?: OutcomesSegment
@@ -131,6 +137,57 @@ export function routeToOutcomesForSystem(
   const qs = new URLSearchParams({ system: systemId });
   if (tab) qs.set("tab", tab);
   return `/outcomes?${qs.toString()}`;
+}
+
+/** Evidence Library URL modes (query `evidenceMode`). */
+export type EvidenceLibraryMode =
+  | "team-library"
+  | "owner-package"
+  | "incident-record";
+
+/** Default Evidence Library — team index (`/outcomes`). */
+export function routeToEvidenceLibraryTeam(): string {
+  return routes.outcomes();
+}
+
+/** Owner evidence package for one accountable team. */
+export function routeToEvidenceLibraryOwnerPackage(ownerTeam: string): string {
+  const qs = new URLSearchParams({
+    evidenceMode: "owner-package",
+    owner: ownerTeam
+  });
+  return `/outcomes?${qs.toString()}`;
+}
+
+/** Incident evidence record (optionally scope owner for breadcrumbs). */
+export function routeToEvidenceLibraryIncidentRecord(
+  incidentId: string,
+  ownerTeam?: string
+): string {
+  const qs = new URLSearchParams({
+    evidenceMode: "incident-record",
+    incidentId
+  });
+  if (ownerTeam) qs.set("owner", ownerTeam);
+  return `/outcomes?${qs.toString()}`;
+}
+
+/** Outcomes / evidence view scoped to an accountable owner team (legacy query). */
+export function routeToOutcomesForOwner(ownerTeam: string): string {
+  return routeToEvidenceLibraryOwnerPackage(ownerTeam);
+}
+
+/** Dashboard → owner package (alias). */
+export function routeToOutcomesOwnerEvidencePack(ownerTeam: string): string {
+  return routeToEvidenceLibraryOwnerPackage(ownerTeam);
+}
+
+/** Incident queue / detail → incident evidence record. */
+export function routeToOutcomesIncidentEvidencePack(
+  incidentId: string,
+  ownerTeam?: string
+): string {
+  return routeToEvidenceLibraryIncidentRecord(incidentId, ownerTeam);
 }
 
 export function routeToOutcomesTab(tab: OutcomesSegment): string {

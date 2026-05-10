@@ -25,7 +25,7 @@ class RuleSpec:
 
 
 RULE_SPECS: list[RuleSpec] = [
-    RuleSpec("rule_drift_high", "Drift Too High", "drift", "drift_index", "expected_drift_score", ">", "high", "Drift index exceeds expected drift score.", "technology risk", "Model Risk Engineering", "Trigger model refresh and run drift root-cause analysis."),
+    RuleSpec("rule_drift_high", "Drift Too High", "drift", "drift_index", "expected_drift_score", ">", "high", "Drift index exceeds expected drift score.", "technology risk", "Model Risk Management", "Trigger model refresh and run drift root-cause analysis."),
     RuleSpec("rule_latency_high", "Latency Too High", "latency", "latency_p95_ms", "expected_latency_p95_ms", ">", "medium", "Observed p95 latency exceeds expected threshold.", "technology risk", "Platform Reliability", "Tune inference path and increase autoscaling buffer."),
     RuleSpec("rule_grounding_low", "Grounding Below Threshold", "grounding", "grounding_score", "expected_grounding_score", "<", "high", "Observed grounding score is below minimum expected.", "output reliability risk", "LLM Quality Operations", "Tighten retrieval prompts and require citation checks."),
     RuleSpec("rule_unsupported_claims", "Unsupported Claim Rate High", "quality", "unsupported_claim_rate", "expected_unsupported_claim_rate", ">", "high", "Unsupported claim rate is elevated.", "output reliability risk", "Responsible AI Review Board", "Route outputs through stricter guardrails and human approval."),

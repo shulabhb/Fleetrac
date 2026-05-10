@@ -7,7 +7,6 @@ import { ChevronRight, Flag, Search } from "lucide-react";
 import { readDemoState } from "@/lib/demo-state";
 import { AnalyzeWithBob } from "@/components/bob/analyze-with-bob";
 import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import {
   humanizeLabel,
   lifecycleBadgeClasses,
@@ -17,24 +16,42 @@ import {
 import { formatRelativeTime } from "@/lib/format";
 import {
   appendReturnTo,
+  routeToEvidenceLibraryIncidentRecord,
   routes,
   routeToControl,
   routeToIncident,
   routeToSystem
 } from "@/lib/routes";
+import { normalizeAiScope, withAiScope, type AiScopeId } from "@/lib/ai-scope";
 
 type Props = {
   incidents: any[];
 };
 
+/** Canonical dashboard owner names vs legacy API seed strings (same accountable team). */
+const OWNER_TEAM_FILTER_EQUIV: Record<string, readonly string[]> = {
+  "Model Risk Management": ["Model Risk Management", "Model Risk Engineering"]
+};
+
+function incidentMatchesOwnerFilter(filterOwner: string, incidentOwner: string): boolean {
+  const aliases = OWNER_TEAM_FILTER_EQUIV[filterOwner];
+  if (aliases?.length) return aliases.includes(incidentOwner);
+  return incidentOwner === filterOwner;
+}
+
+type QueueSegment = "all" | "by_owner" | "mine";
+
 export function IncidentQueueTable({ incidents }: Props) {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const [queueSegment, setQueueSegment] = useState<QueueSegment>("all");
   const systemScope = params?.get("system") ?? null;
   const ruleScope = params?.get("rule") ?? null;
   const returnTo =
     params?.toString() ? `${pathname}?${params.toString()}` : pathname;
+  const scope = normalizeAiScope(params?.get("scope") ?? undefined);
+  const scopeHref = (path: string) => withAiScope(path, scope as AiScopeId);
   const [severityFilter, setSeverityFilter] = useState(
     params?.get("severity") ?? "all"
   );
@@ -70,7 +87,11 @@ export function IncidentQueueTable({ incidents }: Props) {
         if (ruleScope && incident.rule_id !== ruleScope) return false;
         if (severityFilter !== "all" && incident.severity !== severityFilter) return false;
         if (riskCategoryFilter !== "all" && incident.risk_category !== riskCategoryFilter) return false;
-        if (ownerTeamFilter !== "all" && incident.owner_team !== ownerTeamFilter) return false;
+        if (
+          ownerTeamFilter !== "all" &&
+          !incidentMatchesOwnerFilter(ownerTeamFilter, incident.owner_team)
+        )
+          return false;
         if (lifecycleFilter === "open" && incident.incident_status === "closed") return false;
         else if (
           lifecycleFilter !== "all" &&
@@ -114,6 +135,7 @@ export function IncidentQueueTable({ incidents }: Props) {
 
   useEffect(() => {
     const next = new URLSearchParams(params?.toString() ?? "");
+    next.delete("mode");
     if (severityFilter === "all") next.delete("severity");
     else next.set("severity", severityFilter);
     if (riskCategoryFilter === "all") next.delete("risk");
@@ -213,6 +235,44 @@ export function IncidentQueueTable({ incidents }: Props) {
           </div>
         </div>
       ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <span className="text-[11px] font-medium text-slate-500">Queue view</span>
+        <div
+          className="inline-flex rounded-md border border-slate-200 p-0.5"
+          role="tablist"
+          aria-label="Incident queue scope"
+        >
+          {(
+            [
+              ["all", "All incidents"],
+              ["by_owner", "By owner team"],
+              ["mine", "My assignments"]
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={queueSegment === id}
+              onClick={() => setQueueSegment(id)}
+              className={`rounded px-2.5 py-1 text-[11px] font-medium transition ${
+                queueSegment === id
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {queueSegment !== "all" ? (
+        <p className="text-[11px] text-slate-500">
+          {queueSegment === "by_owner"
+            ? "Use the Owner column to scan accountability; grouped filtering ships next."
+            : "Assignment routing is demo-only — default shows full queue."}
+        </p>
+      ) : null}
       <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-card">
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
@@ -292,6 +352,7 @@ export function IncidentQueueTable({ incidents }: Props) {
               <th className="px-4 py-2 text-left font-medium">Lifecycle</th>
               <th className="px-4 py-2 text-left font-medium">Next lane</th>
               <th className="px-4 py-2 text-left font-medium">Bob</th>
+              <th className="px-4 py-2 text-left font-medium">Evidence Library</th>
               <th className="px-4 py-2 text-right font-medium">Age</th>
               <th className="w-8 px-2" />
             </tr>
@@ -366,6 +427,19 @@ export function IncidentQueueTable({ incidents }: Props) {
                       label="Open Bob investigation"
                     />
                   </td>
+                  <td className="max-w-[9rem] px-4 py-2.5 align-top">
+                    <Link
+                      href={scopeHref(
+                        routeToEvidenceLibraryIncidentRecord(
+                          incident.id,
+                          incident.owner_team
+                        )
+                      )}
+                      className="text-[11px] font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+                    >
+                      Open evidence record
+                    </Link>
+                  </td>
                   <td className="px-4 py-2.5 text-right text-[11px] tabular-nums text-slate-500">
                     {formatRelativeTime(incident.created_at)}
                   </td>
@@ -377,7 +451,7 @@ export function IncidentQueueTable({ incidents }: Props) {
             })}
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-500">
+                <td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-500">
                   No incidents match these filters.
                 </td>
               </tr>
