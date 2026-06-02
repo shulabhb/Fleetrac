@@ -1,5 +1,5 @@
 import { SystemsFleetView } from "@/components/systems-fleet-view";
-import { SectionTitle } from "@/components/ui/section-title";
+import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { getIncidents, getSystems } from "@/lib/api";
 import { normalizeAiScope, systemMatchesScope } from "@/lib/ai-scope";
 
@@ -14,15 +14,17 @@ export default async function SystemsPage({
   const systems = (items ?? []).filter((s: any) => systemMatchesScope(s, scope));
   const ids = new Set(systems.map((s: any) => s.id));
   const incidents = (incidentsRes.items ?? []).filter((i: any) => ids.has(i.system_id));
+  const openCount = incidents.filter((i: any) => i.incident_status !== "closed").length;
 
   return (
-    <section className="space-y-5">
-      <SectionTitle
-        eyebrow="Production context"
-        title="Systems"
-        caption="Production truth and posture for monitored AI systems. Use this surface for context, then return to incident, action, or outcome work."
-      />
+    <GovernancePageShell
+      loop="context"
+      eyebrow="Context · Fleet inventory"
+      title="System Registry"
+      subtitle={`${systems.length} systems · ${openCount} open incidents in scope`}
+      workflowLine="Production truth for monitored AI systems — return to Incident Queue or Action Center for decisions"
+    >
       <SystemsFleetView systems={systems} incidents={incidents} />
-    </section>
+    </GovernancePageShell>
   );
 }

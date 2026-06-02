@@ -15,7 +15,7 @@ import { humanizeLabel } from "@/lib/present";
  *
  * Buyer-facing trust artifact. Answers "what is this AI actually allowed to
  * do here?" in layers: Trust summary → permission grid → Access column
- * (what Bob can see) → Actions column (what Bob can propose, and with what
+ * (what Fleetrac can see) → Actions column (what Fleetrac can propose, and with what
  * bounds) → approver footer.
  */
 export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
@@ -28,7 +28,7 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
             Governance contract for this system
           </h3>
           <p className="mt-0.5 text-[11px] text-slate-500">
-            What Bob can see, what Bob can propose, and what approval is
+            What Fleetrac can see, what Fleetrac can propose, and what approval is
             required before anything executes.
           </p>
         </div>
@@ -69,20 +69,20 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
       {/* Access column (read) */}
       <div className="px-5 pt-4">
         <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-          Access · what Bob can see
+          Access · what Fleetrac can see
         </p>
       </div>
       <div className="grid grid-cols-1 gap-5 px-5 pt-2 md:grid-cols-2">
         <PolicyList
           icon={<Eye className="h-3.5 w-3.5 text-slate-500" />}
           title="Observability"
-          caption="Signals, traces, and metrics Bob can read."
+          caption="Signals, traces, and metrics Fleetrac can read."
           items={policy.observability_access}
         />
         <PolicyList
           icon={<Plug2 className="h-3.5 w-3.5 text-slate-500" />}
           title="Integrations"
-          caption="Connection surface Bob reads and prepares against."
+          caption="Connection surface Fleetrac reads and prepares against."
           items={policy.integration_access}
         />
       </div>
@@ -90,14 +90,14 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
       {/* Actions column (write) */}
       <div className="mt-4 border-t border-slate-100 px-5 pt-4">
         <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400">
-          Actions · what Bob can propose
+          Actions · what Fleetrac can propose
         </p>
       </div>
       <div className="grid grid-cols-1 gap-5 px-5 py-4 md:grid-cols-2">
         <PolicyList
           icon={<CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
           title="Allowed actions"
-          caption="Action types Bob may prepare here."
+          caption="Action types Fleetrac may prepare here."
           items={policy.allowed_actions.map((a) => actionTypeLabel(a))}
         />
         <PolicyList

@@ -12,8 +12,8 @@ type Props = {
 };
 
 /**
- * Makes Bob's authority on a single action explicit. Shown in Bob
- * investigation detail, Incident Bob section, System Bob analysis, and
+ * Makes Fleetrac authority on a single action explicit. Shown in analysis
+ * detail, incident queue, system registry, and
  * Action Center action detail.
  */
 export function ExecutionEligibilityCard({
@@ -33,7 +33,7 @@ export function ExecutionEligibilityCard({
         <div>
           <p className="label-eyebrow">Execution eligibility</p>
           <h4 className="mt-0.5 text-sm font-semibold text-slate-900">
-            What Bob can do on this action
+            What Fleetrac can do on this action
           </h4>
         </div>
         {bobOperatingMode ? (

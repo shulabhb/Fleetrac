@@ -18,6 +18,7 @@ import type {
 import { formatRelativeTime } from "@/lib/format";
 import { EnvironmentChip, ServiceHealthBadge } from "./operations-badges";
 import { ExecutionConsole } from "./execution-console";
+import { FleetracOperatingScopePanel } from "@/components/fleetrac/fleetrac-operating-scope-panel";
 import { SettingsIntegrationsTab } from "./settings-integrations-tab";
 import { routeToIntegrationSettings } from "@/lib/routes";
 
@@ -51,7 +52,7 @@ const TABS: { id: Tab; label: string; caption: string; icon: any }[] = [
   {
     id: "policies",
     label: "Operations policies",
-    caption: "Fleet-wide boundaries for Bob, approvals, execution, rollback, and audit.",
+    caption: "Fleet-wide boundaries for analysis, approvals, execution, rollback, and audit.",
     icon: ShieldCheck
   },
   {
@@ -122,6 +123,7 @@ export function SettingsView(props: Props) {
 
   return (
     <div className="space-y-5">
+      <FleetracOperatingScopePanel />
       <TabBar tab={tab} onChange={handleTabChange} />
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-[12px] text-slate-600">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -210,7 +212,7 @@ function InfoRow({
 // ---------- Policies ----------
 
 const POLICY_CATEGORY_LABELS: Record<string, string> = {
-  bob_defaults: "Bob defaults",
+  bob_defaults: "Fleetrac defaults",
   approvals: "Approvals",
   execution: "Execution",
   maintenance: "Maintenance",
@@ -426,7 +428,7 @@ function EnvironmentCard({ env }: { env: EnvironmentConfig }) {
         <p className="font-medium text-slate-800">Operational posture</p>
         <ul className="mt-1.5 grid gap-1 sm:grid-cols-2">
           <li>
-            <span className="text-slate-500">Bob mode:</span>{" "}
+            <span className="text-slate-500">Operating mode:</span>{" "}
             <span className="font-medium text-slate-900">
               {env.default_bob_mode.replace(/_/g, " ")}
             </span>
@@ -464,7 +466,7 @@ function EnvironmentCard({ env }: { env: EnvironmentConfig }) {
         </ul>
       </div>
       <div className="grid gap-1.5 text-[12px] text-slate-700">
-        <InfoRow label="Default Bob mode">
+        <InfoRow label="Default operating mode">
           <span className="font-mono text-[11px] text-slate-600">
             {env.default_bob_mode.replace(/_/g, " ")}
           </span>
@@ -483,7 +485,7 @@ function EnvironmentCard({ env }: { env: EnvironmentConfig }) {
           on={env.maintenance_suppresses_alerts}
         />
         <ToggleRow
-          label="Bob allowed during maintenance"
+          label="Fleetrac allowed during maintenance"
           on={env.bob_allowed_during_maintenance}
         />
         <ToggleRow
@@ -529,7 +531,7 @@ const CONNECTOR_AREA_LABELS: Record<string, string> = {
   collaboration: "Collaboration",
   alerting: "Alerting & on-call",
   workflow_runner: "Workflow runner",
-  bob_investigation: "Bob investigation service",
+  bob_investigation: "Fleetrac analysis service",
   version_sync: "Version sync",
   model_registry: "Model registry"
 };

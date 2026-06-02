@@ -68,7 +68,7 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
             <Undo2 className="h-4 w-4 text-slate-500" />
             <span className="text-[12px] font-semibold text-slate-800">Rollback</span>
             {ops.rollback_recommended ? (
-              <Badge tone="high">Recommended by Bob</Badge>
+              <Badge tone="high">Recommended by Fleetrac</Badge>
             ) : ops.rollback_available ? (
               <span className="text-[11px] font-medium text-slate-600">
                 Available
@@ -115,7 +115,7 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
                 <Row label="Suppresses noise">
                   {ops.maintenance.suppress_incident_noise ? "Yes" : "No"}
                 </Row>
-                <Row label="Bob allowed in-window">
+                <Row label="Fleetrac allowed in-window">
                   {ops.maintenance.bob_allowed_during_maintenance
                     ? "Yes — prepare + execute"
                     : "No — holds until window closes"}
@@ -123,7 +123,7 @@ export function SystemOperationsPanel({ ops }: { ops: SystemOperations }) {
               </>
             ) : (
               <p className="text-[11px] text-slate-500">
-                No maintenance window active. Bob operates under the normal
+                No maintenance window active. Fleetrac operates under the normal
                 access & action policy.
               </p>
             )}

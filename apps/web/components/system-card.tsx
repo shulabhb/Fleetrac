@@ -3,8 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { humanizeLabel, postureTone, severityTone } from "@/lib/present";
 import { cn } from "@/lib/cn";
-import { AnalyzeWithBob } from "@/components/bob/analyze-with-bob";
-import { routeToSystem } from "@/lib/routes";
+import { routeToIncidentsForSystem, routeToSystem } from "@/lib/routes";
 
 type SystemCardProps = {
   system: any;
@@ -95,13 +94,16 @@ export function SystemCard({
           <ChevronRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-slate-700" />
         </div>
       </div>
-      <div className="relative z-[2] mt-2.5 flex items-center justify-end">
-        <AnalyzeWithBob
-          targetType="system"
-          targetId={system.id}
-          label="Review Bob analysis"
-        />
-      </div>
+      {openCount > 0 ? (
+        <div className="relative z-[2] mt-2.5 flex items-center justify-end">
+          <Link
+            href={routeToIncidentsForSystem(system.id)}
+            className="pointer-events-auto rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 shadow-sm hover:border-slate-300"
+          >
+            View governance posture
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }

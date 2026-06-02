@@ -13,8 +13,8 @@ Core workflow loop: Observe -> Investigate -> Act -> Measure.
 ## Product Guardrails
 - Preserve existing IA unless a workflow ownership change is explicitly approved.
 - Keep canonical trust language:
-  - Bob is bounded, policy-checked, approval-gated, audit-linked, and reversible by default where supported.
-  - Do not present Bob as unrestricted autonomous AI.
+  - Fleetrac recommendations are bounded, policy-checked, approval-gated, audit-linked, and reversible by default where supported.
+  - Do not present automated analysis as unrestricted autonomous AI.
 - Keep Action Center as governed action decision surface.
 - Keep Outcomes as post-remediation measurement and evidence surface.
 - Do not remove existing capabilities while simplifying UX.
@@ -31,7 +31,7 @@ Core workflow loop: Observe -> Investigate -> Act -> Measure.
 - Maintain current cross-page patterns for:
   - Actions: `tab`, `q`, `risk`, `type`
   - Outcomes: `tab`, `q`, `env`, `type`, optional `system`
-  - Bob: `status`, `target`, `confidence`, `sort`, `q`, `missing`
+  - Legacy Bob routes redirect to Dashboard; query params retained only where still routed.
   - Incidents: `system`, `severity`, `risk`, `owner`, `lifecycle`, `q`, `rule` (control / `rule_id` scope)
   - Settings: `tab`, `integration`
 
@@ -45,9 +45,16 @@ Core workflow loop: Observe -> Investigate -> Act -> Measure.
 
 ## UI and Design Conventions
 - Keep enterprise visual style: restrained, data-dense, high-signal.
-- Prefer existing shared primitives (`Card`, `Badge`, `SectionTitle`, `Select`).
+- Prefer existing shared primitives (`Card`, `Badge`, `Select`, `SummaryMini`).
+- Use `GovernancePageShell` on all seven nav routes; avoid `SectionTitle` on kept surfaces except rare drill-down breadcrumbs.
+- Summary rows use `SummaryMini`; workbench pages use `lg:grid-cols-[1fr_minmax(280px,340px)]` for list + detail.
 - Do not add flashy visuals or ornamental animation.
 - Preserve shell stability and route-level loading behavior.
+
+## Demo Data and Terminology
+- Canonical pitchable demo graph: `apps/web/lib/governance-demo-model.ts` (re-exports aligned mocks).
+- Governed Action Center inbox: `apps/web/lib/governed-actions-mock.ts` merged with session handoffs — no API sample rows in UI.
+- User-facing analysis label: **Fleetrac Analysis** (not Bob). Legacy `/bob/*` redirects to Dashboard.
 
 ## Architecture and Reuse Rules
 - Prefer extending shared helpers/components over introducing parallel patterns.

@@ -12,7 +12,7 @@ export function LinkedActionsPanel({
   actions,
   title = "Governed actions",
   caption,
-  emptyLabel = "No governed actions yet. Bob's remediations appear here with approval and execution state.",
+  emptyLabel = "No governed actions yet. Fleetrac-recommended remediations appear here with approval and execution state.",
   viewAllHref = "/actions",
   rollbackActionIds
 }: {
@@ -53,7 +53,7 @@ export function LinkedActionsPanel({
           </p>
           <p className="mt-0.5 text-[11px] text-slate-500">
             {caption ??
-              "Bob drafts, humans approve, execution is bounded. Post-execution impact is measured in Outcomes."}
+              "Fleetrac recommends, humans approve, execution is bounded. Post-execution impact is measured in Evidence Library."}
           </p>
         </div>
         <Link

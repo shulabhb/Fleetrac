@@ -69,7 +69,7 @@ export function OutcomesStrip({
           href={routes.outcomes()}
           className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 hover:text-slate-900"
         >
-          Measure outcomes
+          Evidence Library
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
@@ -86,7 +86,7 @@ export function OutcomesStrip({
         </>
       }
       caption="Verify executed changes, close evidence, or route rollback follow-up."
-      cta={{ label: "Measure outcomes", href: routes.outcomes() }}
+      cta={{ label: "Evidence Library", href: routes.outcomes() }}
       stats={
         <>
           <StripStat

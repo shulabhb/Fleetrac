@@ -4,7 +4,6 @@ import {
   getAccessPolicy,
   getActions,
   getAuditLogs,
-  getBobInvestigationForTarget,
   getChanges,
   getExecutionConsole,
   getIncidents,
@@ -13,7 +12,7 @@ import {
   getSystemOperations,
   getTelemetryEvents
 } from "@/lib/api";
-import { BobSummaryPanel, BobEmptyPanel } from "@/components/bob/bob-summary-panel";
+import { FleetracAnalysisPanel } from "@/components/fleetrac/fleetrac-analysis-panel";
 import { AccessPolicyPanel } from "@/components/actions/access-policy-panel";
 import { LinkedActionsPanel } from "@/components/actions/linked-actions";
 import { SystemOperationsPanel } from "@/components/operations/system-operations-panel";
@@ -35,7 +34,6 @@ import {
 import { formatInteger, formatRelativeTime } from "@/lib/format";
 import {
   routes,
-  routeToBobForTarget,
   routeToControl,
   routeToIncident,
   routeToIncidentsForSystem,
@@ -54,7 +52,6 @@ export default async function SystemDetailPage({ params }: Props) {
     telemetryRes,
     auditRes,
     rulesRes,
-    bobRes,
     policyRes,
     actionsRes,
     opsRes,
@@ -66,7 +63,6 @@ export default async function SystemDetailPage({ params }: Props) {
     getTelemetryEvents(`?system_id=${id}&limit=120`),
     getAuditLogs(),
     getRules(),
-    getBobInvestigationForTarget("system", id).catch(() => ({ item: null })),
     getAccessPolicy(id).catch(() => ({ item: null as any })),
     getActions({ target_system_id: id }).catch(() => ({ items: [] as any[] })),
     getSystemOperations(id).catch(() => ({ item: null as any })),
@@ -75,7 +71,6 @@ export default async function SystemDetailPage({ params }: Props) {
       items: [] as any[]
     }))
   ]);
-  const bobInvestigation = bobRes?.item ?? null;
   const accessPolicy = policyRes?.item ?? null;
   const systemActions = actionsRes?.items ?? [];
   const ops = opsRes?.item ?? null;
@@ -196,7 +191,7 @@ export default async function SystemDetailPage({ params }: Props) {
         ops={ops}
         openIncidentCount={openIncidents.length}
         highestOpenSeverity={highestSeverity}
-        bobInvestigationId={bobInvestigation?.id ?? null}
+        primaryIncidentId={openIncidents[0]?.id ?? null}
       />
 
       {/* Operations state — versioning, maintenance, rollback */}
@@ -229,7 +224,7 @@ export default async function SystemDetailPage({ params }: Props) {
               emptyLabel={
                 openIncidents.length === 0
                   ? "Healthy — no governed actions open. Any future recurrence routes here for approval."
-                  : "No governed actions yet. Bob's remediations will appear here with approval and execution state."
+                  : "No governed actions yet. Fleetrac-recommended remediations will appear here with approval and execution state."
               }
             />
           </div>
@@ -264,7 +259,7 @@ export default async function SystemDetailPage({ params }: Props) {
             emptyLabel={
               openIncidents.length === 0
                 ? "No governed changes in this window. Operating within policy."
-                : "No governed changes yet. Approved Bob recommendations will appear here with measured impact."
+                : "No governed changes yet. Approved recommendations will appear here with measured impact."
             }
             />
             {hiddenChanges.length > 0 ? (
@@ -288,19 +283,19 @@ export default async function SystemDetailPage({ params }: Props) {
         </Card>
       </section>
 
-      {/* Bob System Analysis — the structural read */}
       <section>
         <LayerHeader
           eyebrow="Decision-support layer"
-          title="Bob system analysis"
+          title="Fleetrac Analysis"
           caption="Structural read: recurrence, likely root cause, and next approval-gated remediation."
           tone="indigo"
         />
-        {bobInvestigation ? (
-          <BobSummaryPanel investigation={bobInvestigation} variant="compact" />
-        ) : (
-          <BobEmptyPanel targetType="system" targetId={system.id} />
-        )}
+        <FleetracAnalysisPanel
+          incidentId={openIncidents[0]?.id}
+          recommendedAction={
+            openIncidents[0]?.recommended_action ?? undefined
+          }
+        />
       </section>
 
       {/* Telemetry evidence + recent incidents */}
@@ -431,12 +426,12 @@ export default async function SystemDetailPage({ params }: Props) {
         <DisclosureSection
           eyebrow="Audit / deep-detail layer"
           title="Execution record"
-          summary={`${consoleEntries.length} audit-linked operational acts Bob has prepared or executed.`}
+          summary={`${consoleEntries.length} audit-linked operational acts Fleetrac has prepared or executed.`}
         >
           <ExecutionConsole
             entries={consoleEntries}
             title="Execution console · this system"
-            caption="Audit-linked operational acts Bob has prepared or executed."
+            caption="Audit-linked operational acts Fleetrac has prepared or executed."
           />
         </DisclosureSection>
       ) : null}
@@ -463,11 +458,8 @@ export default async function SystemDetailPage({ params }: Props) {
                   items={activityItems}
                   hrefFor={(item) => {
                     if (!item.targetId) return null;
-                    if (item.action?.startsWith("bob.") && item.targetType === "control") {
-                      return routeToBobForTarget("control", item.targetId);
-                    }
                     if (item.action?.startsWith("bob.") && item.targetType === "incident") {
-                      return routeToBobForTarget("incident", item.targetId);
+                      return routeToIncident(item.targetId);
                     }
                     if (item.targetId.startsWith("inc_"))
                       return routeToIncident(item.targetId);

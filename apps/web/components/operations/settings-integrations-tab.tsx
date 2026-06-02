@@ -485,10 +485,10 @@ function IntegrationDetailDialog({
 
           <div>
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Bob & execution
+              Fleetrac & execution
             </h3>
             <p className="mt-1 text-slate-700">
-              Bob may{" "}
+              Fleetrac may{" "}
               <span className="font-medium">
                 {i.bob_prepare_actions !== false ? "prepare" : "not prepare"}
               </span>{" "}

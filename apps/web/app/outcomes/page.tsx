@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { SectionTitle } from "@/components/ui/section-title";
-import { OutcomesView } from "@/components/operations/outcomes-view";
-import { getChanges, getSystems } from "@/lib/api";
+import { EvidenceLibraryApp } from "@/components/evidence-library/evidence-library-app";
+import { GovernancePageShell } from "@/components/layout/governance-page-shell";
+import { getSystems } from "@/lib/api";
 import { routes, routeToSystem } from "@/lib/routes";
 import {
   AI_SCOPE_OPTIONS,
@@ -11,16 +11,14 @@ import {
   withAiScope
 } from "@/lib/ai-scope";
 
-type SearchParams = {
-  system?: string;
-  tab?: string;
-  scope?: string;
-};
-
 export default async function OutcomesPage({
   searchParams
 }: {
-  searchParams?: Promise<SearchParams>;
+  searchParams?: Promise<{
+    system?: string;
+    tab?: string;
+    scope?: string;
+  }>;
 }) {
   const params = (await searchParams) ?? {};
   const systemFilter = params.system ?? null;
@@ -28,34 +26,27 @@ export default async function OutcomesPage({
   const scopeLabel =
     AI_SCOPE_OPTIONS.find((opt) => opt.id === scope)?.label ?? "All";
 
-  const [changesRes, systemsRes] = await Promise.all([
-    getChanges(
-      systemFilter ? { target_system_id: systemFilter } : undefined
-    ),
-    getSystems().catch(() => ({ items: [] as any[] }))
-  ]);
+  const systemsRes = await getSystems().catch(() => ({ items: [] as any[] }));
   const scopedSystems = (systemsRes.items ?? []).filter((s: any) =>
     systemMatchesScope(s, scope)
-  );
-  const scopedSystemIds = new Set(scopedSystems.map((s: any) => s.id));
-  const scopedChanges = (changesRes.items ?? []).filter((change: any) =>
-    scopedSystemIds.has(change.target_system_id)
   );
 
   const scopedSystem = systemFilter
     ? scopedSystems.find((s: any) => s.id === systemFilter)
     : null;
 
-  return (
-    <section className="space-y-5">
-      {scopedSystem ? (
+  const outcomesBaseHref = withAiScope(routes.outcomes(), scope);
+
+  if (systemFilter && scopedSystem) {
+    return (
+      <section className="space-y-5">
         <div className="flex items-center justify-between">
           <Link
-            href={withAiScope(routes.outcomes(), scope)}
+            href={outcomesBaseHref}
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
-            All outcomes
+            Evidence Library
           </Link>
           <Link
             href={routeToSystem(scopedSystem.id)}
@@ -64,25 +55,44 @@ export default async function OutcomesPage({
             View production context · {scopedSystem.use_case}
           </Link>
         </div>
-      ) : null}
 
-      <SectionTitle
-        eyebrow={
-          scopedSystem
-            ? `System · ${scopedSystem.use_case}`
-            : "Post-Remediation Review · Measure"
-        }
-        title="Outcomes"
-        caption={
-          scopedSystem
-            ? `Measured post-remediation evidence for ${scopedSystem.use_case}. Close, follow up, or prepare rollback from actual impact.`
-            : `Proof and verification queue for governed changes: measured outcome, follow-up, closure, and rollback evidence. Profile scope: ${scopeLabel}.`
-        }
-      />
-      <OutcomesView
-        changes={scopedChanges}
-        systemFilter={systemFilter}
-      />
+        <GovernancePageShell
+          loop="measure"
+          eyebrow={`Measure · ${scopedSystem.use_case}`}
+          title="Evidence Library"
+          subtitle={`Scoped context · profile scope: ${scopeLabel}`}
+          workflowLine="Owner-team evidence packages are indexed from the main library"
+        >
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 text-[13px] text-slate-700">
+          <p>
+            For governed execution and remediation follow-up for this system, use production
+            context and Action Center. Team-level evidence packages are unchanged below.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={routeToSystem(scopedSystem.id)}
+              className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
+            >
+              Open system record
+            </Link>
+            <Link
+              href={routes.actions()}
+              className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
+            >
+              Action Center
+            </Link>
+          </div>
+        </div>
+
+        <EvidenceLibraryApp />
+        </GovernancePageShell>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-5">
+      <EvidenceLibraryApp />
     </section>
   );
 }

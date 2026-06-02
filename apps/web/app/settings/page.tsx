@@ -1,4 +1,4 @@
-import { SectionTitle } from "@/components/ui/section-title";
+import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { SettingsView } from "@/components/operations/settings-view";
 import {
   getConnectorStatus,
@@ -23,13 +23,16 @@ export default async function SettingsPage() {
     getExecutionConsole({ limit: 60 })
   ]);
 
+  const connected = integrations.filter((i: any) => i.status === "connected").length;
+
   return (
-    <section className="space-y-5">
-      <SectionTitle
-        eyebrow="Control plane capability"
-        title="Settings"
-        caption="Define what Fleetrac can observe, prepare, execute, and audit through integrations, policies, environments, and connector readiness."
-      />
+    <GovernancePageShell
+      loop="configure"
+      eyebrow="Configure · Control plane capability"
+      title="Settings"
+      subtitle={`${connected} connectors connected · ${policies.length} operations policies`}
+      workflowLine="Telemetry ingest, Slack notifications, policy scope, and connector readiness"
+    >
       <SettingsView
         integrations={integrations}
         policies={policies}
@@ -37,6 +40,6 @@ export default async function SettingsPage() {
         connectors={connectors}
         executionConsole={executionConsole}
       />
-    </section>
+    </GovernancePageShell>
   );
 }
