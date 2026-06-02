@@ -11,7 +11,7 @@ import {
   severityBadgeClasses
 } from "@/lib/present";
 import { formatInteger } from "@/lib/format";
-import { routeToBobInvestigation } from "@/lib/routes";
+import { routeToIncidentsForSystem } from "@/lib/routes";
 
 type System = {
   id: string;
@@ -37,7 +37,7 @@ type SystemHeroProps = {
   ops: SystemOperations | null;
   openIncidentCount: number;
   highestOpenSeverity?: "high" | "medium" | "low";
-  bobInvestigationId?: string | null;
+  primaryIncidentId?: string | null;
 };
 
 /**
@@ -55,7 +55,7 @@ export function SystemHero({
   ops,
   openIncidentCount,
   highestOpenSeverity,
-  bobInvestigationId
+  primaryIncidentId
 }: SystemHeroProps) {
   const displayName = system.use_case
     ? `${system.use_case} (${system.model ?? "—"})`
@@ -89,12 +89,12 @@ export function SystemHero({
               No open issues
             </Badge>
           )}
-          {bobInvestigationId ? (
+          {openIncidentCount > 0 ? (
             <Link
-              href={routeToBobInvestigation(bobInvestigationId)}
+              href={routeToIncidentsForSystem(system.id)}
               className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-100"
             >
-              Bob review open
+              {primaryIncidentId ? "Review incident queue" : "Open incidents"}
               <ArrowRight className="h-3 w-3" />
             </Link>
           ) : null}

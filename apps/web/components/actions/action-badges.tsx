@@ -232,7 +232,7 @@ export function ReversibleBadge({ reversible }: { reversible: boolean }) {
 
 const EXEC_MODE_LABELS: Record<ExecutionMode, string> = {
   manual_handoff: "Manual handoff",
-  bob_prepares: "Bob prepares",
+  bob_prepares: "Prepared for approval",
   approval_gated: "Approval-gated execution",
   auto_within_bounds: "Auto within bounds"
 };
@@ -348,7 +348,7 @@ export function BobOperatingModeBadge({
         className
       )}
     >
-      Bob: {c.label}
+      Mode: {c.label}
     </span>
   );
 }

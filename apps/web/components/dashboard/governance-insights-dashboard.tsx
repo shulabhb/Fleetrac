@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, PackageOpen, UserCog } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
+import { NotificationBell } from "@/components/fleetrac/notification-bell";
 import { GovernanceLoopStatus } from "@/components/dashboard/governance-loop-status";
 import { ManageAssignmentModal } from "@/components/dashboard/manage-assignment-modal";
 import { cn } from "@/lib/cn";
@@ -13,32 +14,28 @@ import {
   DEFAULT_OWNER_TEAM,
   DEFAULT_SYSTEM_ID,
   DASHBOARD_KPI,
-  decisionPanelCopyForSystem,
   GOVERNANCE_LOOP,
   GOVERNED_SYSTEMS,
   highestRiskOwnerTeam,
-  INCIDENTS_BY_SYSTEM,
   ownerActionCopyForTeam,
   formatRiskMixCompact,
   getOwnerTeamDetails,
   ownerPriorityQueueRows,
   OWNER_INSIGHTS,
-  primaryIncidentForPanel,
   REMEDIATION_EVIDENCE_SUMMARY,
-  type GovernanceIncident,
   type GovernedSystem,
   type OwnerInsight,
   type OwnerNotificationUIFlag,
   type OwnerTeamDetails,
   type SlaRiskLevel
 } from "@/lib/governance-dashboard-mock";
+import { NOTIFICATION_EVENTS } from "@/lib/governance-demo-model";
 import { withAiScope, type AiScopeId } from "@/lib/ai-scope";
 import {
-  routeToBobForTarget,
-  routeToIncidentsForSystem,
+  routeToEvidenceLibraryOwnerPackage,
   routeToIncidentsForOwner,
+  routeToIncidentsOwnerQueue,
   routeToOutcomesOwnerEvidencePack,
-  routeToSystem,
   routes
 } from "@/lib/routes";
 
@@ -82,18 +79,6 @@ function statusBadgeTone(st: GovernedSystem["status"]): "high" | "medium" | "low
   return "low";
 }
 
-function severityAccentClass(sev: GovernanceIncident["severity"]): string {
-  if (sev === "Critical" || sev === "High") return "text-rose-700";
-  if (sev === "Medium") return "text-amber-700";
-  return "text-emerald-700";
-}
-
-function severityDotClass(sev: GovernanceIncident["severity"]): string {
-  if (sev === "Critical" || sev === "High") return "bg-rose-600";
-  if (sev === "Medium") return "bg-amber-500";
-  return "bg-emerald-600";
-}
-
 /** Status word coloring for compact priority rows (metadata only). */
 function governanceStatusTone(st: GovernedSystem["status"]): string {
   if (st === "Critical" || st === "High") return "text-rose-700";
@@ -101,12 +86,9 @@ function governanceStatusTone(st: GovernedSystem["status"]): string {
   return "text-emerald-700";
 }
 
-type PanelMode = "owner" | "system";
-
 export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   const router = useRouter();
   const scopeHref = (path: string) => withAiScope(path, scope);
-  const [panelMode, setPanelMode] = useState<PanelMode>("owner");
   const [selectedOwnerTeam, setSelectedOwnerTeam] = useState(DEFAULT_OWNER_TEAM);
   const [selectedSystemId, setSelectedSystemId] = useState(DEFAULT_SYSTEM_ID);
   const [filters, setFilters] = useState({
@@ -139,46 +121,10 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
     }).sort(compareSystems);
   }, [filters]);
 
-  useEffect(() => {
-    if (panelMode !== "system") return;
-    if (!filteredSystems.length) return;
-    const visible = filteredSystems.some((s) => s.id === selectedSystemId);
-    if (!visible) {
-      const next = filteredSystems[0];
-      setSelectedSystemId(next.id);
-      setSelectedOwnerTeam(next.ownerTeam);
-    }
-  }, [filteredSystems, selectedSystemId, panelMode]);
-
   const selectedSystem = useMemo(
     () => GOVERNED_SYSTEMS.find((s) => s.id === selectedSystemId) ?? GOVERNED_SYSTEMS[0],
     [selectedSystemId]
   );
-
-  const incidentsForSelected = INCIDENTS_BY_SYSTEM[selectedSystem.id] ?? [];
-
-  const primaryIncident = useMemo(
-    () => primaryIncidentForPanel(selectedSystem.id, incidentsForSelected),
-    [selectedSystem.id, incidentsForSelected]
-  );
-
-  const decisionCopy = useMemo(
-    () => decisionPanelCopyForSystem(selectedSystem.id),
-    [selectedSystem.id]
-  );
-
-  const oldestIncidentAge = useMemo(() => {
-    if (!incidentsForSelected.length) return "—";
-    const maxDays = Math.max(...incidentsForSelected.map((i) => parseEvidenceAge(i.age)));
-    return `${maxDays}d`;
-  }, [incidentsForSelected]);
-
-  const visibleIncidents = incidentsForSelected.slice(0, 4);
-  const hasMoreIncidents = incidentsForSelected.length > 4;
-
-  const investigationHref = primaryIncident
-    ? scopeHref(routeToBobForTarget("incident", primaryIncident.id))
-    : scopeHref(routeToIncidentsForSystem(selectedSystem.id));
 
   const ownerInsightRow = useMemo(
     () => OWNER_INSIGHTS.find((o) => o.ownerTeam === selectedOwnerTeam) ?? OWNER_INSIGHTS[0],
@@ -222,7 +168,6 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   const clearOwnerFilter = useCallback(() => {
     const fleetOwner = highestRiskOwnerTeam();
     setFilters((f) => ({ ...f, ownerTeam: "" }));
-    setPanelMode("owner");
     const fullSorted = [...GOVERNED_SYSTEMS].sort(compareSystems);
     const stillVisible = fullSorted.some((s) => s.id === selectedSystemId);
     if (stillVisible) {
@@ -237,7 +182,6 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
     (ownerTeam: string) => {
       if (ownerTeam) {
         setFilters((f) => ({ ...f, ownerTeam: ownerTeam }));
-        setPanelMode("owner");
         setSelectedOwnerTeam(ownerTeam);
       } else {
         clearOwnerFilter();
@@ -247,48 +191,38 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   );
 
   const onOwnerRowClick = (row: OwnerInsight) => {
-    setPanelMode("owner");
     setSelectedOwnerTeam(row.ownerTeam);
     setFilters((f) => ({ ...f, ownerTeam: row.ownerTeam }));
+    window.requestAnimationFrame(() => {
+      evidencePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
   };
 
-  const openSystemContext = useCallback((sys: GovernedSystem) => {
-    setPanelMode("system");
+  const focusOwnerFromSystem = useCallback((sys: GovernedSystem) => {
     setSelectedSystemId(sys.id);
     setSelectedOwnerTeam(sys.ownerTeam);
-    setFilters((f) => {
-      if (f.ownerTeam && f.ownerTeam !== sys.ownerTeam) {
-        return { ...f, ownerTeam: "" };
-      }
-      return f;
-    });
-  }, []);
-
-  const onSystemRowClick = (sys: GovernedSystem) => {
-    openSystemContext(sys);
-  };
-
-  const onPrioritySystemClick = (systemId: string) => {
-    const sys = GOVERNED_SYSTEMS.find((s) => s.id === systemId);
-    if (sys) openSystemContext(sys);
-  };
-
-  const reviewHighestRisk = useCallback(() => {
-    const topSystem = [...GOVERNED_SYSTEMS].sort(compareSystems)[0];
-    setPanelMode("system");
-    setSelectedSystemId(topSystem.id);
-    setSelectedOwnerTeam(topSystem.ownerTeam);
-    setFilters((f) => ({ ...f, ownerTeam: topSystem.ownerTeam }));
+    setFilters((f) => ({
+      ...f,
+      ownerTeam: f.ownerTeam && f.ownerTeam !== sys.ownerTeam ? "" : f.ownerTeam
+    }));
     window.requestAnimationFrame(() => {
       evidencePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   }, []);
 
-  const needsIncidentFallback =
-    incidentsForSelected.length === 0 &&
-    (selectedSystem.status === "Critical" || selectedSystem.status === "High");
+  const onSystemRowClick = (sys: GovernedSystem) => {
+    focusOwnerFromSystem(sys);
+  };
 
-  const packageIncidentHref = scopeHref(routeToIncidentsForSystem(selectedSystem.id));
+  const onPrioritySystemClick = (systemId: string) => {
+    const sys = GOVERNED_SYSTEMS.find((s) => s.id === systemId);
+    if (sys) focusOwnerFromSystem(sys);
+  };
+
+  const reviewOwnerQueue = useCallback(() => {
+    const team = highestRiskOwnerTeam();
+    router.push(scopeHref(routeToIncidentsOwnerQueue(team)));
+  }, [router, scopeHref]);
 
   const ownerTeams = useMemo(
     () => Array.from(new Set(GOVERNED_SYSTEMS.map((s) => s.ownerTeam))).sort(),
@@ -342,14 +276,17 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
             {DASHBOARD_KPI.ownersAboveTolerance} owners above risk tolerance
           </p>
         </div>
-        <button
-          type="button"
-          onClick={reviewHighestRisk}
-          className="inline-flex shrink-0 items-center gap-2 rounded-md border border-slate-900 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-        >
-          Review highest-risk incident
-          <ArrowRight className="h-4 w-4" aria-hidden />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <NotificationBell events={NOTIFICATION_EVENTS} />
+          <button
+            type="button"
+            onClick={reviewOwnerQueue}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-900 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+          >
+            Review owner queue
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
       </header>
 
       {/* KPI row */}
@@ -477,8 +414,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
           className="flex min-h-0 max-h-[min(520px,56vh)] flex-col"
         >
           <Card className="flex h-full min-h-0 flex-1 flex-col overflow-hidden shadow-none ring-1 ring-slate-100">
-            {panelMode === "owner" ? (
-              <>
+            <>
                 <div className="shrink-0 border-b border-slate-100 bg-white px-4 pb-3 pt-4">
                   <CardHeader
                     title="Owner Action Panel"
@@ -608,248 +544,6 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                   </div>
                 </div>
               </>
-            ) : (
-              <>
-                <div className="shrink-0 border-b border-slate-100 px-4 pb-3 pt-4">
-                  <CardHeader title="System Decision Panel" />
-                  <p className="mt-2 text-[11px] leading-snug text-slate-500">Selected system</p>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
-                  <div className="space-y-3">
-                {/* System identity */}
-                <div>
-                  <p className="text-lg font-semibold leading-snug text-slate-900">
-                    {selectedSystem.name}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
-                    {selectedSystem.id} · {selectedSystem.businessFunction} · {selectedSystem.platform}{" "}
-                    · {selectedSystem.type}
-                  </p>
-                  <p className="mt-1.5 text-[11px] text-slate-600">
-                    <span className="text-slate-500">Owner:</span>{" "}
-                    <span className="font-medium text-slate-800">{selectedSystem.ownerTeam}</span>
-                  </p>
-                  {selectedSystem.dataSensitivity === "Critical" ? (
-                    <p className="mt-1 text-[10px] text-slate-400">
-                      Sensitivity: {selectedSystem.dataSensitivity}
-                    </p>
-                  ) : null}
-                </div>
-
-                {/* Compact risk summary */}
-                <div className="grid grid-cols-4 gap-2 rounded-md border border-slate-100 bg-slate-50/60 px-2 py-2 text-center">
-                  <div className="min-w-0">
-                    <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                      Status
-                    </p>
-                    <div className="mt-1 flex justify-center">
-                      <Badge tone={statusBadgeTone(selectedSystem.status)} size="xs" dot>
-                        {selectedSystem.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="min-w-0 border-l border-slate-200/80">
-                    <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                      Open
-                    </p>
-                    <p className="mt-1 text-[13px] font-semibold tabular-nums text-slate-800">
-                      {selectedSystem.openIncidents}
-                    </p>
-                  </div>
-                  <div className="min-w-0 border-l border-slate-200/80">
-                    <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                      Critical
-                    </p>
-                    <p className="mt-1 text-[13px] font-semibold tabular-nums text-slate-800">
-                      {selectedSystem.criticalIncidents}
-                    </p>
-                  </div>
-                  <div className="min-w-0 border-l border-slate-200/80">
-                    <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                      Oldest
-                    </p>
-                    <p className="mt-1 text-[13px] font-semibold tabular-nums text-slate-600">
-                      {oldestIncidentAge}
-                    </p>
-                  </div>
-                </div>
-
-                <GovernanceLoopStatus
-                  variant="system"
-                  currentStage={selectedSystem.governanceStage}
-                  stageSummary={selectedSystem.stageSummary}
-                />
-
-                {/* Primary decision */}
-                <div className="rounded-md border border-slate-200 bg-white px-3 py-3 shadow-sm">
-                  {needsIncidentFallback ? (
-                    <>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        Decision needed
-                      </p>
-                      <p className="mt-1 text-[14px] font-semibold leading-snug text-slate-900">
-                        Review open governance signals
-                      </p>
-                      <p className="mt-1.5 text-[12px] leading-snug text-slate-600">
-                        This system has open risk signals but no packaged incident details yet.
-                      </p>
-                      <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        Recommended action
-                      </p>
-                      <p className="mt-0.5 text-[13px] font-medium leading-snug text-slate-900">
-                        Send to Incident Queue for packaging.
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Link
-                          href={packageIncidentHref}
-                          className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                        >
-                          Package incident →
-                        </Link>
-                        <Link
-                          href={scopeHref(routes.actions())}
-                          className="text-[12px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-                        >
-                          Send to Action Center
-                        </Link>
-                        <Link
-                          href={scopeHref(routeToBobForTarget("system", selectedSystem.id))}
-                          className="text-[12px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-                        >
-                          Generate evidence pack
-                        </Link>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        Decision needed
-                      </p>
-                      <p className="mt-1 text-[14px] font-semibold leading-snug text-slate-900">
-                        {decisionCopy.headline}
-                      </p>
-                      <p className="mt-1.5 text-[12px] leading-snug text-slate-600">{decisionCopy.context}</p>
-                      <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        Recommended action
-                      </p>
-                      <p className="mt-0.5 text-[13px] font-medium leading-snug text-slate-900">
-                        {decisionCopy.recommendedAction}
-                      </p>
-                      <p className="mt-2 text-[11px] text-slate-500">{decisionCopy.evidenceSummary}</p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Link
-                          href={investigationHref}
-                          className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                        >
-                          Open investigation →
-                        </Link>
-                        <Link
-                          href={scopeHref(routes.actions())}
-                          className="text-[12px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-                        >
-                          Send to Action Center
-                        </Link>
-                        <Link
-                          href={scopeHref(routeToBobForTarget("system", selectedSystem.id))}
-                          className="text-[12px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-                        >
-                          Generate evidence pack
-                        </Link>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Open incidents — compact rows */}
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                    Open incidents
-                  </p>
-                  {incidentsForSelected.length === 0 ? (
-                    <p className="mt-2 text-[12px] text-slate-500">
-                      {needsIncidentFallback
-                        ? "Package incidents in the queue to populate this list."
-                        : selectedSystem.status === "Critical" || selectedSystem.status === "High"
-                          ? "Packaged incidents are being reconciled for this system."
-                          : "No packaged incidents for this view."}
-                    </p>
-                  ) : (
-                    <ul className="mt-2 divide-y divide-slate-100 border border-slate-100 rounded-md bg-white">
-                      {visibleIncidents.map((inc) => {
-                        const isPrimary = primaryIncident?.id === inc.id;
-                        return (
-                          <li
-                            key={inc.id}
-                            className={cn(
-                              "flex gap-2 px-2.5 py-2",
-                              isPrimary ? "bg-slate-50/90" : ""
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full",
-                                severityDotClass(inc.severity)
-                              )}
-                              aria-hidden
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[12px] leading-snug text-slate-900">
-                                <span
-                                  className={cn(
-                                    "font-semibold tabular-nums",
-                                    severityAccentClass(inc.severity)
-                                  )}
-                                >
-                                  {inc.severity}
-                                </span>
-                                <span className="text-slate-400"> · </span>
-                                {inc.title}
-                              </p>
-                              <p className="mt-0.5 text-[11px] text-slate-500">
-                                {inc.riskCategory} · {inc.actionState} ·{" "}
-                                <span className="text-slate-400">{inc.age}</span>
-                              </p>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                  {hasMoreIncidents ? (
-                    <Link
-                      href={scopeHref(routeToIncidentsForSystem(selectedSystem.id))}
-                      className="mt-2 inline-block text-[12px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-                    >
-                      View all incidents →
-                    </Link>
-                  ) : null}
-                </div>
-
-                {/* Footer actions */}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-slate-100 pt-3">
-                  <Link
-                    href={needsIncidentFallback ? packageIncidentHref : investigationHref}
-                    className="text-[12px] font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
-                  >
-                    {needsIncidentFallback ? "Package incident →" : "Open investigation →"}
-                  </Link>
-                  <Link
-                    href={scopeHref(routeToSystem(selectedSystem.id))}
-                    className="text-[12px] font-medium text-slate-600 hover:text-slate-900"
-                  >
-                    Assign owner
-                  </Link>
-                  <Link
-                    href={scopeHref(routeToBobForTarget("system", selectedSystem.id))}
-                    className="text-[12px] font-medium text-slate-600 hover:text-slate-900"
-                  >
-                    Create evidence pack
-                  </Link>
-                </div>
-                  </div>
-                </div>
-              </>
-            )}
           </Card>
         </div>
       </div>
@@ -921,7 +615,8 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
               </thead>
               <tbody>
                 {filteredSystems.map((sys) => {
-                  const sel = panelMode === "system" && sys.id === selectedSystemId;
+                  const sel =
+                    sys.ownerTeam === selectedOwnerTeam && sys.id === selectedSystemId;
                   return (
                     <tr
                       key={sys.id}
@@ -990,12 +685,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-6">
               <div className="min-w-0 flex-1">
                 <h3 className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  Investigations
+                  Incident workflow
                 </h3>
                 <OperationalMetricGrid
                   columns={4}
                   items={[
-                    { label: "Open", value: GOVERNANCE_LOOP.investigations.open },
+                    { label: "Open incidents", value: GOVERNANCE_LOOP.investigations.open },
                     {
                       label: "Awaiting approval",
                       value: GOVERNANCE_LOOP.investigations.awaitingApproval
@@ -1009,10 +704,10 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                 />
               </div>
               <Link
-                href={scopeHref(routes.bob())}
+                href={scopeHref(routeToIncidentsOwnerQueue(selectedOwnerTeam))}
                 className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
-                Open Bob →
+                Open Incident Queue →
               </Link>
             </div>
           </div>
@@ -1053,7 +748,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                 href={scopeHref(routes.outcomes())}
                 className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
-                Outcomes →
+                Evidence Library →
               </Link>
             </div>
           </div>

@@ -1,3 +1,5 @@
+import { findOwnerTeamForQueueIncident } from "@/lib/incident-queue-owner-review-mock";
+
 /**
  * Canonical route builders for Fleetrac.
  *
@@ -73,7 +75,24 @@ export const routes = {
 // ---------------------------------------------------------------------------
 
 export function routeToIncident(id: string): string {
+  const owner = findOwnerTeamForQueueIncident(id);
+  if (owner) return routeToIncidentsQueue({ ownerTeam: owner, incidentId: id });
   return `/incidents/${encodeURIComponent(id)}`;
+}
+
+/** Incident Queue workbench — global or owner-scoped (`queue=owner`). */
+export function routeToIncidentsQueue(options?: {
+  ownerTeam?: string;
+  incidentId?: string;
+}): string {
+  const qs = new URLSearchParams();
+  if (options?.ownerTeam) {
+    qs.set("queue", "owner");
+    qs.set("owner", options.ownerTeam);
+  }
+  if (options?.incidentId) qs.set("incident", options.incidentId);
+  const s = qs.toString();
+  return s ? `/incidents?${s}` : routes.incidents();
 }
 
 export function routeToSystem(id: string): string {
@@ -125,9 +144,19 @@ export function routeToIncidentsForSystem(systemId: string): string {
   return `/incidents?system=${encodeURIComponent(systemId)}`;
 }
 
+/** Owner-team review workbench on Incident Queue (`queue=owner`). */
+export function routeToIncidentsOwnerQueue(
+  ownerTeam: string,
+  incidentId?: string
+): string {
+  const qs = new URLSearchParams({ queue: "owner", owner: ownerTeam });
+  if (incidentId) qs.set("incident", incidentId);
+  return `/incidents?${qs.toString()}`;
+}
+
 /** Incident queue scoped to systems owned by an accountable team (dashboard owner pivot). */
 export function routeToIncidentsForOwner(ownerTeam: string): string {
-  return `/incidents?owner=${encodeURIComponent(ownerTeam)}`;
+  return routeToIncidentsOwnerQueue(ownerTeam);
 }
 
 export function routeToOutcomesForSystem(

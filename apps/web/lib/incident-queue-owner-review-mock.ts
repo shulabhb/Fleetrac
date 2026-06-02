@@ -15,6 +15,8 @@ export type OwnerReviewTableRow = {
   stage: string;
   assignedTo: string;
   evidenceItemsCount: number;
+  /** Evidence Library sync status shown in queue table */
+  evidenceSyncStatus?: "Synced" | "Needs refresh";
   ageLabel: string;
   nextAction: string;
   decisionNeeded: string;
@@ -23,15 +25,86 @@ export type OwnerReviewTableRow = {
   investigationTimeline: string;
 };
 
-/** Evidence library line shown in owner queue header (demo copy per owner team). */
+/** Evidence library status in owner queue header. */
 export const OWNER_EVIDENCE_LIBRARY_LINE: Partial<Record<string, string>> = {
-  "Model Risk Management": "3 incident packs · 1 owner snapshot",
-  "Security Operations": "3 incident packs · 1 owner snapshot",
-  "Platform Reliability": "2 incident packs · 1 owner snapshot"
+  "Model Risk Management": "Synced · 4 active records",
+  "Security Operations": "Synced · 3 active records",
+  "Platform Reliability": "Synced · 2 active records"
 };
 
 export function ownerEvidenceLibraryLine(ownerTeam: string): string {
-  return OWNER_EVIDENCE_LIBRARY_LINE[ownerTeam] ?? "Incident packs · 1 owner snapshot";
+  return OWNER_EVIDENCE_LIBRARY_LINE[ownerTeam] ?? "Synced · records available";
+}
+
+/** Queue summary strip — evidence record counts per owner team. */
+export const OWNER_QUEUE_EVIDENCE_RECORDS: Partial<Record<string, number>> = {
+  "Model Risk Management": 4,
+  "Security Operations": 3,
+  "Platform Reliability": 2
+};
+
+/** Fleetrac analysis one-liners for incident detail panel (owner queue). */
+export const OWNER_QUEUE_FLEETRAC_ANALYSIS: Partial<Record<string, string>> = {
+  "inc-mrm-001":
+    "Unsupported claim rate exceeded the approved threshold while retrieval confidence dropped below baseline.",
+  "inc-sec-001":
+    "Agent attempted a restricted refund API tool call outside approved policy scope.",
+  "inc-plat-001":
+    "Provider latency increased above baseline after routing change."
+};
+
+export function fleetracAnalysisForQueueIncident(incidentId: string, fallback: string): string {
+  return OWNER_QUEUE_FLEETRAC_ANALYSIS[incidentId] ?? fallback;
+}
+
+/** Compact evidence cell for Incident Queue table and detail panel. */
+export function formatQueueEvidenceLabel(row: {
+  evidenceItemsCount: number;
+  evidenceSyncStatus?: "Synced" | "Needs refresh";
+}): string {
+  const status = row.evidenceSyncStatus ?? "Synced";
+  return `${status} · ${row.evidenceItemsCount} items`;
+}
+
+/** Recent async activity feed per owner team (Incident Queue). */
+export const OWNER_QUEUE_RECENT_ACTIVITY: Partial<Record<string, string[]>> = {
+  "Model Risk Management": [
+    "8m ago · Evidence synced for 4 active records",
+    "8m ago · Anika Rao notified for owner review",
+    "12m ago · Groundedness evidence updated for Model Risk FAQ",
+    "26m ago · Baseline drift packaged for NII Sensitivity"
+  ],
+  "Security Operations": [
+    "4m ago · Evidence synced for 3 active records",
+    "4m ago · Marcus Lee notified for action approval",
+    "1d ago · Tool scope violation routed to Nora Patel",
+    "2d ago · Retry pattern packaged for review"
+  ],
+  "Platform Reliability": [
+    "22m ago · Sofia Martinez acknowledged verification queue",
+    "2h ago · Rollback verification evidence updated",
+    "4d ago · Fallback route misfire sent for action approval"
+  ]
+};
+
+/** Row plus accountable owner — used by global and owner queue workbench. */
+export type QueueTableRow = OwnerReviewTableRow & { ownerTeam: string };
+
+/** Primary owner teams in the governance demo queue. */
+export const PRIMARY_OWNER_QUEUE_TEAMS = [
+  "Model Risk Management",
+  "Security Operations",
+  "Platform Reliability"
+] as const;
+
+export function allOwnerQueueRows(): QueueTableRow[] {
+  const rows: QueueTableRow[] = [];
+  for (const [ownerTeam, list] of Object.entries(OWNER_REVIEW_QUEUE_ROWS)) {
+    for (const row of list ?? []) {
+      rows.push({ ...row, ownerTeam });
+    }
+  }
+  return rows;
 }
 
 /** Mock rows keyed by owner team. */
@@ -130,8 +203,8 @@ export const OWNER_REVIEW_QUEUE_ROWS: Partial<Record<string, OwnerReviewTableRow
       evidenceItemsCount: 5,
       ageLabel: "1d",
       nextAction: "Approve containment",
-      decisionNeeded: "Approve containment action",
-      recommendedAction: "Approve narrowed tool manifest and redeploy routing policy.",
+      decisionNeeded: "Approve containment",
+      recommendedAction: "Require human approval for refund tool calls above threshold.",
       evidenceSummary:
         "Automated routing invoked refund tooling outside approved scope; containment awaits approval.",
       investigationTimeline:
@@ -191,8 +264,8 @@ export const OWNER_REVIEW_QUEUE_ROWS: Partial<Record<string, OwnerReviewTableRow
       evidenceItemsCount: 4,
       ageLabel: "2d",
       nextAction: "Verify rollback",
-      decisionNeeded: "Verify rollback effectiveness",
-      recommendedAction: "Verify OCR provider rollback and latency recovery vs SLA.",
+      decisionNeeded: "Verify rollback",
+      recommendedAction: "Confirm rollback reduced recurrence before closing incident.",
       evidenceSummary:
         "Sustained latency regression vs baseline; rollback candidate under verification.",
       investigationTimeline:
@@ -531,32 +604,19 @@ export const INCIDENT_EVIDENCE_PACK_BY_ID: Partial<Record<string, IncidentEviden
   }
 };
 
-const MOCK_AC_KEY = "fleetrac-mock-action-center-items";
-
-export type MockActionCenterItem = {
-  incidentId: string;
-  title: string;
-  ownerTeam: string;
-  createdAt: number;
-};
-
-export function pushMockActionCenterItem(item: {
-  incidentId: string;
-  title: string;
-  ownerTeam: string;
-}): void {
-  if (typeof window === "undefined") return;
-  let list: MockActionCenterItem[] = [];
-  try {
-    const raw = window.sessionStorage.getItem(MOCK_AC_KEY);
-    if (raw) list = JSON.parse(raw) as MockActionCenterItem[];
-  } catch {
-    list = [];
+/** Resolve owner team for workbench deep links (`/incidents/[id]` → queue). */
+export function findOwnerTeamForQueueIncident(incidentId: string): string | null {
+  for (const [team, list] of Object.entries(OWNER_REVIEW_QUEUE_ROWS)) {
+    if (list?.some((r) => r.incidentId === incidentId)) return team;
   }
-  list.push({ ...item, createdAt: Date.now() });
-  try {
-    window.sessionStorage.setItem(MOCK_AC_KEY, JSON.stringify(list));
-  } catch {
-    /* ignore */
-  }
+  return INCIDENT_EVIDENCE_PACK_BY_ID[incidentId]?.ownerTeam ?? null;
 }
+
+export function isGovernanceQueueIncidentId(incidentId: string): boolean {
+  return findOwnerTeamForQueueIncident(incidentId) != null;
+}
+
+export {
+  pushMockActionCenterItem,
+  type MockActionCenterItem
+} from "@/lib/governance-demo-actions";

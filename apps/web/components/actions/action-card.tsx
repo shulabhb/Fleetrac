@@ -139,7 +139,7 @@ export function ActionCard({
               href={routeToBobInvestigation(action.bob_investigation_id)}
               className="hover:text-slate-900 hover:underline"
             >
-              Bob investigation →
+              Fleetrac analysis →
             </Link>
           ) : null}
           {action.related_incident_id ? (

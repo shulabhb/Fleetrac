@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { Sparkline } from "@/components/charts/sparkline";
-import { BobIcon } from "@/components/bob/bob-icon";
-import { AnalyzeWithBob } from "@/components/bob/analyze-with-bob";
+import { Sparkles } from "lucide-react";
 import { DisclosureSection } from "@/components/shared/disclosure-section";
 import { FlowBreadcrumb } from "@/components/shared/flow-breadcrumb";
 import { Badge } from "@/components/ui/badge";
@@ -17,8 +16,6 @@ import { verdictColor, verdictRing } from "@/lib/governance-states";
 import {
   appendReturnTo,
   routeToAction,
-  routeToBobForTarget,
-  routeToBobInvestigation,
   routeToIncident,
   routeToIncidentsForControl,
   routeToSystem,
@@ -35,7 +32,7 @@ type Props = {
 };
 
 const DEMO_ACTIONS = [
-  "Open Bob control review",
+  "Open Fleetrac analysis",
   "Prepare control tuning",
   "View affected incidents",
   "Split control",
@@ -129,14 +126,14 @@ export function ControlDetailSurface({
             : { label: "Incident", icon: "incident", missing: true },
           bobInvestigation
             ? {
-                label: "Bob review",
+                label: "Fleetrac Analysis",
                 href: appendReturnTo(
-                  routeToBobInvestigation(bobInvestigation.id),
+                  routeToIncidentsForControl(snapshot.ruleId),
                   here
                 ),
-                icon: "bob"
+                icon: "analysis"
               }
-            : { label: "Bob review", icon: "bob", missing: true },
+            : { label: "Fleetrac Analysis", icon: "analysis", missing: true },
           firstAction
             ? {
                 label: "Governed action",
@@ -161,8 +158,8 @@ export function ControlDetailSurface({
             <div className="mt-2 flex flex-wrap gap-1.5">
               {snapshot.bobFlagged ? (
                 <Badge tone="info" size="xs" className="gap-0.5 font-semibold">
-                  <BobIcon size="xs" withBackground={false} />
-                  Bob flagged
+                  <Sparkles className="h-3 w-3 text-indigo-600" aria-hidden />
+                  Fleetrac flagged
                 </Badge>
               ) : null}
               {snapshot.activeNow ? (
@@ -237,30 +234,14 @@ export function ControlDetailSurface({
               <ChevronRight className="h-3 w-3 opacity-60" />
             </Link>
           ) : null}
-          {bobInvestigation ? (
-            <Link
-              href={appendReturnTo(
-                routeToBobInvestigation(bobInvestigation.id),
-                here
-              )}
-              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-800 hover:text-indigo-950"
-            >
-              <BobIcon size="xs" withBackground={false} />
-              Open Bob control review
-              <ExternalLink className="h-3 w-3 opacity-50" />
-            </Link>
-          ) : (
-            <Link
-              href={appendReturnTo(
-                routeToBobForTarget("control", snapshot.ruleId),
-                here
-              )}
-              className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
-            >
-              <BobIcon size="xs" withBackground={false} />
-              Start Bob review (resolver)
-            </Link>
-          )}
+          <Link
+            href={appendReturnTo(routeToIncidentsForControl(snapshot.ruleId), here)}
+            className="inline-flex items-center gap-1 text-xs font-medium text-indigo-800 hover:text-indigo-950"
+          >
+            <Sparkles className="h-3 w-3 text-indigo-600" aria-hidden />
+            Open Fleetrac analysis
+            <ExternalLink className="h-3 w-3 opacity-50" />
+          </Link>
         </div>
       </Card>
 
@@ -301,7 +282,7 @@ export function ControlDetailSurface({
       <Card surface="support">
         <CardHeader
           title="Recommended next action"
-          caption="Bob remains bounded, approval-gated, policy-checked, audit-linked, and reversible-by-default where supported."
+          caption="Fleetrac remains bounded, approval-gated, policy-checked, audit-linked, and reversible-by-default where supported."
         />
         <CardSection>
           <div className="flex flex-wrap gap-2">
@@ -376,7 +357,7 @@ export function ControlDetailSurface({
               </span>
             </p>
             <p>
-              Bob is bounded and approval-gated; tuning or split requests should
+              Fleetrac is bounded and approval-gated; tuning or split requests should
               route through Action Center when policy requires it.
             </p>
           </CardSection>
@@ -473,11 +454,12 @@ export function ControlDetailSurface({
                     >
                       Open incident
                     </Link>
-                    <AnalyzeWithBob
-                      targetType="incident"
-                      targetId={inc.id}
-                      label="Bob analysis"
-                    />
+                    <Link
+                      href={appendReturnTo(routeToIncident(inc.id), here)}
+                      className="text-[11px] font-semibold text-indigo-800"
+                    >
+                      Fleetrac analysis
+                    </Link>
                   </div>
                 </li>
               ))}
@@ -516,11 +498,10 @@ export function ControlDetailSurface({
         </CardSection>
       </Card>
 
-      {/* Bob control review */}
       <Card>
         <CardHeader
-          title="Bob control review"
-          caption="Bob is bounded, policy-checked, and audit-linked; recommendations are not autonomous execution."
+          title="Fleetrac Analysis"
+          caption="Bounded, policy-checked, and audit-linked; recommendations are not autonomous execution."
         />
         <CardSection>
           {bobInvestigation ? (
@@ -550,40 +531,34 @@ export function ControlDetailSurface({
                 <span className="capitalize">{bobInvestigation.confidence}</span>
               </p>
               <Link
-                href={appendReturnTo(
-                  routeToBobInvestigation(bobInvestigation.id),
-                  here
-                )}
+                href={appendReturnTo(routeToIncidentsForControl(snapshot.ruleId), here)}
                 className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-900 hover:underline"
               >
-                Open full Bob review
+                Open Incident Queue
                 <ChevronRight className="h-3 w-3" />
               </Link>
             </div>
           ) : (
             <div className="rounded-md border border-dashed border-slate-200 bg-slate-50/50 p-4 text-sm text-slate-600">
-              <p>No Bob investigation is attached to this control yet.</p>
+              <p>No Fleetrac analysis is attached to this control yet.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() =>
                     runDemo(
-                      "Run Bob control review (bounded analysis — queued locally)"
+                      "Run Fleetrac analysis (bounded — queued locally)"
                     )
                   }
                   className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-800 hover:bg-slate-50"
                 >
-                  Run Bob control review (demo)
+                  Run Fleetrac analysis (demo)
                 </button>
                 <Link
-                  href={appendReturnTo(
-                    routeToBobForTarget("control", snapshot.ruleId),
-                    here
-                  )}
+                  href={appendReturnTo(routeToIncidentsForControl(snapshot.ruleId), here)}
                   className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50/40 px-2.5 py-1 text-[11px] font-semibold text-indigo-900 hover:bg-indigo-50"
                 >
-                  <BobIcon size="xs" withBackground={false} />
-                  Open Bob resolver
+                  <Sparkles className="h-3 w-3 text-indigo-600" aria-hidden />
+                  Open Incident Queue
                 </Link>
               </div>
             </div>
@@ -609,7 +584,7 @@ export function ControlDetailSurface({
           />
           {bobInvestigation ? (
             <AuditRow
-              label="Bob review"
+              label="Fleetrac Analysis"
               detail={`Opened ${formatRelativeTime(bobInvestigation.created_at)} · ${bobInvestigation.title}`}
             />
           ) : null}

@@ -280,6 +280,7 @@ export type StructuredEvidenceRow = {
   evidenceItem: string;
   source: string;
   signal: string;
+  governanceRelevance: string;
   status: string;
   timestamp: string;
   rawLog: Record<string, unknown>;
@@ -387,6 +388,7 @@ export const INCIDENT_EVIDENCE_DETAILS: Partial<Record<string, IncidentEvidenceD
         evidenceItem: "Unsupported claim rate above threshold",
         source: "Runtime evaluation",
         signal: "claim_rate = 8.4% / threshold 3%",
+        governanceRelevance: "Output reliability control breach",
         status: "Confirmed",
         timestamp: "10d ago",
         rawLog: RAW_LOG_MRM_001_A
@@ -395,6 +397,7 @@ export const INCIDENT_EVIDENCE_DETAILS: Partial<Record<string, IncidentEvidenceD
         evidenceItem: "Retrieval confidence below baseline",
         source: "Retrieval monitor",
         signal: "confidence = 0.62 / baseline 0.78",
+        governanceRelevance: "Grounding quality degraded",
         status: "Confirmed",
         timestamp: "10d ago",
         rawLog: {
@@ -410,6 +413,7 @@ export const INCIDENT_EVIDENCE_DETAILS: Partial<Record<string, IncidentEvidenceD
         evidenceItem: "Citation fallback missing",
         source: "Response audit",
         signal: "fallback = false",
+        governanceRelevance: "Required fallback control missing",
         status: "Needs review",
         timestamp: "9d ago",
         rawLog: {
@@ -423,6 +427,7 @@ export const INCIDENT_EVIDENCE_DETAILS: Partial<Record<string, IncidentEvidenceD
         evidenceItem: "Recurrence pattern detected",
         source: "Fleetrac pattern analysis",
         signal: "2 repeats in 10d",
+        governanceRelevance: "Recurring issue, not isolated",
         status: "Confirmed",
         timestamp: "8d ago",
         rawLog: {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Circle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   INCIDENT_EVIDENCE_DETAILS,
@@ -25,6 +25,7 @@ import {
 import {
   routeToEvidenceLibraryOwnerPackage,
   routeToEvidenceLibraryTeam,
+  routeToIncidentsOwnerQueue,
   routes
 } from "@/lib/routes";
 
@@ -33,10 +34,28 @@ function fallbackStructuredFromPack(pack: IncidentEvidencePackMock): StructuredE
     evidenceItem: title,
     source: "Evidence package",
     signal: "See incident record",
+    governanceRelevance: "Governance signal recorded",
     status: "Recorded",
     timestamp: "—",
     rawLog: { packaged: true, incident_id: pack.incidentId }
   }));
+}
+
+function currentStageLabel(
+  lifecycle: IncidentEvidenceDetail["lifecycleTimestamps"] | undefined,
+  fallback: string
+): string {
+  if (!lifecycle) return fallback;
+  for (const key of INCIDENT_LIFECYCLE_ORDER) {
+    const step = lifecycle[key];
+    if (step?.state === "current") return step.label ?? lifecycleLabel(key);
+  }
+  for (const key of [...INCIDENT_LIFECYCLE_ORDER].reverse()) {
+    if (lifecycle[key]?.state === "done") {
+      return lifecycle[key]?.label ?? lifecycleLabel(key);
+    }
+  }
+  return fallback;
 }
 
 function mergeLifecycle(
@@ -113,33 +132,34 @@ export function EvidenceLibraryIncidentRecord({
 
   const sendToActionCenter = () => {
     pushMockActionCenterItem({
+      source: "Evidence Library",
       incidentId,
       title: detail?.title ?? pack?.title ?? incidentId,
-      ownerTeam: resolvedOwner
+      ownerTeam: resolvedOwner,
+      assignedTo: detail?.assigned ?? pack?.assignedReviewer,
+      systemName: detail?.systemName ?? pack?.systemName,
+      riskCategory: detail?.riskCategory ?? pack?.riskCategory,
+      severity: detail?.severity ?? pack?.severity,
+      recommendedAction: detail?.recommendedAction ?? pack?.recommendedAction,
+      status: "Awaiting approval",
+      verificationStatus: "Not started"
     });
     showToast("Sent to Action Center");
     if (!isArchived) {
       setLifecycle((prev) =>
         mergeLifecycle(prev ?? detail?.lifecycleTimestamps, {
-          action_approval: { label: "Action approval", at: "Queued", state: "current" },
-          owner_review: { label: "Owner review", at: "Complete", state: "done" }
+          action_approval: { label: "Action approval", at: "Awaiting approval", state: "current" },
+          owner_review: { label: "Owner review", at: "Complete", state: "done" },
+          remediation: { label: "Remediation", state: "pending" },
+          verification: { label: "Verification", state: "pending" },
+          closed: { label: "Closed / archived", state: "pending" }
         })
       );
     }
   };
 
-  const markReviewed = () => {
-    setDecisionLabel("Reviewed");
-    setLifecycle((prev) =>
-      mergeLifecycle(prev ?? detail?.lifecycleTimestamps, {
-        owner_review: { label: "Owner review", at: "Reviewed", state: "current" }
-      })
-    );
-    showToast("Marked reviewed");
-  };
-
   const approveRemediation = () => {
-    setDecisionLabel("Approved remediation");
+    setDecisionLabel("Approved");
     setNeedsMoreEvidence(false);
     setLifecycle((prev) =>
       mergeLifecycle(prev ?? detail?.lifecycleTimestamps, {
@@ -150,17 +170,23 @@ export function EvidenceLibraryIncidentRecord({
         closed: { label: "Closed / archived", state: "pending" }
       })
     );
-    showToast("Decision recorded — stage advanced to Action Approval");
+    showToast("Remediation approved");
   };
 
   const requestMoreEvidence = () => {
     setDecisionLabel("More evidence requested");
     setNeedsMoreEvidence(true);
-    showToast("Owner review continues — flag evidence as needs more detail");
+    setLifecycle((prev) =>
+      mergeLifecycle(prev ?? detail?.lifecycleTimestamps, {
+        owner_review: { label: "Owner review", at: "In progress", state: "current" }
+      })
+    );
+    showToast("More evidence requested");
   };
 
   const markFalsePositive = () => {
     if (!pack || resolvedOwner === "—") return;
+    setDecisionLabel("False positive");
     setLivePackages((prev) =>
       archiveIncidentInPackage(prev, resolvedOwner, incidentId, {
         title: pack.title,
@@ -170,7 +196,7 @@ export function EvidenceLibraryIncidentRecord({
         verificationResult: "Closed without material risk"
       })
     );
-    showToast("Incident archived as false positive");
+    showToast("Incident moved to resolved archive");
     router.push(scopeHref(routeToEvidenceLibraryOwnerPackage(resolvedOwner)));
   };
 
@@ -190,6 +216,12 @@ export function EvidenceLibraryIncidentRecord({
   const title = detail?.title ?? pack?.title ?? incidentId;
   const summary = detail?.summary ?? pack?.summary ?? "";
   const timelineSource = lifecycle ?? detail?.lifecycleTimestamps;
+  const stageDisplay = currentStageLabel(
+    timelineSource,
+    pack?.stage ?? detail?.recordSubtitle?.split(" · ").pop() ?? "—"
+  );
+  const recordKind = isArchived ? "Resolved" : "Active";
+  const handoffReady = decisionLabel === "Approved";
 
   return (
     <div className="space-y-6">
@@ -237,24 +269,31 @@ export function EvidenceLibraryIncidentRecord({
             </dd>
           </div>
         </dl>
+        <p className="mt-3 rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2 text-[12px] text-slate-600">
+          <span className="text-slate-500">Source:</span>{" "}
+          <Link
+            href={scopeHref(routeToIncidentsOwnerQueue(resolvedOwner, incidentId))}
+            className="font-medium text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-slate-950"
+          >
+            {resolvedOwner} owner queue
+          </Link>
+          <span className="text-slate-400"> · </span>
+          <span className="font-medium text-slate-800">{recordKind} evidence record</span>
+          <span className="text-slate-400"> · </span>
+          <span>
+            <span className="text-slate-500">Current stage:</span>{" "}
+            <span className="font-medium text-slate-800">{stageDisplay}</span>
+          </span>
+        </p>
       </header>
 
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
-        <button
-          type="button"
-          onClick={sendToActionCenter}
-          className="rounded-md bg-slate-900 px-3 py-2 text-[12px] font-semibold text-white hover:bg-slate-800"
+        <Link
+          href={scopeHref(routeToEvidenceLibraryOwnerPackage(resolvedOwner))}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
         >
-          Send to Action Center
-        </button>
-        <button
-          type="button"
-          onClick={markReviewed}
-          disabled={isArchived}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-        >
-          Mark reviewed
-        </button>
+          Back to owner package
+        </Link>
         <button
           type="button"
           onClick={() => {
@@ -270,43 +309,20 @@ export function EvidenceLibraryIncidentRecord({
         >
           Download JSON
         </button>
-        <Link
-          href={scopeHref(routeToEvidenceLibraryOwnerPackage(resolvedOwner))}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard.writeText(summary).catch(() => {});
+            showToast("Summary copied");
+          }}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-600 hover:bg-slate-50"
         >
-          Back to owner package
-        </Link>
+          Copy summary
+        </button>
       </div>
 
       {!isArchived && timelineSource ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-            Lifecycle timeline
-          </h2>
-          <ol className="mt-3 space-y-2">
-            {INCIDENT_LIFECYCLE_ORDER.map((key) => {
-              const custom = timelineSource[key];
-              const state = custom?.state ?? "pending";
-              const lab = custom?.label ?? lifecycleLabel(key);
-              return (
-                <li
-                  key={key}
-                  className={cn(
-                    "flex flex-wrap items-baseline justify-between gap-2 border-l-2 pl-3 text-[13px]",
-                    state === "done" && "border-emerald-500 text-slate-700",
-                    state === "current" && "border-slate-900 font-medium text-slate-900",
-                    state === "pending" && "border-slate-100 text-slate-400"
-                  )}
-                >
-                  <span>{lab}</span>
-                  {custom?.at ? (
-                    <span className="text-[11px] text-slate-500">{custom.at}</span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+        <LifecycleTimeline lifecycle={timelineSource} />
       ) : isArchived ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -356,12 +372,13 @@ export function EvidenceLibraryIncidentRecord({
           Captured logs / evidence items
         </h2>
         <div className="mt-3 overflow-x-auto">
-          <table className="min-w-[920px] w-full divide-y divide-slate-200 text-[12px]">
+          <table className="min-w-[1040px] w-full divide-y divide-slate-200 text-[12px]">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-2 py-2 text-left font-medium">Evidence item</th>
                 <th className="px-2 py-2 text-left font-medium">Source</th>
                 <th className="px-2 py-2 text-left font-medium">Signal</th>
+                <th className="px-2 py-2 text-left font-medium">Governance relevance</th>
                 <th className="px-2 py-2 text-left font-medium">Status</th>
                 <th className="px-2 py-2 text-left font-medium">Timestamp</th>
                 <th className="px-2 py-2 text-left font-medium">Raw log</th>
@@ -423,16 +440,26 @@ export function EvidenceLibraryIncidentRecord({
       ) : null}
 
       {!isArchived ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <section
+          className={cn(
+            "rounded-lg border bg-white p-4 shadow-sm",
+            handoffReady ? "border-slate-300 ring-1 ring-slate-200" : "border-slate-200"
+          )}
+        >
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Action handoff
           </h2>
+          {handoffReady ? (
+            <p className="mt-1 text-[11px] text-slate-600">
+              Remediation approved — ready to route to Action Center.
+            </p>
+          ) : null}
           <p className="mt-2 text-[13px] font-medium text-slate-900">
             Next step · {detail?.nextStep ?? "Send remediation to Action Center"}
           </p>
           {detail?.actionHandoffPreview?.length ? (
             <ul className="mt-2 list-inside list-disc space-y-1 text-[13px] text-slate-700">
-              <li className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 list-none">
+              <li className="list-none text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 Action preview
               </li>
               {detail.actionHandoffPreview.map((line) => (
@@ -443,7 +470,12 @@ export function EvidenceLibraryIncidentRecord({
           <button
             type="button"
             onClick={sendToActionCenter}
-            className="mt-4 inline-flex rounded-md border border-slate-900 bg-white px-3 py-2 text-[12px] font-semibold text-slate-900 hover:bg-slate-50"
+            className={cn(
+              "mt-4 inline-flex rounded-md px-3 py-2 text-[12px] font-semibold",
+              handoffReady
+                ? "bg-slate-900 text-white hover:bg-slate-800"
+                : "border border-slate-900 bg-white text-slate-900 hover:bg-slate-50"
+            )}
           >
             Send to Action Center →
           </button>
@@ -509,30 +541,97 @@ export function EvidenceLibraryIncidentRecord({
   );
 }
 
+function LifecycleTimeline({
+  lifecycle
+}: {
+  lifecycle: IncidentEvidenceDetail["lifecycleTimestamps"];
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        Lifecycle timeline
+      </h2>
+      <ol className="mt-3 space-y-0">
+        {INCIDENT_LIFECYCLE_ORDER.map((key) => {
+          const custom = lifecycle?.[key];
+          const state = custom?.state ?? "pending";
+          const lab = custom?.label ?? lifecycleLabel(key);
+          return (
+            <li
+              key={key}
+              className={cn(
+                "flex items-start gap-3 border-b border-slate-50 py-2.5 last:border-0",
+                state === "pending" && "opacity-70"
+              )}
+            >
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
+                {state === "done" ? (
+                  <Check className="h-3.5 w-3.5 text-slate-500" strokeWidth={2.5} />
+                ) : state === "current" ? (
+                  <Circle className="h-3 w-3 fill-slate-900 text-slate-900" />
+                ) : (
+                  <Circle className="h-3 w-3 text-slate-200" />
+                )}
+              </span>
+              <span
+                className={cn(
+                  "min-w-0 flex-1 text-[13px]",
+                  state === "done" && "text-slate-700",
+                  state === "current" && "font-semibold text-slate-900",
+                  state === "pending" && "text-slate-400"
+                )}
+              >
+                {lab}
+              </span>
+              {custom?.at ? (
+                <span
+                  className={cn(
+                    "shrink-0 text-[11px] tabular-nums",
+                    state === "current" ? "font-medium text-slate-700" : "text-slate-500"
+                  )}
+                >
+                  {custom.at}
+                </span>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function EvidenceRow({ row }: { row: StructuredEvidenceRow }) {
   const [open, setOpen] = useState(false);
   return (
-    <tr className="align-top">
-      <td className="px-2 py-2 font-medium text-slate-900">{row.evidenceItem}</td>
-      <td className="px-2 py-2 text-slate-700">{row.source}</td>
-      <td className="max-w-[220px] px-2 py-2 font-mono text-[11px] text-slate-600">{row.signal}</td>
-      <td className="whitespace-nowrap px-2 py-2 text-slate-700">{row.status}</td>
-      <td className="whitespace-nowrap px-2 py-2 text-slate-500">{row.timestamp}</td>
-      <td className="px-2 py-2">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="text-[11px] font-semibold text-slate-700 underline decoration-slate-300 underline-offset-2"
-          aria-expanded={open}
-        >
-          {open ? "Hide raw log" : "Expand raw log"}
-        </button>
-        {open ? (
-          <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-slate-900 p-2 font-mono text-[10px] leading-relaxed text-slate-100">
-            {JSON.stringify(row.rawLog, null, 2)}
-          </pre>
-        ) : null}
-      </td>
-    </tr>
+    <>
+      <tr className="align-top">
+        <td className="px-2 py-2 font-medium text-slate-900">{row.evidenceItem}</td>
+        <td className="px-2 py-2 text-slate-700">{row.source}</td>
+        <td className="max-w-[200px] px-2 py-2 font-mono text-[11px] text-slate-600">{row.signal}</td>
+        <td className="max-w-[180px] px-2 py-2 text-slate-700">{row.governanceRelevance}</td>
+        <td className="whitespace-nowrap px-2 py-2 text-slate-700">{row.status}</td>
+        <td className="whitespace-nowrap px-2 py-2 text-slate-500">{row.timestamp}</td>
+        <td className="px-2 py-2">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-[11px] font-semibold text-slate-700 underline decoration-slate-300 underline-offset-2"
+            aria-expanded={open}
+          >
+            {open ? "Hide raw log" : "Expand raw log"}
+          </button>
+        </td>
+      </tr>
+      {open ? (
+        <tr>
+          <td colSpan={7} className="bg-slate-50/80 px-3 py-2">
+            <pre className="max-h-48 overflow-auto rounded-md border border-slate-200 bg-slate-100 p-2 font-mono text-[10px] leading-relaxed text-slate-800">
+              {JSON.stringify(row.rawLog, null, 2)}
+            </pre>
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }

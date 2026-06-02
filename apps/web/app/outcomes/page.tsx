@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { EvidenceLibraryApp } from "@/components/evidence-library/evidence-library-app";
-import { SectionTitle } from "@/components/ui/section-title";
+import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { getSystems } from "@/lib/api";
 import { routes, routeToSystem } from "@/lib/routes";
 import {
@@ -56,12 +56,13 @@ export default async function OutcomesPage({
           </Link>
         </div>
 
-        <SectionTitle
-          eyebrow={`System · ${scopedSystem.use_case}`}
+        <GovernancePageShell
+          loop="measure"
+          eyebrow={`Measure · ${scopedSystem.use_case}`}
           title="Evidence Library"
-          caption={`Scoped context for ${scopedSystem.use_case}. Owner-team evidence packages are indexed from the main library. Profile scope: ${scopeLabel}.`}
-        />
-
+          subtitle={`Scoped context · profile scope: ${scopeLabel}`}
+          workflowLine="Owner-team evidence packages are indexed from the main library"
+        >
         <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 text-[13px] text-slate-700">
           <p>
             For governed execution and remediation follow-up for this system, use production
@@ -84,6 +85,7 @@ export default async function OutcomesPage({
         </div>
 
         <EvidenceLibraryApp />
+        </GovernancePageShell>
       </section>
     );
   }

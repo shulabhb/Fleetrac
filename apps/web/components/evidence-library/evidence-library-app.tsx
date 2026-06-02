@@ -15,6 +15,8 @@ import {
   routeToEvidenceLibraryOwnerPackage,
   routeToEvidenceLibraryTeam
 } from "@/lib/routes";
+import { GovernancePageShell } from "@/components/layout/governance-page-shell";
+import { SummaryMini } from "@/components/ui/summary-mini";
 import { EvidenceLibraryIncidentRecord } from "@/components/evidence-library/evidence-library-incident-record";
 import { EvidenceLibraryOwnerPackage } from "@/components/evidence-library/evidence-library-owner-package";
 
@@ -86,31 +88,29 @@ function TeamLibraryView({
   const summary = getTeamLibrarySummary();
 
   return (
-    <div className="space-y-5">
-      <header className="space-y-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          Evidence Library
-        </p>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-          Evidence Library
-        </h1>
-        <p className="max-w-3xl text-[13px] leading-relaxed text-slate-600">
-          Living governance evidence organized by owner team, incident status, and lifecycle
-          stage.
-        </p>
-      </header>
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <SummaryCard label="Active owner packages" value={summary.activeOwnerPackages} />
-        <SummaryCard label="Active incident records" value={summary.activeIncidentRecords} />
-        <SummaryCard label="Awaiting review" value={summary.awaitingReview} />
-        <SummaryCard label="Under verification" value={summary.underVerification} />
-        <SummaryCard
-          className="sm:col-span-1 col-span-2"
-          label="Archived / resolved"
-          value={summary.archivedResolved}
-        />
-      </div>
+    <GovernancePageShell
+      loop="measure"
+      eyebrow="Measure · Evidence and verification"
+      title="Evidence Library"
+      subtitle={`${summary.activeOwnerPackages} owner packages · ${summary.awaitingReview} awaiting review`}
+      workflowLine="Living governance evidence by owner team, incident status, and lifecycle stage"
+      summary={
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <SummaryMini label="Active owner packages" value={String(summary.activeOwnerPackages)} />
+          <SummaryMini
+            label="Active incident records"
+            value={String(summary.activeIncidentRecords)}
+          />
+          <SummaryMini label="Awaiting review" value={String(summary.awaitingReview)} />
+          <SummaryMini label="Under verification" value={String(summary.underVerification)} />
+          <SummaryMini
+            label="Archived / resolved"
+            value={String(summary.archivedResolved)}
+          />
+        </div>
+      }
+    >
+      <div className="space-y-5">
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-[13px]">
@@ -162,29 +162,7 @@ function TeamLibraryView({
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+    </GovernancePageShell>
   );
 }
-
-function SummaryCard({
-  label,
-  value,
-  className
-}: {
-  label: string;
-  value: number;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm",
-        className
-      )}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900">{value}</p>
-    </div>
-  );
-}
-

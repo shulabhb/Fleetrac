@@ -12,7 +12,7 @@ import { cn } from "@/lib/cn";
 type Step = {
   label: string;
   href?: string;
-  icon?: "incident" | "bob" | "action" | "outcome" | "control";
+  icon?: "incident" | "analysis" | "action" | "outcome" | "control";
   active?: boolean;
   missing?: boolean;
 };
@@ -21,7 +21,7 @@ type Step = {
  * A thin horizontal breadcrumb making the governed-remediation workflow
  * legible at the top of detail pages:
  *
- *   Incident → Bob investigation → Governed action → Measured outcome
+ *   Incident → Fleetrac Analysis → Governed action → Measured outcome
  *
  * Steps that don't yet exist are dimmed; the active step is emphasized.
  * Intentionally calm — this is orientation, not navigation primary.
@@ -39,7 +39,7 @@ export function FlowBreadcrumb({ steps }: { steps: Step[] }) {
         const icon =
           s.icon === "incident" ? (
             <AlertTriangle className="h-3 w-3" />
-          ) : s.icon === "bob" ? (
+          ) : s.icon === "analysis" ? (
             <Sparkles className="h-3 w-3" />
           ) : s.icon === "action" ? (
             <PlayCircle className="h-3 w-3" />

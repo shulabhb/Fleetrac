@@ -1,25 +1,29 @@
-import { SectionTitle } from "@/components/ui/section-title";
-import { Card } from "@/components/ui/card";
+import { LiveSignalsFeed } from "@/components/live-signals/live-signals-feed";
+import { GovernancePageShell } from "@/components/layout/governance-page-shell";
+import { SummaryMini } from "@/components/ui/summary-mini";
+import { LIVE_SIGNALS_SUMMARY } from "@/lib/governance-demo-model";
 
 export default function LiveSignalsPage() {
   return (
-    <section className="space-y-5">
-      <SectionTitle
-        eyebrow="Observe · Signal hygiene"
-        title="Live Signals"
-        caption="Streaming governance-relevant signals across production AI — curated for triage, not raw telemetry noise."
-      />
-      <Card className="border-dashed border-slate-200 bg-slate-50/50 p-8 shadow-none">
-        <p className="text-sm leading-relaxed text-slate-700">
-          This workflow is next on the roadmap. You will use it to scan live control posture, drift, and policy signals
-          before they become incidents — without leaving the governance narrative.
-        </p>
-        <p className="mt-3 text-[13px] font-medium text-slate-900">Coming next in workflow</p>
-        <p className="mt-1 text-sm text-slate-600">
-          For now, start from <strong className="font-semibold text-slate-800">Governance Insights</strong> on the
-          Dashboard and route open work through the Incident Queue and Action Center.
-        </p>
-      </Card>
-    </section>
+    <GovernancePageShell
+      loop="observe"
+      eyebrow="Observe · Signal hygiene"
+      title="Live Signals"
+      subtitle={`${LIVE_SIGNALS_SUMMARY.active} active · ${LIVE_SIGNALS_SUMMARY.critical} critical / high`}
+      workflowLine="Streaming governance signals — drift, grounding, policy, and security — before they become incidents"
+      summary={
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <SummaryMini label="Active signals" value={String(LIVE_SIGNALS_SUMMARY.active)} />
+          <SummaryMini label="Critical / high" value={String(LIVE_SIGNALS_SUMMARY.critical)} />
+          <SummaryMini label="Linked incidents" value={String(LIVE_SIGNALS_SUMMARY.linkedIncidents)} />
+          <SummaryMini
+            label="Systems affected"
+            value={String(LIVE_SIGNALS_SUMMARY.systemsAffected)}
+          />
+        </div>
+      }
+    >
+      <LiveSignalsFeed />
+    </GovernancePageShell>
   );
 }

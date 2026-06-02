@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { navItems } from "@/lib/nav";
-import { isIncidentDetailPath, routes } from "@/lib/routes";
+import { routes } from "@/lib/routes";
 import { ResetDemoStateButton } from "@/components/reset-demo-state-button";
 import { cn } from "@/lib/cn";
 import {
@@ -70,8 +70,12 @@ export function Sidebar() {
               <span className="h-3 w-3 rounded-full border border-white bg-slate-950" aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-extrabold tracking-tight text-slate-950">SHUUU</p>
-              <p className="truncate text-[11px] font-medium text-slate-700">AI Ops Lead</p>
+              <p className="truncate text-[13px] font-extrabold tracking-tight text-slate-950">
+                Fleet Governor
+              </p>
+              <p className="truncate text-[11px] font-medium text-slate-700">
+                Production AI scope
+              </p>
             </div>
           </div>
           <div className="relative mt-2" ref={scopeMenuRef}>
@@ -126,8 +130,6 @@ export function Sidebar() {
             pathname === item.href ||
             (item.href !== "/" && pathname.startsWith(item.href));
           const Icon = item.icon;
-          const incidentTriageDock =
-            item.href === routes.incidents() && isIncidentDetailPath(pathname);
           const href = withAiScope(item.href, scope);
           return (
             <Link
@@ -146,18 +148,19 @@ export function Sidebar() {
                   active ? "text-white" : "text-slate-400 group-hover:text-slate-700"
                 )}
               />
-              <span className="min-w-0 flex-1 font-medium">{item.label}</span>
-              {incidentTriageDock ? (
-                <span
-                  className={cn(
-                    "shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
-                    active ? "bg-white/15 text-white" : "bg-slate-200 text-slate-600"
-                  )}
-                  title="Open queue is shown beside the nav"
-                >
-                  Triage
-                </span>
-              ) : null}
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{item.label}</span>
+                {active ? (
+                  <span
+                    className={cn(
+                      "block text-[10px] font-medium capitalize",
+                      active ? "text-white/70" : "text-slate-400"
+                    )}
+                  >
+                    {item.loop}
+                  </span>
+                ) : null}
+              </span>
             </Link>
           );
         })}

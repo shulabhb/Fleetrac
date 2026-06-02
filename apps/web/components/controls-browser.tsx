@@ -17,10 +17,9 @@ import {
   signalColor,
   signalTypeForField
 } from "@/lib/present";
-import { BobIcon } from "@/components/bob/bob-icon";
+import { Sparkles } from "lucide-react";
 import {
   appendReturnTo,
-  routeToBobInvestigation,
   routeToControl,
   routeToIncidentsForControl
 } from "@/lib/routes";
@@ -450,7 +449,7 @@ function BucketStrip({
     },
     {
       id: "bob_flagged",
-      label: "Bob flagged",
+      label: "Fleetrac flagged",
       caption: "Review or tune",
       tone: "indigo"
     },
@@ -675,8 +674,8 @@ function CompactRow({
               className="inline-flex shrink-0 items-center gap-0.5 rounded bg-indigo-50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-800 ring-1 ring-indigo-200/80"
               title={bob.summary}
             >
-              <BobIcon size="xs" withBackground={false} />
-              Bob
+              <Sparkles className="h-3 w-3 text-indigo-600" aria-hidden />
+              Fleetrac
             </span>
           ) : null}
         </div>
@@ -759,11 +758,11 @@ function CompactRow({
           ) : null}
           {bob ? (
             <Link
-              href={appendReturnTo(routeToBobInvestigation(bob.id), listReturnTo)}
+              href={appendReturnTo(routeToIncidentsForControl(rule.id), listReturnTo)}
               className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-indigo-800 hover:text-indigo-950"
             >
-              <BobIcon size="xs" withBackground={false} />
-              Bob review
+              <Sparkles className="h-3 w-3 text-indigo-600" aria-hidden />
+              Fleetrac review
             </Link>
           ) : null}
         </div>
@@ -863,8 +862,8 @@ function ControlCard({
           </span>
           {bob ? (
             <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-800">
-              <BobIcon size="xs" withBackground={false} />
-              Bob
+              <Sparkles className="h-3 w-3 text-indigo-600" aria-hidden />
+              Fleetrac
             </span>
           ) : null}
         </div>
@@ -912,7 +911,7 @@ function ControlCard({
         </div>
       ) : isRecurring ? (
         <p className="mt-2 border-t border-slate-100 pt-2 text-[11px] text-slate-600">
-          Recurring: {recentCount} fires (7d) · consider Bob review when ready.
+          Recurring: {recentCount} fires (7d) · review in Incident Queue when ready.
         </p>
       ) : null}
 
@@ -959,11 +958,11 @@ function ControlCard({
           ) : null}
           {bob ? (
             <Link
-              href={appendReturnTo(routeToBobInvestigation(bob.id), listReturnTo)}
+              href={appendReturnTo(routeToIncidentsForControl(rule.id), listReturnTo)}
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-800 hover:text-indigo-950"
             >
-              <BobIcon size="xs" withBackground={false} />
-              Bob review
+              <Sparkles className="h-3 w-3 text-indigo-600" aria-hidden />
+              Fleetrac review
             </Link>
           ) : null}
         </div>
