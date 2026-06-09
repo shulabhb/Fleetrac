@@ -652,8 +652,11 @@ def _build_audit_logs(incidents: list[Incident], telemetry_events: list[Telemetr
 
 
 def generate_mock_store() -> dict[str, list]:
-    rows = load_post_go_live_rows()
-    systems = [_build_system(row) for row in rows]
+    from app.fleet.mock_alignment import _fleet_system_entity
+    from app.fleet.registry import FLEET_SYSTEMS
+
+    systems = [_fleet_system_entity(spec.id) for spec in FLEET_SYSTEMS]
+    rows = [_fleet_metrics_row(spec.id) for spec in FLEET_SYSTEMS]
     rules = _build_rules()
 
     telemetry_by_system: dict[str, list[TelemetryEvent]] = {}
@@ -677,6 +680,44 @@ def generate_mock_store() -> dict[str, list]:
         "incidents": incidents,
         "audit_logs": audit_logs,
         "rules": rules,
+    }
+
+
+def _fleet_metrics_row(fleet_id: str) -> dict:
+    from app.fleet.registry import SYSTEM_BY_ID
+    from app.simulator.system_profiles import profile_for
+
+    fleet = SYSTEM_BY_ID[fleet_id]
+    profile = profile_for(fleet_id)
+    bm = fleet.baseline_metrics
+    h = abs(hash(fleet_id))
+    return {
+        "model": profile.model_code,
+        "use_case": profile.use_case,
+        "model_owner": fleet.owner_team,
+        "model_type": profile.model_type_label,
+        "telemetry_archetype": "agentic_workflow",
+        "business_function": fleet.name,
+        "deployment_scope": "internal",
+        "regulatory_sensitivity": "high_regulated",
+        "control_owner": fleet.team_lead,
+        "expected_drift_score": 0.12,
+        "expected_latency_p95_ms": bm.get("latency_ms", 350),
+        "expected_grounding_score": bm.get("grounding_score", 0.85),
+        "expected_hallucination_rate": bm.get("unsupported_claim_rate", 0.01) * 100,
+        "context_retrieval_hit_rate": 1 - bm.get("retrieval_failure_rate", 0.02),
+        "observed_latency_p95_ms": bm.get("latency_ms", 350) * (1 + (h % 5) * 0.02),
+        "observed_grounding_score": bm.get("grounding_score", 0.86),
+        "drift_index": 0.08 + (h % 7) * 0.005,
+        "unsupported_claim_rate": bm.get("unsupported_claim_rate", 0.01),
+        "retrieval_failure_rate": bm.get("retrieval_failure_rate", 0.02),
+        "audit_coverage_pct": bm.get("audit_coverage_pct", 0.98) * 100
+        if bm.get("audit_coverage_pct", 0) <= 1
+        else bm.get("audit_coverage_pct", 98),
+        "policy_violation_rate": bm.get("policy_violation_rate", 0.005),
+        "security_anomaly_count": bm.get("security_anomaly_count", 0),
+        "accuracy_pct": 92,
+        "error_pct": 8,
     }
 
 

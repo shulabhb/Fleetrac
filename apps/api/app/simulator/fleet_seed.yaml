@@ -1,0 +1,10 @@
+systems:
+  - id: sys-agt-treasury-001
+    display_id: M40
+    name: Treasury Commentary Agent
+    name_alias: NII Sensitivity
+    owner_team: Model Risk Management
+    team_lead: Anika Rao
+    default_reviewer: Evan Brooks
+aliases:
+  inc-mrm-001: inc_sys-agt-treasury-001_unsupported_claim_001

@@ -114,59 +114,99 @@ Master–detail pages: `lg:grid-cols-[1fr_minmax(280px,340px)]` (Incident Queue,
 
 ---
 
-## Demo data architecture
+## Multi-cloud simulator and ingestion pipeline
 
-**Import rule:** Prefer `apps/web/lib/governance-demo-model.ts` for cross-route IDs and pitchable constants. Avoid duplicating incident/system IDs in new mocks.
+Local SQLite (`apps/api/data/fleetrac_sim.db`) is the **source of truth** for governance runtime data when the simulator is active.
 
-### Canonical barrel: `governance-demo-model.ts`
+### Architecture
 
-Re-exports aligned slices and adds:
+| Layer | Path | Role |
+|-------|------|------|
+| Simulator | `apps/api/app/simulator/` | Scenario generators; **must** POST via HTTP loopback to ingest |
+| Ingest | `POST /api/v1/ingest/events` | Validate, persist raw, adapt, normalize, detect |
+| Pipeline | `apps/api/app/pipeline/` | OTEL + AWS/Azure/GCP adapters → `FleetracEvent` |
+| Detection | `apps/api/app/detection/` | Rule engine + correlator → incidents |
+| Governance | `apps/api/app/governance/` | Evidence, Fleetrac Analysis, notifications, actions, verification |
+| Read APIs | `GET /api/v1/governance/*` | Live signals, owner queue, evidence library, dashboard summary |
+| SSE | `GET /api/v1/events/stream` | Live Signals push; 5s polling fallback in `use-event-stream.ts` |
 
-- `NOTIFICATION_EVENTS` — Slack / email / in-app (Dashboard bell)
-- `FLEETRAC_OPERATING_SCOPE` — prototype policy boundaries (Settings panel)
+### Feature flag
 
-### Source modules (thin; do not fork IDs)
+- `NEXT_PUBLIC_GOVERNANCE_API=1` (default): frontend reads governance APIs first.
+- `NEXT_PUBLIC_GOVERNANCE_API=0`: legacy mock catalogs render unchanged demo rows.
 
-| Module | Contents |
-|--------|----------|
-| `governance-dashboard-mock.ts` | `GOVERNED_SYSTEMS`, `DASHBOARD_KPI`, owner insights, owner priority rows |
-| `incident-queue-owner-review-mock.ts` | Owner queue rows, `pushMockActionCenterItem`, evidence labels, `OWNER_QUEUE_*` |
-| `evidence-library-mock.ts` | Team library, `INCIDENT_EVIDENCE_DETAILS`, owner packages |
-| `live-signals-mock.ts` | `liveRuntimeSignals()`, `LIVE_SIGNALS_SUMMARY` |
-| `governance-demo-model-analysis.ts` | `FLEETRAC_ANALYSIS_BY_INCIDENT` (avoids circular imports with actions mock) |
-| `governed-actions-mock.ts` | `GOVERNED_ACTIONS_CATALOG`, `mergeGovernedActions()`, tab helpers |
-| `governance-demo-actions.ts` | **Session storage** for queue/evidence → Action Center handoffs |
+**Merge rule:** API-sourced rows replace matching mock rows by alias (`inc-mrm-001`, `M40`); mocks remain as fallback only.
 
-### Pitchable demo fleet (aligned IDs)
+### Key client modules
 
-Owner teams: **Model Risk Management**, **Security Operations**, **Platform Reliability**.
+| Module | Role |
+|--------|------|
+| `apps/web/lib/governance-api.ts` | Governance + simulator HTTP client |
+| `apps/web/lib/simulator-api.ts` | Simulator control re-exports |
+| `apps/web/lib/governance-merge.ts` | API → UI row mappers |
+| `apps/web/lib/governance-types.ts` | Shared types (no mock rows) |
+| `apps/web/hooks/use-governance-data.ts` | Polling refresh for governance surfaces |
+| `apps/web/hooks/use-event-stream.ts` | SSE + polling fallback |
 
-Canonical incidents for demos:
+### Pitch commands
 
-- `inc-mrm-001` — primary Model Risk / grounding path
-- `inc-mrm-002`, `inc-sec-001`, `inc-plat-001` — queue and action catalog seeds
-- `inc-gov-001`, `inc-auto-001` — policy-blocked and auto-in-scope action examples
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/simulator/reset
+curl -X POST http://127.0.0.1:8000/api/v1/simulator/pitch/treasury_unsupported_claim
+```
 
-### Scripted demo path (no legacy URLs)
+Full loop: Live Signals → Incident Queue (MRM) → Evidence Library → Action Center → Approve → Verify → Dashboard.
 
-1. **Dashboard** — posture, owner queue CTA, notification bell  
-2. **Live Signals** — signal linked to `inc-mrm-001`  
-3. **Incident Queue** — `?queue=owner`, Fleetrac Analysis on detail, Send to Action Center  
-4. **Evidence Library** — `?evidenceMode=incident-record&incidentId=inc-mrm-001`  
-5. **Action Center** — governed inbox, approve, execution mode chip  
-6. **Evidence Library** — verification / lifecycle copy  
-7. **Settings** — connectors, **Fleetrac operating scope**
+### Production replacement path
+
+Simulator generators → OTEL Collector / cloud log sinks → same `POST /ingest/events` envelope. SQLite → Postgres. Template analysis → policy-guarded LLM assist.
 
 ---
 
-## Action Center (governed inbox only)
+## Demo data architecture
 
-- **No** `getActions()` in the page inbox; **no** “Sample actions (API)” UI.
-- Inbox = `mergeGovernedActions(readDemoWorkflowActions())` from `governed-actions-mock.ts` + session overlay.
-- Session: `governance-demo-actions.ts` (`fleetrac-mock-action-center-items`, event `fleetrac-demo-actions-updated`).
-- Dedupe by `incidentId`; selection id prefix `gov:{actionId}`.
-- Tabs (URL `tab`): `pending` \| `ready` \| `closed` (legacy tab names normalize in workspace).
-- Detail: `action-center-detail-panel.tsx` — Approve/Reject, Fleetrac Analysis, links to evidence and queue.
+**Import rule:** Prefer `apps/web/lib/governance-types.ts` and `governance-incident-routing.ts` for IDs and routing. Use `governance-demo-model.ts` only for API-off fallback constants.
+
+### Canonical modules
+
+| Module | Contents | When used |
+|--------|----------|-----------|
+| `governance-api.ts` + `governance-merge.ts` | Live API data | `NEXT_PUBLIC_GOVERNANCE_API=1` (default) |
+| `governance-dashboard-mock.ts` | KPI/owner fiction | API-off fallback only |
+| `incident-queue-owner-review-mock.ts` | Queue rows | API-off fallback only |
+| `evidence-library-mock.ts` | Library catalog | API-off fallback only |
+| `live-signals-mock.ts` | Signal catalog | API-off fallback only |
+| `governed-actions-types.ts` | Action types + tab helpers | Always (types only) |
+
+### Pitchable fleet (10 systems)
+
+Registry: `apps/api/app/fleet/registry.py`. Owner teams: **Model Risk Management**, **Security Operations**, **Platform Reliability**.
+
+Primary pitch IDs:
+
+- System: `sys-agt-treasury-001` / display `M40`
+- Incident alias: `inc-mrm-001` (canonical: `inc_sys-agt-treasury-001_unsupported_claim_001`)
+- Security alternate: `sys-agt-cs-002` / `A12` → `inc-sec-001`
+
+### Scripted demo path
+
+1. **Reset + pitch** — simulator controls or `POST /simulator/pitch/treasury_unsupported_claim`
+2. **Live Signals** — SSE feed with linked incident
+3. **Incident Queue** — MRM owner queue, Fleetrac Analysis on detail
+4. **Evidence Library** — incident record for `inc-mrm-001`
+5. **Action Center** — approve governed action (`approval_required`)
+6. **Verify** — post-remediation traffic + incident closed
+7. **Dashboard** — live KPIs from `dashboard-summary`
+
+---
+
+## Action Center (governed inbox)
+
+- Inbox reads `GET /api/v1/governance/actions` when governance API is enabled.
+- Handoffs: `POST /api/v1/governance/incidents/{id}/actions` from Incident Queue / Evidence Library.
+- Approve/reject/verify: governance action endpoints (not session overlay).
+- Tabs (URL `tab`): `pending` | `ready` | `closed`.
+- Detail: `action-center-detail-panel.tsx` — bounded execution mode chip, Fleetrac Analysis, evidence links.
 
 ---
 
@@ -193,7 +233,7 @@ Scoped system view: `outcomes/page.tsx` with `?system=` — shell + context bann
 - Single workbench at `/incidents` (no standalone triage dock).
 - Owner mode: `?queue=owner&owner={team}&incident={id}`.
 - Filters: `system`, `severity`, `risk`, `owner`, `lifecycle`, `q`, `rule` (control scope).
-- Detail panel: Fleetrac Analysis (`fleetracAnalysisForQueueIncident`), send to Action Center via `pushMockActionCenterItem`.
+- Detail panel: Fleetrac Analysis from evidence API, send to Action Center via `handoffIncidentToActionCenter`.
 
 ---
 
@@ -249,15 +289,17 @@ Tone: enterprise operational; avoid marketing copy.
 
 ## API vs prototype boundaries
 
-| Area | Source |
-|------|--------|
-| Action Center inbox | Mock catalog + session only |
-| Dashboard owner queue / KPIs | `governance-dashboard-mock` (+ overrides in dashboard client state) |
-| Live Signals table | `live-signals-mock.ts` |
-| Systems list/detail, settings integrations | API (`lib/api.ts`) with mock/sample backend data |
-| Notifications on Dashboard | `NOTIFICATION_EVENTS` in demo model (not live Slack) |
+| Area | Source (API on) | Fallback (API off) |
+|------|-----------------|---------------------|
+| Live Signals | `GET /governance/live-signals` + SSE | `live-signals-mock.ts` |
+| Incident Queue | `GET /governance/owner-queue` | `incident-queue-owner-review-mock.ts` |
+| Evidence Library | `GET /governance/evidence-library` | `evidence-library-mock.ts` |
+| Action Center | `GET /governance/actions` | Empty inbox |
+| Dashboard KPIs | `GET /governance/dashboard-summary` | `governance-dashboard-mock.ts` |
+| Notifications | `GET /governance/notifications` | Empty bell |
+| Systems list/detail, settings | API (`lib/api.ts`) | Sample backend data |
 
-Backend may still expose Bob-related endpoints/sample data; web UI does not surface Bob routes.
+Bob API routes are deprecated; use governance evidence Fleetrac Analysis instead.
 
 ---
 
@@ -287,7 +329,7 @@ Backend may still expose Bob-related endpoints/sample data; web UI does not surf
 
 1. Confirm ownership and IA impact first (which loop step owns the change).
 2. Stage: routing/state and demo model alignment before large layout moves.
-3. Extend `governance-demo-model` / existing mocks rather than adding parallel ID graphs.
+3. Extend `governance-merge.ts` / `governance-api.ts` rather than adding parallel ID graphs.
 4. Re-verify pitch path, trust language, and shell consistency.
 
 ---

@@ -1,6 +1,14 @@
 /**
  * Canonical demo governance graph — re-exports aligned mocks + shared constants.
+ * @deprecated Operational arrays are API-off fallbacks only when NEXT_PUBLIC_GOVERNANCE_API=0.
  */
+
+export type {
+  NotificationTarget,
+  NotificationEvent
+} from "@/lib/governance-notification-types";
+
+import type { NotificationEvent } from "@/lib/governance-notification-types";
 
 export {
   GOVERNED_SYSTEMS,
@@ -29,15 +37,21 @@ export {
   OWNER_QUEUE_FLEETRAC_ANALYSIS,
   OWNER_QUEUE_RECENT_ACTIVITY,
   allOwnerQueueRows,
+  ownerEvidenceLibraryLine,
+  OWNER_QUEUE_EVIDENCE_RECORDS
+} from "@/lib/incident-queue-owner-review-mock";
+
+export {
   fleetracAnalysisForQueueIncident,
   PRIMARY_OWNER_QUEUE_TEAMS,
-  ownerEvidenceLibraryLine,
-  OWNER_QUEUE_EVIDENCE_RECORDS,
-  findOwnerTeamForQueueIncident,
-  isGovernanceQueueIncidentId,
   type OwnerReviewTableRow,
   type QueueTableRow
-} from "@/lib/incident-queue-owner-review-mock";
+} from "@/lib/incident-queue-types";
+
+export {
+  findOwnerTeamForQueueIncident,
+  isGovernanceQueueIncidentId
+} from "@/lib/governance-incident-routing";
 
 export {
   FLEETRAC_ANALYSIS_BY_INCIDENT,
@@ -50,15 +64,23 @@ export {
   INCIDENT_EVIDENCE_DETAILS
 } from "@/lib/evidence-library-mock";
 
-export { liveRuntimeSignals, LIVE_SIGNALS_SUMMARY } from "@/lib/live-signals-mock";
+export {
+  liveRuntimeSignals,
+  LIVE_SIGNALS_SUMMARY
+} from "@/lib/live-signals-mock";
+
+export type {
+  LiveSignalSeverity,
+  LiveSignalCategory,
+  LiveRuntimeSignal,
+  LiveSignalsSummary
+} from "@/lib/live-signals-types";
 
 export {
-  GOVERNED_ACTIONS_CATALOG,
-  mergeGovernedActions,
   governedInTab,
   type GovernedAction,
   type GovernedExecutionMode
-} from "@/lib/governed-actions-mock";
+} from "@/lib/governed-actions-types";
 
 /** Fleetrac may auto-execute vs always escalate (prototype copy). */
 export const FLEETRAC_OPERATING_SCOPE = {
@@ -76,15 +98,7 @@ export const FLEETRAC_OPERATING_SCOPE = {
   ]
 } as const;
 
-export type NotificationEvent = {
-  id: string;
-  at: string;
-  channel: "Slack" | "Email" | "In-app";
-  summary: string;
-  ownerTeam: string;
-  incidentId?: string;
-};
-
+/** @deprecated API-off fallback only — use governance notifications API when enabled. */
 export const NOTIFICATION_EVENTS: NotificationEvent[] = [
   {
     id: "n1",
@@ -92,7 +106,8 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
     channel: "Slack",
     summary: "Owner review requested · #ai-governance · Model Risk Management",
     ownerTeam: "Model Risk Management",
-    incidentId: "inc-mrm-001"
+    incidentId: "inc-mrm-001",
+    target: "incident-queue"
   },
   {
     id: "n2",
@@ -100,7 +115,8 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
     channel: "Slack",
     summary: "Action approval pending · Ticket Routing Agent tool scope",
     ownerTeam: "Security Operations",
-    incidentId: "inc-sec-001"
+    incidentId: "inc-sec-001",
+    target: "action-center"
   },
   {
     id: "n3",
@@ -108,6 +124,7 @@ export const NOTIFICATION_EVENTS: NotificationEvent[] = [
     channel: "In-app",
     summary: "Verification window opened · Platform Reliability queue",
     ownerTeam: "Platform Reliability",
-    incidentId: "inc-plat-001"
+    incidentId: "inc-plat-001",
+    target: "evidence"
   }
 ];

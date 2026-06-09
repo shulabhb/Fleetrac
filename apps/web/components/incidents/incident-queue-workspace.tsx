@@ -3,25 +3,21 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Select } from "@/components/ui/select";
 import { SummaryMini } from "@/components/ui/summary-mini";
-import { DASHBOARD_KPI } from "@/lib/governance-demo-model";
 import {
-  allOwnerQueueRows,
-  fleetracAnalysisForQueueIncident,
   formatQueueEvidenceLabel,
-  OWNER_QUEUE_EVIDENCE_RECORDS,
-  OWNER_QUEUE_RECENT_ACTIVITY,
-  OWNER_REVIEW_QUEUE_ROWS,
-  ownerEvidenceLibraryLine,
   PRIMARY_OWNER_QUEUE_TEAMS,
-  pushMockActionCenterItem,
   type OwnerReviewTableRow,
   type QueueTableRow
-} from "@/lib/incident-queue-owner-review-mock";
-import { getOwnerTeamDetails, OWNER_INSIGHTS } from "@/lib/governance-demo-model";
+} from "@/lib/incident-queue-types";
+import {
+  buildOwnerInsightsFromApi,
+  buildOwnerPackageMetaFromApi
+} from "@/lib/dashboard-merge";
+import { handoffIncidentToActionCenter } from "@/lib/governance-api";
 import { normalizeAiScope, withAiScope, type AiScopeId } from "@/lib/ai-scope";
 import {
   routeToEvidenceLibraryIncidentRecord,
@@ -29,6 +25,11 @@ import {
   routeToIncidentsQueue,
   routes
 } from "@/lib/routes";
+import { useGovernanceData } from "@/hooks/use-governance-data";
+import {
+  buildGlobalOwnerQueueRowsFromApi,
+  buildOwnerQueueRowsFromApi
+} from "@/lib/governance-merge";
 
 const STAGE_OPTIONS = [
   "All",
@@ -114,25 +115,23 @@ function matchesRiskFilter(row: OwnerReviewTableRow, risk: string): boolean {
   return row.riskCategory === risk;
 }
 
-function globalQueueSummary() {
-  const teams = PRIMARY_OWNER_QUEUE_TEAMS.map(
-    (name) => OWNER_INSIGHTS.find((o) => o.ownerTeam === name)
-  ).filter(Boolean);
-  const decisionsWaiting = teams.reduce((s, t) => s + (t?.decisionsNeeded ?? 0), 0);
-  const critical = teams.reduce((s, t) => s + (t?.critical ?? 0), 0);
-  const evidenceRecords = PRIMARY_OWNER_QUEUE_TEAMS.reduce(
-    (s, name) => s + (OWNER_QUEUE_EVIDENCE_RECORDS[name] ?? 0),
-    0
+function globalQueueSummaryFromInsights(
+  ownerInsights: ReturnType<typeof buildOwnerInsightsFromApi>
+) {
+  const teams = ownerInsights.filter((row) =>
+    (PRIMARY_OWNER_QUEUE_TEAMS as readonly string[]).includes(row.ownerTeam)
   );
   const oldest = teams
-    .map((t) => t?.oldestEvidenceAge ?? "0d")
+    .map((t) => t.oldestEvidenceAge)
     .sort((a, b) => parseAgeDays(b) - parseAgeDays(a))[0];
   return {
-    decisionsWaiting,
-    critical,
-    evidenceRecords,
+    decisionsWaiting: teams.reduce((s, t) => s + t.decisionsNeeded, 0),
+    critical: teams.reduce((s, t) => s + t.critical, 0),
+    evidenceRecords: teams.reduce((s, t) => s + t.open, 0),
     oldest: oldest ?? "—",
-    bottleneck: "Mixed ownership load"
+    bottleneck:
+      teams.sort((a, b) => b.decisionsNeeded - a.decisionsNeeded)[0]?.bottleneck ??
+      "Monitoring"
   };
 }
 
@@ -157,25 +156,62 @@ function IncidentQueueWorkbench({
   const isOwnerMode = mode === "owner" && Boolean(lockedOwnerTeam);
   const ownerTeam = lockedOwnerTeam ?? "";
 
+  const { ownerQueues, evidenceByAlias, dashboard } = useGovernanceData();
+
+  const ownerInsights = useMemo(
+    () => buildOwnerInsightsFromApi(ownerQueues, dashboard),
+    [ownerQueues, dashboard]
+  );
+
   const insight = isOwnerMode
-    ? OWNER_INSIGHTS.find((o) => o.ownerTeam === ownerTeam)
+    ? ownerInsights.find((o) => o.ownerTeam === ownerTeam)
     : null;
-  const details = isOwnerMode ? getOwnerTeamDetails(ownerTeam) : null;
-  const globalSummary = useMemo(() => globalQueueSummary(), []);
+
+  const details = useMemo(() => {
+    if (!isOwnerMode) return null;
+    const meta = buildOwnerPackageMetaFromApi(ownerTeam, ownerQueues, ownerInsights);
+    return {
+      notificationStatus: meta.handoff.split(" · ")[0] ?? "Monitoring",
+      teamLead: meta.teamLead,
+      lastNotifiedAt: meta.lastUpdated,
+      members: meta.reviewers === "—" ? [] : meta.reviewers.split(", ")
+    };
+  }, [isOwnerMode, ownerTeam, ownerQueues, ownerInsights]);
+
+  const globalSummary = useMemo(
+    () => globalQueueSummaryFromInsights(ownerInsights),
+    [ownerInsights]
+  );
+
+  const headerKpi = useMemo(() => {
+    if (dashboard) {
+      return {
+        activeIncidents: dashboard.active_incidents,
+        criticalDecisions: dashboard.decisions_needed,
+        ownersAboveTolerance: Object.values(dashboard.owner_open_counts).filter(
+          (count) => (count ?? 0) > 0
+        ).length
+      };
+    }
+    return {
+      activeIncidents: 0,
+      criticalDecisions: 0,
+      ownersAboveTolerance: 0
+    };
+  }, [dashboard]);
 
   const allRows = useMemo((): QueueTableRow[] => {
     if (isOwnerMode) {
-      return (OWNER_REVIEW_QUEUE_ROWS[ownerTeam] ?? []).map((row) => ({
-        ...row,
+      return buildOwnerQueueRowsFromApi(
+        ownerQueues[ownerTeam] ?? null,
+        evidenceByAlias,
         ownerTeam
-      }));
+      );
     }
-    return allOwnerQueueRows();
-  }, [isOwnerMode, ownerTeam]);
+    return buildGlobalOwnerQueueRowsFromApi(ownerQueues, evidenceByAlias);
+  }, [isOwnerMode, ownerTeam, ownerQueues, evidenceByAlias]);
 
-  const evidenceRecords = isOwnerMode
-    ? (OWNER_QUEUE_EVIDENCE_RECORDS[ownerTeam] ?? allRows.length)
-    : globalSummary.evidenceRecords;
+  const evidenceRecords = allRows.reduce((sum, row) => sum + row.evidenceItemsCount, 0);
 
   const [stageFilter, setStageFilter] = useState("All");
   const [severityFilter, setSeverityFilter] = useState("All");
@@ -189,7 +225,6 @@ function IncidentQueueWorkbench({
     const picked = pickDefaultOwnerIncident(allRows);
     return picked?.incidentId ?? null;
   });
-  const [investigationOpen, setInvestigationOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [stageOverrides, setStageOverrides] = useState<Record<string, string>>({});
 
@@ -287,7 +322,7 @@ function IncidentQueueWorkbench({
   };
 
   const clearOwnerMode = () => {
-    const defaultRow = pickDefaultOwnerIncident(allOwnerQueueRows());
+    const defaultRow = pickDefaultOwnerIncident(allRows);
     router.replace(
       scopeHref(
         routeToIncidentsQueue(
@@ -302,21 +337,13 @@ function IncidentQueueWorkbench({
     router.push(scopeHref(routeToIncidentsOwnerQueue(team, incidentId)));
   };
 
-  const sendToActionCenter = () => {
+  const sendToActionCenter = async () => {
     if (!selectedRow) return;
-    pushMockActionCenterItem({
-      source: "Incident Queue",
-      incidentId: selectedRow.incidentId,
-      title: selectedRow.title,
-      ownerTeam: selectedRow.ownerTeam,
-      assignedTo: selectedRow.assignedTo,
-      systemName: selectedRow.systemName,
-      riskCategory: selectedRow.riskCategory,
-      severity: selectedRow.severityLabel,
-      recommendedAction: selectedRow.recommendedAction,
-      status: "Awaiting approval",
-      verificationStatus: "Not started"
-    });
+    const ok = await handoffIncidentToActionCenter(selectedRow.incidentId);
+    if (!ok) {
+      showToast("Could not send to Action Center — check API connection");
+      return;
+    }
     setStageOverrides((prev) => ({
       ...prev,
       [selectedRow.incidentId]: "Action Approval"
@@ -345,8 +372,8 @@ function IncidentQueueWorkbench({
                 Owner Queue: {ownerTeam}
               </h1>
               <p className="mt-1 text-[13px] text-slate-600">
-                {insight!.decisionsNeeded} decisions waiting · {insight!.critical} critical
-                incidents · oldest {insight!.oldestEvidenceAge}
+                {insight?.decisionsNeeded ?? 0} decisions waiting · {insight?.critical ?? 0}{" "}
+                critical incidents · oldest {insight?.oldestEvidenceAge ?? "—"}
               </p>
             </>
           ) : (
@@ -358,8 +385,8 @@ function IncidentQueueWorkbench({
                 All governance incidents
               </p>
               <p className="text-[13px] text-slate-600">
-                {DASHBOARD_KPI.activeIncidents} open · {DASHBOARD_KPI.criticalDecisions}{" "}
-                decisions waiting · {DASHBOARD_KPI.ownersAboveTolerance} owners above risk
+                {headerKpi.activeIncidents} open · {headerKpi.criticalDecisions}{" "}
+                decisions waiting · {headerKpi.ownersAboveTolerance} owners above risk
                 tolerance
               </p>
             </>
@@ -380,7 +407,7 @@ function IncidentQueueWorkbench({
             <p>
               <span className="text-slate-500">Evidence library:</span>{" "}
               <span className="font-medium text-slate-900">
-                {ownerEvidenceLibraryLine(ownerTeam)}
+                {insight?.open ?? 0} active incident records · {evidenceRecords} evidence items
               </span>
             </p>
           </div>
@@ -642,6 +669,7 @@ function IncidentQueueWorkbench({
                 ? ownerFilter
                 : null
           }
+          rows={filteredRows}
         />
         </div>
 
@@ -652,8 +680,11 @@ function IncidentQueueWorkbench({
               ownerTeam={selectedRow.ownerTeam}
               stage={effectiveStage ?? selectedRow.stage}
               scopeHref={scopeHref}
-              investigationOpen={investigationOpen}
-              onToggleInvestigation={() => setInvestigationOpen((v) => !v)}
+              isOwnerMode={isOwnerMode}
+              fleetracSummary={
+                evidenceByAlias[selectedRow.incidentId]?.fleetrac_analysis?.summary ??
+                selectedRow.evidenceSummary
+              }
               onSendToActionCenter={sendToActionCenter}
               onOpenOwnerQueue={
                 !isOwnerMode
@@ -684,8 +715,8 @@ function IncidentDetailPanel({
   ownerTeam,
   stage,
   scopeHref,
-  investigationOpen,
-  onToggleInvestigation,
+  isOwnerMode,
+  fleetracSummary,
   onSendToActionCenter,
   onOpenOwnerQueue
 }: {
@@ -693,12 +724,14 @@ function IncidentDetailPanel({
   ownerTeam: string;
   stage: string;
   scopeHref: (path: string) => string;
-  investigationOpen: boolean;
-  onToggleInvestigation: () => void;
+  isOwnerMode: boolean;
+  fleetracSummary: string;
   onSendToActionCenter: () => void;
   onOpenOwnerQueue?: () => void;
 }) {
-  const fleetrac = fleetracAnalysisForQueueIncident(row.incidentId, row.evidenceSummary);
+  const evidenceHref = scopeHref(
+    routeToEvidenceLibraryIncidentRecord(row.incidentId, ownerTeam)
+  );
 
   return (
     <div className="flex flex-col">
@@ -745,7 +778,7 @@ function IncidentDetailPanel({
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             Fleetrac analysis
           </p>
-          <p className="mt-1 text-slate-700">{fleetrac}</p>
+          <p className="mt-1 text-slate-700">{fleetracSummary}</p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -753,73 +786,67 @@ function IncidentDetailPanel({
           </p>
           <p className="mt-1 text-slate-800">{row.recommendedAction}</p>
         </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            Lifecycle
+          </p>
+          <p className="mt-1 text-slate-600">{row.investigationTimeline}</p>
+        </div>
       </div>
 
       <div className="space-y-2 border-t border-slate-100 px-4 py-3">
+        <Link
+          href={evidenceHref}
+          className={cn(
+            "flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-semibold shadow-sm transition",
+            isOwnerMode
+              ? "bg-slate-900 text-white hover:bg-slate-800"
+              : "border border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50"
+          )}
+        >
+          Open evidence record
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
         <button
           type="button"
-          onClick={onToggleInvestigation}
-          className="flex w-full items-center justify-between rounded-md bg-slate-900 px-3 py-2 text-[12px] font-semibold text-white hover:bg-slate-800"
+          onClick={onSendToActionCenter}
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
         >
-          Open investigation →
-          <ChevronDown
-            className={cn("h-4 w-4 transition", investigationOpen && "rotate-180")}
-          />
+          Send to Action Center
         </button>
-        {investigationOpen ? (
-          <div className="rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2 text-[12px] text-slate-700">
-            <p>
-              <span className="font-medium text-slate-800">Lifecycle:</span>{" "}
-              {row.investigationTimeline}
-            </p>
-            <p className="mt-2">
-              <span className="font-medium text-slate-800">Evidence summary:</span>{" "}
-              {row.evidenceSummary}
-            </p>
-            <p className="mt-2">
-              <span className="font-medium text-slate-800">Recommended remediation:</span>{" "}
-              {row.recommendedAction}
-            </p>
-          </div>
-        ) : null}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        {onOpenOwnerQueue ? (
           <button
             type="button"
-            onClick={onSendToActionCenter}
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-800 hover:bg-slate-50"
+            onClick={onOpenOwnerQueue}
+            className="w-full text-center text-[11px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
           >
-            Send to Action Center
+            Open owner queue
           </button>
-          <Link
-            href={scopeHref(
-              routeToEvidenceLibraryIncidentRecord(row.incidentId, ownerTeam)
-            )}
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-900 hover:bg-slate-50"
-          >
-            Open evidence record
-          </Link>
-          {onOpenOwnerQueue ? (
-            <button
-              type="button"
-              onClick={onOpenOwnerQueue}
-              className="text-[11px] font-medium text-slate-600 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
-            >
-              Owner queue
-            </button>
-          ) : null}
-        </div>
+        ) : null}
+        {isOwnerMode ? (
+          <p className="text-[10px] leading-snug text-slate-400">
+            Review structured evidence in the library before approving remediation in Action
+            Center.
+          </p>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function RecentQueueActivity({ ownerTeam }: { ownerTeam: string | null }) {
+function RecentQueueActivity({
+  ownerTeam,
+  rows
+}: {
+  ownerTeam: string | null;
+  rows: QueueTableRow[];
+}) {
   const lines = useMemo(() => {
-    if (ownerTeam) return OWNER_QUEUE_RECENT_ACTIVITY[ownerTeam] ?? [];
-    return PRIMARY_OWNER_QUEUE_TEAMS.flatMap(
-      (team) => (OWNER_QUEUE_RECENT_ACTIVITY[team] ?? []).slice(0, 2)
-    );
-  }, [ownerTeam]);
+    const scoped = ownerTeam ? rows.filter((row) => row.ownerTeam === ownerTeam) : rows;
+    return scoped
+      .slice(0, 5)
+      .map((row) => `${row.ageLabel} · ${row.stage} · ${row.title.slice(0, 64)}`);
+  }, [ownerTeam, rows]);
 
   if (!lines.length) return null;
 
@@ -843,6 +870,7 @@ export function IncidentQueueWorkspace() {
   const params = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
+  const { ownerQueues, evidenceByAlias } = useGovernanceData();
   const scope = normalizeAiScope(params?.get("scope") ?? undefined);
   const scopeHref = useCallback(
     (path: string) => withAiScope(path, scope as AiScopeId),
@@ -854,14 +882,20 @@ export function IncidentQueueWorkspace() {
   const isOwnerMode = queueParam === "owner" && Boolean(ownerParam);
   const incidentParam = params?.get("incident");
 
-  const allRows = useMemo(() => allOwnerQueueRows(), []);
+  const allRows = useMemo(() => {
+    if (isOwnerMode && ownerParam) {
+      return buildOwnerQueueRowsFromApi(
+        ownerQueues[ownerParam] ?? null,
+        evidenceByAlias,
+        ownerParam
+      );
+    }
+    return buildGlobalOwnerQueueRowsFromApi(ownerQueues, evidenceByAlias);
+  }, [isOwnerMode, ownerParam, ownerQueues, evidenceByAlias]);
 
   useEffect(() => {
     if (incidentParam) return;
-    const rows = isOwnerMode && ownerParam
-      ? (OWNER_REVIEW_QUEUE_ROWS[ownerParam] ?? [])
-      : allRows;
-    const defaultRow = pickDefaultOwnerIncident(rows);
+    const defaultRow = pickDefaultOwnerIncident(allRows);
     if (!defaultRow) return;
     if (isOwnerMode && ownerParam) {
       router.replace(

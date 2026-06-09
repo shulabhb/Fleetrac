@@ -6,30 +6,39 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, PackageOpen, UserCog } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
-import { NotificationBell } from "@/components/fleetrac/notification-bell";
+import { SummaryMini } from "@/components/ui/summary-mini";
+import { GovernanceNotificationBell } from "@/components/fleetrac/governance-notification-bell";
+import {
+  buildGovernedSystemsFromQueues,
+  buildGovernanceLoopFromApi,
+  buildOwnerInsightsFromApi,
+  buildOwnerTeamDetailsFromApi,
+  buildRemediationEvidenceSummaryFromApi,
+  highestRiskOwnerTeamFromInsights
+} from "@/lib/dashboard-merge";
 import { GovernanceLoopStatus } from "@/components/dashboard/governance-loop-status";
 import { ManageAssignmentModal } from "@/components/dashboard/manage-assignment-modal";
 import { cn } from "@/lib/cn";
+import { useGovernanceData } from "@/hooks/use-governance-data";
+import {
+  GOVERNED_FLEET_SYSTEM_COUNT,
+  GOVERNED_FLEET_SYSTEMS_SUB
+} from "@/lib/governed-fleet-registry";
 import {
   DEFAULT_OWNER_TEAM,
   DEFAULT_SYSTEM_ID,
-  DASHBOARD_KPI,
-  GOVERNANCE_LOOP,
-  GOVERNED_SYSTEMS,
-  highestRiskOwnerTeam,
-  ownerActionCopyForTeam,
   formatRiskMixCompact,
-  getOwnerTeamDetails,
+  ownerActionCopyForTeam,
   ownerPriorityQueueRows,
-  OWNER_INSIGHTS,
-  REMEDIATION_EVIDENCE_SUMMARY,
   type GovernedSystem,
   type OwnerInsight,
   type OwnerNotificationUIFlag,
   type OwnerTeamDetails,
   type SlaRiskLevel
 } from "@/lib/governance-dashboard-mock";
-import { NOTIFICATION_EVENTS } from "@/lib/governance-demo-model";
+import {
+  PRIMARY_OWNER_QUEUE_TEAMS
+} from "@/lib/governance-demo-model";
 import { withAiScope, type AiScopeId } from "@/lib/ai-scope";
 import {
   routeToEvidenceLibraryOwnerPackage,
@@ -111,24 +120,91 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   >({});
   const [dashboardToast, setDashboardToast] = useState<string | null>(null);
   const [teamLeadByTeam, setTeamLeadByTeam] = useState<Record<string, string>>({});
+  const { dashboard: apiDashboard, ownerQueues } = useGovernanceData();
+
+  const ownerInsights = useMemo(
+    () => buildOwnerInsightsFromApi(ownerQueues, apiDashboard),
+    [ownerQueues, apiDashboard]
+  );
+
+  const governedSystems = useMemo(
+    () => buildGovernedSystemsFromQueues(ownerQueues),
+    [ownerQueues]
+  );
+
+  const remediationSummary = useMemo(
+    () => buildRemediationEvidenceSummaryFromApi(apiDashboard),
+    [apiDashboard]
+  );
+
+  const kpi = useMemo(() => {
+    const ownersAboveTolerance = apiDashboard
+      ? Object.keys(apiDashboard.owner_open_counts).filter(
+          (team) => (apiDashboard.owner_open_counts[team] ?? 0) > 0
+        ).length
+      : 0;
+    return {
+      activeIncidents: apiDashboard?.active_incidents ?? 0,
+      activeIncidentsSub: apiDashboard
+        ? `${apiDashboard.critical_incidents} critical · live from simulator`
+        : "Awaiting simulator ingest",
+      criticalDecisions: apiDashboard?.decisions_needed ?? 0,
+      criticalDecisionsSub: `${apiDashboard?.actions_awaiting_approval ?? 0} awaiting Action Center approval`,
+      remediationVerified: apiDashboard?.verification_improved ?? 0,
+      remediationVerifiedSub: `${apiDashboard?.verification_count ?? 0} under verification tracking`,
+      governedSystems: GOVERNED_FLEET_SYSTEM_COUNT,
+      governedSystemsSub: GOVERNED_FLEET_SYSTEMS_SUB,
+      ownersAboveTolerance,
+      ownersAboveToleranceSub: "Owner teams with open queue load"
+    };
+  }, [apiDashboard]);
+
+  const loopMetrics = useMemo(
+    () => buildGovernanceLoopFromApi(apiDashboard),
+    [apiDashboard]
+  );
+
+  const headerPosture = useMemo(() => {
+    let openIncidents = governedSystems.reduce((sum, sys) => sum + sys.openIncidents, 0);
+    let decisionsNeeded = ownerInsights.reduce((sum, o) => sum + o.decisionsNeeded, 0);
+    let ownersAboveTolerance = PRIMARY_OWNER_QUEUE_TEAMS.filter((team) => {
+      const insight = ownerInsights.find((o) => o.ownerTeam === team);
+      return insight != null && (insight.slaRisk === "High" || insight.critical > 0);
+    }).length;
+
+    if (apiDashboard) {
+      openIncidents = apiDashboard.active_incidents;
+      decisionsNeeded = apiDashboard.decisions_needed;
+      ownersAboveTolerance = Object.keys(apiDashboard.owner_open_counts).filter(
+        (team) => (apiDashboard.owner_open_counts[team] ?? 0) > 0
+      ).length;
+    }
+
+    return {
+      governedSystems: GOVERNED_FLEET_SYSTEM_COUNT,
+      openIncidents,
+      decisionsNeeded,
+      ownersAboveTolerance
+    };
+  }, [apiDashboard, governedSystems, ownerInsights]);
 
   const filteredSystems = useMemo(() => {
-    return GOVERNED_SYSTEMS.filter((sys) => {
+    return governedSystems.filter((sys) => {
       if (filters.ownerTeam && sys.ownerTeam !== filters.ownerTeam) return false;
       if (filters.riskCategory && sys.primaryRisk !== filters.riskCategory) return false;
       if (filters.severity && sys.status !== filters.severity) return false;
       return true;
     }).sort(compareSystems);
-  }, [filters]);
+  }, [filters, governedSystems]);
 
   const selectedSystem = useMemo(
-    () => GOVERNED_SYSTEMS.find((s) => s.id === selectedSystemId) ?? GOVERNED_SYSTEMS[0],
-    [selectedSystemId]
+    () => governedSystems.find((s) => s.id === selectedSystemId) ?? governedSystems[0],
+    [selectedSystemId, governedSystems]
   );
 
   const ownerInsightRow = useMemo(
-    () => OWNER_INSIGHTS.find((o) => o.ownerTeam === selectedOwnerTeam) ?? OWNER_INSIGHTS[0],
-    [selectedOwnerTeam]
+    () => ownerInsights.find((o) => o.ownerTeam === selectedOwnerTeam) ?? ownerInsights[0],
+    [selectedOwnerTeam, ownerInsights]
   );
 
   const ownerActionCopy = useMemo(
@@ -149,7 +225,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   const ownerQueueHref = scopeHref(routeToIncidentsForOwner(selectedOwnerTeam));
 
   const activeOwnerTeamDetails = useMemo((): OwnerTeamDetails => {
-    const base = getOwnerTeamDetails(selectedOwnerTeam);
+    const base = buildOwnerTeamDetailsFromApi(selectedOwnerTeam, ownerQueues, ownerInsights);
     const members = assignmentMembersByTeam[selectedOwnerTeam] ?? base.members;
     const teamLead = teamLeadByTeam[selectedOwnerTeam] ?? base.teamLead;
     const notificationStatus =
@@ -159,6 +235,8 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
     return { ...base, members, teamLead, notificationStatus, evidencePackStatus };
   }, [
     selectedOwnerTeam,
+    ownerQueues,
+    ownerInsights,
     assignmentMembersByTeam,
     teamLeadByTeam,
     notificationOverride,
@@ -166,9 +244,9 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   ]);
 
   const clearOwnerFilter = useCallback(() => {
-    const fleetOwner = highestRiskOwnerTeam();
+    const fleetOwner = highestRiskOwnerTeamFromInsights(ownerInsights);
     setFilters((f) => ({ ...f, ownerTeam: "" }));
-    const fullSorted = [...GOVERNED_SYSTEMS].sort(compareSystems);
+    const fullSorted = [...governedSystems].sort(compareSystems);
     const stillVisible = fullSorted.some((s) => s.id === selectedSystemId);
     if (stillVisible) {
       setSelectedOwnerTeam(fleetOwner);
@@ -176,7 +254,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
       setSelectedSystemId(fullSorted[0].id);
       setSelectedOwnerTeam(fullSorted[0].ownerTeam);
     }
-  }, [selectedSystemId]);
+  }, [selectedSystemId, governedSystems]);
 
   const onOwnerTeamFilterChange = useCallback(
     (ownerTeam: string) => {
@@ -215,18 +293,18 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   };
 
   const onPrioritySystemClick = (systemId: string) => {
-    const sys = GOVERNED_SYSTEMS.find((s) => s.id === systemId);
+    const sys = governedSystems.find((s) => s.id === systemId);
     if (sys) focusOwnerFromSystem(sys);
   };
 
   const reviewOwnerQueue = useCallback(() => {
-    const team = highestRiskOwnerTeam();
+    const team = highestRiskOwnerTeamFromInsights(ownerInsights);
     router.push(scopeHref(routeToIncidentsOwnerQueue(team)));
   }, [router, scopeHref]);
 
   const ownerTeams = useMemo(
-    () => Array.from(new Set(GOVERNED_SYSTEMS.map((s) => s.ownerTeam))).sort(),
-    []
+    () => Array.from(new Set(governedSystems.map((s) => s.ownerTeam))).sort(),
+    [governedSystems]
   );
 
   const showDashboardToast = useCallback((msg: string) => {
@@ -270,14 +348,31 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-[26px]">
             Governance Insights
           </h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-slate-600">
-            {DASHBOARD_KPI.governedSystems} AI systems governed · {DASHBOARD_KPI.activeIncidents}{" "}
-            open incidents · {DASHBOARD_KPI.criticalDecisions} decisions needed ·{" "}
-            {DASHBOARD_KPI.ownersAboveTolerance} owners above risk tolerance
-          </p>
+          <div className="flex max-w-3xl flex-wrap gap-1.5 pt-1">
+            <SummaryMini
+              compact
+              label="AI systems governed"
+              value={String(headerPosture.governedSystems)}
+            />
+            <SummaryMini
+              compact
+              label="Open incidents"
+              value={String(headerPosture.openIncidents)}
+            />
+            <SummaryMini
+              compact
+              label="Decisions needed"
+              value={String(headerPosture.decisionsNeeded)}
+            />
+            <SummaryMini
+              compact
+              label="Owners above risk tolerance"
+              value={String(headerPosture.ownersAboveTolerance)}
+            />
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <NotificationBell events={NOTIFICATION_EVENTS} />
+          <GovernanceNotificationBell scopeHref={scopeHref} />
           <button
             type="button"
             onClick={reviewOwnerQueue}
@@ -293,32 +388,32 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiGovernance
           label="Governed AI Systems"
-          value={DASHBOARD_KPI.governedSystems}
-          caption={DASHBOARD_KPI.governedSystemsSub}
+          value={kpi.governedSystems}
+          caption={kpi.governedSystemsSub}
           accent="slate"
         />
         <KpiGovernance
           label="Active Governance Incidents"
-          value={DASHBOARD_KPI.activeIncidents}
-          caption={DASHBOARD_KPI.activeIncidentsSub}
+          value={kpi.activeIncidents}
+          caption={kpi.activeIncidentsSub}
           accent="rose"
         />
         <KpiGovernance
           label="Critical Decisions Needed"
-          value={DASHBOARD_KPI.criticalDecisions}
-          caption={DASHBOARD_KPI.criticalDecisionsSub}
+          value={kpi.criticalDecisions}
+          caption={kpi.criticalDecisionsSub}
           accent="amber"
         />
         <KpiGovernance
           label="Owners Above Risk Tolerance"
-          value={DASHBOARD_KPI.ownersAboveTolerance}
-          caption={DASHBOARD_KPI.ownersAboveToleranceSub}
+          value={kpi.ownersAboveTolerance}
+          caption={kpi.ownersAboveToleranceSub}
           accent="rose"
         />
         <KpiGovernance
           label="Remediation Verification"
-          value={`${DASHBOARD_KPI.remediationVerified} improved`}
-          caption={DASHBOARD_KPI.remediationVerifiedSub}
+          value={`${kpi.remediationVerified} improved`}
+          caption={kpi.remediationVerifiedSub}
           accent="emerald"
         />
       </div>
@@ -352,8 +447,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                 </tr>
               </thead>
               <tbody>
-                {OWNER_INSIGHTS.map((row) => {
-                  const ownerStatus = getOwnerTeamDetails(row.ownerTeam).notificationStatus;
+                {ownerInsights.map((row) => {
+                  const ownerStatus = buildOwnerTeamDetailsFromApi(
+                    row.ownerTeam,
+                    ownerQueues,
+                    ownerInsights
+                  ).notificationStatus;
                   const selected = selectedOwnerTeam === row.ownerTeam;
                   return (
                     <tr
@@ -511,7 +610,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                       </p>
                       <ul className="mt-2 divide-y divide-slate-200">
                         {ownerPriorityRows.map((row) => {
-                          const sys = GOVERNED_SYSTEMS.find((s) => s.id === row.systemId);
+                          const sys = governedSystems.find((s) => s.id === row.systemId);
                           if (!sys) return null;
                           const metaBits = [
                             sys.primaryRisk,
@@ -690,16 +789,16 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                 <OperationalMetricGrid
                   columns={4}
                   items={[
-                    { label: "Open incidents", value: GOVERNANCE_LOOP.investigations.open },
+                    { label: "Open incidents", value: loopMetrics.investigations.open },
                     {
                       label: "Awaiting approval",
-                      value: GOVERNANCE_LOOP.investigations.awaitingApproval
+                      value: loopMetrics.investigations.awaitingApproval
                     },
                     {
                       label: "Pending recommendations",
-                      value: GOVERNANCE_LOOP.investigations.pendingRecommendations
+                      value: loopMetrics.investigations.pendingRecommendations
                     },
-                    { label: "Recurring patterns", value: GOVERNANCE_LOOP.investigations.recurring }
+                    { label: "Recurring patterns", value: loopMetrics.investigations.recurring }
                   ]}
                 />
               </div>
@@ -723,22 +822,22 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                   items={[
                     {
                       label: "Recurrence reduced",
-                      value: GOVERNANCE_LOOP.verification.recurrenceReduced,
+                      value: loopMetrics.verification.recurrenceReduced,
                       variant: "emerald"
                     },
                     {
                       label: "Improvement observed",
-                      value: GOVERNANCE_LOOP.verification.improvement,
+                      value: loopMetrics.verification.improvement,
                       variant: "default"
                     },
                     {
                       label: "Follow-up required",
-                      value: GOVERNANCE_LOOP.verification.followUp,
+                      value: loopMetrics.verification.followUp,
                       variant: "amber"
                     },
                     {
                       label: "Rollback candidates",
-                      value: GOVERNANCE_LOOP.verification.rollback,
+                      value: loopMetrics.verification.rollback,
                       variant: "rose"
                     }
                   ]}
@@ -765,27 +864,27 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                   items={[
                     {
                       label: "Under monitoring",
-                      value: REMEDIATION_EVIDENCE_SUMMARY.underMonitoring,
+                      value: remediationSummary.underMonitoring,
                       variant: "default"
                     },
                     {
                       label: "Improvement",
-                      value: REMEDIATION_EVIDENCE_SUMMARY.improvementObserved,
+                      value: remediationSummary.improvementObserved,
                       variant: "emerald"
                     },
                     {
                       label: "Follow-up",
-                      value: REMEDIATION_EVIDENCE_SUMMARY.followUpRequired,
+                      value: remediationSummary.followUpRequired,
                       variant: "amber"
                     },
                     {
                       label: "Rollback risk",
-                      value: REMEDIATION_EVIDENCE_SUMMARY.rollbackCandidates,
+                      value: remediationSummary.rollbackCandidates,
                       variant: "rose"
                     },
                     {
                       label: "Closed · no material change",
-                      value: REMEDIATION_EVIDENCE_SUMMARY.closedNoMaterial,
+                      value: remediationSummary.closedNoMaterial,
                       variant: "default"
                     }
                   ]}
@@ -793,7 +892,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
               </div>
             </div>
             <p className="mt-3 border-t border-slate-100 pt-3 text-[10px] leading-snug text-slate-400">
-              {REMEDIATION_EVIDENCE_SUMMARY.footer}
+              {remediationSummary.footer}
             </p>
           </div>
         </Card>
@@ -803,7 +902,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
         open={assignmentModalOpen}
         onClose={() => setAssignmentModalOpen(false)}
         details={{
-          ...getOwnerTeamDetails(selectedOwnerTeam),
+          ...buildOwnerTeamDetailsFromApi(selectedOwnerTeam, ownerQueues, ownerInsights),
           evidencePackStatus: activeOwnerTeamDetails.evidencePackStatus,
           lastNotifiedAt: activeOwnerTeamDetails.lastNotifiedAt
         }}

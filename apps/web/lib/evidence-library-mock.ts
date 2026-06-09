@@ -1,18 +1,24 @@
 /**
- * Evidence Library demo model — living packages synced with governance incidents (frontend-only).
+ * Evidence Library demo model — used only when governance API is disabled.
  */
 
 import { getOwnerTeamDetails, OWNER_INSIGHTS } from "@/lib/governance-dashboard-mock";
 
-export type TeamLibraryRow = {
-  ownerTeam: string;
-  handoff: string;
-  activeIncidents: number;
-  critical: number;
-  bottleneck: string;
-  evidenceStatus: "Synced" | "Needs refresh";
-  lastUpdated: string;
-};
+export type {
+  TeamLibraryRow,
+  OwnerIncidentRecord,
+  ResolvedArchiveRecord,
+  FleetracAnalysisBlock,
+  StructuredEvidenceRow,
+  IncidentEvidenceDetail
+} from "@/lib/evidence-library-types";
+
+export {
+  INCIDENT_LIFECYCLE_ORDER,
+  lifecycleLabel
+} from "@/lib/evidence-library-types";
+
+import type { TeamLibraryRow } from "@/lib/evidence-library-types";
 
 /** Team library table — aligns with OWNER_INSIGHTS + delivery lines */
 export const TEAM_LIBRARY_ROWS: TeamLibraryRow[] = [
@@ -63,29 +69,7 @@ export const TEAM_LIBRARY_ROWS: TeamLibraryRow[] = [
   }
 ];
 
-export type OwnerIncidentRecord = {
-  id: string;
-  title: string;
-  systemName: string;
-  risk: string;
-  severity: string;
-  stage: string;
-  assigned: string;
-  evidenceCount: number;
-  lastUpdated: string;
-  confidence: "High" | "Medium" | "Low";
-  nextAction: string;
-};
-
-export type ResolvedArchiveRecord = {
-  id: string;
-  title: string;
-  systemName: string;
-  outcome: string;
-  closedAt: string;
-  evidenceCount: number;
-  verificationResult: string;
-};
+import type { OwnerIncidentRecord, ResolvedArchiveRecord } from "@/lib/evidence-library-types";
 
 /** Fleetrac narrative per owner package (concise). */
 export const OWNER_FLEETRAC_ANALYSIS: Partial<
@@ -243,92 +227,7 @@ export const OWNER_RESOLVED_ARCHIVE: Partial<
   ]
 };
 
-export const INCIDENT_LIFECYCLE_ORDER = [
-  "signal",
-  "packaged",
-  "owner_notified",
-  "owner_review",
-  "action_approval",
-  "remediation",
-  "verification",
-  "closed"
-] as const;
-
-const DEFAULT_STEP_LABEL: Record<string, string> = {
-  signal: "Signal detected",
-  packaged: "Incident packaged",
-  owner_notified: "Owner notified",
-  owner_review: "Owner review",
-  action_approval: "Action approval",
-  remediation: "Remediation",
-  verification: "Verification",
-  closed: "Closed / archived"
-};
-
-export function lifecycleLabel(key: string): string {
-  return DEFAULT_STEP_LABEL[key] ?? key;
-}
-
-export type FleetracAnalysisBlock = {
-  narrative: string;
-  rootSignal: string;
-  likelyCause: string;
-  governanceImplication: string;
-};
-
-export type StructuredEvidenceRow = {
-  evidenceItem: string;
-  source: string;
-  signal: string;
-  governanceRelevance: string;
-  status: string;
-  timestamp: string;
-  rawLog: Record<string, unknown>;
-};
-
-export type IncidentEvidenceDetail = {
-  id: string;
-  title: string;
-  /** One-line subtitle for header */
-  recordSubtitle: string;
-  subtitleParts: string[];
-  currentStageKey: string;
-  assigned: string;
-  lastUpdated: string;
-  evidenceConfidence: "High" | "Medium" | "Low";
-  summary: string;
-  systemName: string;
-  ownerTeam: string;
-  severity: string;
-  riskCategory: string;
-  teamLead: string;
-  decisionNeeded: string;
-  decisionStatus: string;
-  decisionNotes: string;
-  recommendedAction: string;
-  expectedImpact: string;
-  nextStep: string;
-  outcomeVerification: "not_started" | "complete";
-  outcomeReason?: string;
-  nextMeasurementWindow?: string;
-  outcomeResult?: string;
-  fleetracAnalysis?: FleetracAnalysisBlock;
-  structuredEvidence?: StructuredEvidenceRow[];
-  actionHandoffPreview?: string[];
-  lifecycleTimestamps: Partial<
-    Record<
-      string,
-      { label: string; at?: string; state: "done" | "current" | "pending" }
-    >
-  >;
-  /** Legacy simple evidence lines — used when structuredEvidence absent */
-  evidenceItems: {
-    title: string;
-    source: string;
-    status: string;
-    timestamp: string;
-  }[];
-};
+import type { IncidentEvidenceDetail } from "@/lib/evidence-library-types";
 
 const RAW_LOG_MRM_001_A: Record<string, unknown> = {
   event_id: "evt-mrm-001-a",

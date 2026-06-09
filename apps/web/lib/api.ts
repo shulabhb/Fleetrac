@@ -54,6 +54,7 @@ export async function getAuditLogs() {
 
 import type { BobInvestigation, BobRecommendation } from "./bob-types";
 
+/** @deprecated Use governance evidence Fleetrac analysis (`/governance/evidence/{id}`). */
 export async function getBobInvestigations(params?: {
   status?: string;
   target_type?: string;
@@ -69,10 +70,12 @@ export async function getBobInvestigations(params?: {
   );
 }
 
+/** @deprecated Use governance evidence Fleetrac analysis (`/governance/evidence/{id}`). */
 export async function getBobInvestigation(id: string) {
   return apiGet<{ item: BobInvestigation }>(`/bob/investigations/${id}`);
 }
 
+/** @deprecated Use governance evidence Fleetrac analysis (`/governance/evidence/{id}`). */
 export async function getBobInvestigationForTarget(
   targetType: string,
   targetId: string
@@ -82,6 +85,7 @@ export async function getBobInvestigationForTarget(
   );
 }
 
+/** @deprecated Use governed actions API (`/governance/actions`). */
 export async function getBobRecommendations(params?: {
   status?: string;
   target_type?: string;

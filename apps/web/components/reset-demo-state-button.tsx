@@ -4,6 +4,8 @@ import { useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { resetDemoState } from "@/lib/demo-state";
 import { resetBobState } from "@/lib/bob-state";
+import { resetNotificationState } from "@/lib/notification-state";
+import { notifyGovernanceUpdated } from "@/lib/governance-api";
 
 export function ResetDemoStateButton() {
   const [done, setDone] = useState(false);
@@ -13,6 +15,8 @@ export function ResetDemoStateButton() {
       onClick={() => {
         resetDemoState();
         resetBobState();
+        resetNotificationState();
+        notifyGovernanceUpdated();
         setDone(true);
         setTimeout(() => setDone(false), 1400);
       }}

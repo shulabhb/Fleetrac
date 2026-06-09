@@ -1,6 +1,6 @@
 /**
  * Demo governance dashboard data — executive-first copy and structure.
- * Frontend-only; aligns with product narrative in app/dashboard UX.
+ * @deprecated Operational arrays are API-off fallbacks only when NEXT_PUBLIC_GOVERNANCE_API=0.
  */
 
 export type SlaRiskLevel = "High" | "Medium" | "Low";
@@ -104,8 +104,8 @@ export type DecisionPanelCopy = {
 };
 
 export const DASHBOARD_KPI = {
-  governedSystems: 30,
-  governedSystemsSub: "24 agentic · 6 model/RAG workflows",
+  governedSystems: 10,
+  governedSystemsSub: "10 agentic workflows · multi-cloud telemetry",
   activeIncidents: 24,
   activeIncidentsSub: "<30d 18 · 30–60d 5 · >60d 1",
   criticalDecisions: 7,

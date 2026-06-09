@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "source_type": "vertex_ai_invocation",
+  "source_provider": "gcp",
+  "source_service": "vertex-ai",
+  "tenant_id": "tenant-demo",
+  "environment": "production",
+  "system_id": "sys-agt-pep-003",
+  "invocation_id": "vertex-fixture-001",
+  "trace_id": "trc-fixture-gcp",
+  "timestamp": "2026-06-02T14:22:04Z",
+  "model_version": "gemini-1.5-pro",
+  "latency_ms": 410,
+  "evaluation": { "grounding_score": 0.91, "unsupported_claim_rate": 0.005 },
+  "content_mode": "metadata_only",
+  "idempotency_key": "fixture:gcp:healthy:1"
+}
