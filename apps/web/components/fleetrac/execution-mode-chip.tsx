@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import type { GovernedExecutionMode } from "@/lib/governed-actions-mock";
+import type { GovernedExecutionMode } from "@/lib/governed-actions-types";
 
 const LABEL: Record<GovernedExecutionMode, string> = {
   approval_required: "Approval required",

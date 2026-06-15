@@ -6,10 +6,12 @@ import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
-  OWNER_FLEETRAC_ANALYSIS,
-  packageMetaForOwner,
-  riskMixLabel
-} from "@/lib/evidence-library-mock";
+  buildOwnerFleetracAnalysisFromApi,
+  buildOwnerInsightsFromApi,
+  buildOwnerPackageMetaFromApi,
+  riskMixLabelFromInsight
+} from "@/lib/dashboard-merge";
+import { useGovernanceData } from "@/hooks/use-governance-data";
 import type { LivePackageState } from "@/lib/evidence-library-package-state";
 import {
   routeToEvidenceLibraryIncidentRecord,
@@ -39,20 +41,33 @@ function HealthMetric({
 export function EvidenceLibraryOwnerPackage({
   ownerTeam,
   scopeHref,
-  livePackages
+  livePackages,
+  evidenceLibrary: _evidenceLibrary
 }: {
   ownerTeam: string;
   scopeHref: (path: string) => string;
   livePackages: LivePackageState;
+  evidenceLibrary?: ReturnType<typeof import("@/hooks/use-governance-data").useGovernanceData>["evidenceLibrary"];
 }) {
   const router = useRouter();
   const [segment, setSegment] = useState<"active" | "resolved">("active");
-  const meta = packageMetaForOwner(ownerTeam);
+  const { ownerQueues, dashboard, evidenceByAlias } = useGovernanceData();
+  const ownerInsights = useMemo(
+    () => buildOwnerInsightsFromApi(ownerQueues, dashboard),
+    [ownerQueues, dashboard]
+  );
+  const meta = useMemo(
+    () => buildOwnerPackageMetaFromApi(ownerTeam, ownerQueues, ownerInsights),
+    [ownerTeam, ownerQueues, ownerInsights]
+  );
   const insight = meta.insight;
   const pkg = livePackages[ownerTeam] ?? { active: [], resolved: [] };
   const activeList = pkg.active;
   const resolvedList = pkg.resolved;
-  const fleetrac = OWNER_FLEETRAC_ANALYSIS[ownerTeam];
+  const fleetrac = useMemo(
+    () => buildOwnerFleetracAnalysisFromApi(ownerTeam, evidenceByAlias),
+    [ownerTeam, evidenceByAlias]
+  );
 
   const evidenceRecordCounts = useMemo(
     () => `${activeList.length} active · ${resolvedList.length} archived`,
@@ -127,7 +142,7 @@ export function EvidenceLibraryOwnerPackage({
           </div>
           <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-800 shadow-sm">
             <span className="font-semibold text-slate-500">Risk mix · </span>
-            {riskMixLabel(ownerTeam)}
+            {riskMixLabelFromInsight(insight)}
           </div>
         </section>
       ) : null}

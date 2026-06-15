@@ -4,11 +4,11 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { FleetracAnalysisPanel } from "@/components/fleetrac/fleetrac-analysis-panel";
 import { ExecutionModeChip } from "@/components/fleetrac/execution-mode-chip";
+import { postApproveAction, postRejectAction, postVerifyAction } from "@/lib/governance-api";
 import {
-  approveDemoWorkflowAction,
-  rejectDemoWorkflowAction
-} from "@/lib/governance-demo-actions";
-import type { GovernedAction } from "@/lib/governed-actions-mock";
+  canVerifyAction,
+  type GovernedAction
+} from "@/lib/governed-actions-types";
 import { formatRelativeTime } from "@/lib/format";
 import {
   routeToEvidenceLibraryIncidentRecord,
@@ -20,6 +20,29 @@ type Props = {
   onDecision: () => void;
   onToast: (msg: string) => void;
 };
+
+const VERIFY_OUTCOMES = [
+  {
+    id: "improvement_observed",
+    label: "Improvement observed",
+    summary: "Post-remediation telemetry shows reduced signal recurrence."
+  },
+  {
+    id: "no_material_change",
+    label: "No material change",
+    summary: "Metrics unchanged in the verification window."
+  },
+  {
+    id: "regression_detected",
+    label: "Regression detected",
+    summary: "Signal worsened after remediation — follow-up required."
+  },
+  {
+    id: "rollback_candidate",
+    label: "Rollback candidate",
+    summary: "Remediation may have increased blast radius."
+  }
+] as const;
 
 export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) {
   if (!action) {
@@ -35,6 +58,39 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
   }
 
   const canDecide = action.status === "Awaiting approval";
+  const showVerify = canVerifyAction(action);
+
+  const handleApprove = async () => {
+    const result = await postApproveAction(action.id);
+    if (!result) {
+      onToast("Could not approve — check API connection");
+      return;
+    }
+    onDecision();
+    onToast(
+      "Approved · Fleetrac will notify Slack channel #ai-governance when execution completes"
+    );
+  };
+
+  const handleReject = async () => {
+    const result = await postRejectAction(action.id);
+    if (!result) {
+      onToast("Could not reject — check API connection");
+      return;
+    }
+    onDecision();
+    onToast("Rejected · decision recorded for audit");
+  };
+
+  const handleVerify = async (outcome: string, summary: string) => {
+    const result = await postVerifyAction(action.id, outcome, summary);
+    if (!result) {
+      onToast("Could not record verification — check API connection");
+      return;
+    }
+    onDecision();
+    onToast(`Verification recorded · ${outcome.replace(/_/g, " ")}`);
+  };
 
   return (
     <div className="flex h-full min-h-[280px] flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -94,30 +150,41 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => {
-                approveDemoWorkflowAction(action.incidentId);
-                onDecision();
-                onToast(
-                  "Approved · Fleetrac will notify Slack channel #ai-governance when execution completes"
-                );
-              }}
+              onClick={() => void handleApprove()}
               className="inline-flex flex-1 items-center justify-center rounded-md bg-slate-900 px-3 py-2 text-[12px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
             >
               Approve
             </button>
             <button
               type="button"
-              onClick={() => {
-                rejectDemoWorkflowAction(action.incidentId);
-                onDecision();
-                onToast("Rejected · decision recorded for audit");
-              }}
+              onClick={() => void handleReject()}
               className="inline-flex flex-1 items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-800 shadow-sm transition hover:border-slate-300"
             >
               Reject
             </button>
           </div>
         ) : null}
+
+        {showVerify ? (
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+              Record verification outcome
+            </p>
+            <div className="grid gap-1.5">
+              {VERIFY_OUTCOMES.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => void handleVerify(opt.id, opt.summary)}
+                  className="rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-[11px] font-medium text-slate-800 transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <Link
           href={routeToEvidenceLibraryIncidentRecord(action.incidentId, action.ownerTeam)}
           className="block text-center text-[12px] font-semibold text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-slate-600"

@@ -19,7 +19,9 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.venv/
+apps/api/data/
+apps/api/data/*.db
+apps/api/.venv/
 venv/
 
 # Env files

@@ -1,29 +1,18 @@
 /**
- * Demo rows for Owner Review queue mode — aligns with dashboard owner workflow.
- * Merge with API incidents by incidentId when present.
+ * Demo rows for Owner Review queue mode — used only when governance API is disabled.
  */
 
-export type OwnerReviewTableRow = {
-  incidentId: string;
-  priority: "P1" | "P2" | "P3";
-  title: string;
-  systemId: string;
-  systemName: string;
-  /** Aligns with Evidence Library risk vocabulary / filters */
-  riskCategory: string;
-  severityLabel: string;
-  stage: string;
-  assignedTo: string;
-  evidenceItemsCount: number;
-  /** Evidence Library sync status shown in queue table */
-  evidenceSyncStatus?: "Synced" | "Needs refresh";
-  ageLabel: string;
-  nextAction: string;
-  decisionNeeded: string;
-  recommendedAction: string;
-  evidenceSummary: string;
-  investigationTimeline: string;
-};
+export type {
+  OwnerReviewTableRow,
+  QueueTableRow
+} from "@/lib/incident-queue-types";
+
+export {
+  formatQueueEvidenceLabel,
+  PRIMARY_OWNER_QUEUE_TEAMS
+} from "@/lib/incident-queue-types";
+
+import type { OwnerReviewTableRow, QueueTableRow } from "@/lib/incident-queue-types";
 
 /** Evidence library status in owner queue header. */
 export const OWNER_EVIDENCE_LIBRARY_LINE: Partial<Record<string, string>> = {
@@ -57,15 +46,6 @@ export function fleetracAnalysisForQueueIncident(incidentId: string, fallback: s
   return OWNER_QUEUE_FLEETRAC_ANALYSIS[incidentId] ?? fallback;
 }
 
-/** Compact evidence cell for Incident Queue table and detail panel. */
-export function formatQueueEvidenceLabel(row: {
-  evidenceItemsCount: number;
-  evidenceSyncStatus?: "Synced" | "Needs refresh";
-}): string {
-  const status = row.evidenceSyncStatus ?? "Synced";
-  return `${status} · ${row.evidenceItemsCount} items`;
-}
-
 /** Recent async activity feed per owner team (Incident Queue). */
 export const OWNER_QUEUE_RECENT_ACTIVITY: Partial<Record<string, string[]>> = {
   "Model Risk Management": [
@@ -88,14 +68,8 @@ export const OWNER_QUEUE_RECENT_ACTIVITY: Partial<Record<string, string[]>> = {
 };
 
 /** Row plus accountable owner — used by global and owner queue workbench. */
-export type QueueTableRow = OwnerReviewTableRow & { ownerTeam: string };
 
 /** Primary owner teams in the governance demo queue. */
-export const PRIMARY_OWNER_QUEUE_TEAMS = [
-  "Model Risk Management",
-  "Security Operations",
-  "Platform Reliability"
-] as const;
 
 export function allOwnerQueueRows(): QueueTableRow[] {
   const rows: QueueTableRow[] = [];
@@ -122,7 +96,7 @@ export const OWNER_REVIEW_QUEUE_ROWS: Partial<Record<string, OwnerReviewTableRow
       assignedTo: "Evan Brooks",
       evidenceItemsCount: 4,
       ageLabel: "10d",
-      nextAction: "Open investigation",
+      nextAction: "Open evidence record",
       decisionNeeded: "Review unsupported claim remediation",
       recommendedAction: "Raise retrieval threshold and require citation fallback.",
       evidenceSummary:
@@ -222,7 +196,7 @@ export const OWNER_REVIEW_QUEUE_ROWS: Partial<Record<string, OwnerReviewTableRow
       assignedTo: "James Kim",
       evidenceItemsCount: 3,
       ageLabel: "1d",
-      nextAction: "Open investigation",
+      nextAction: "Open evidence record",
       decisionNeeded: "Investigate injection pathway",
       recommendedAction: "Isolate prompt boundary and enable refusal escalation.",
       evidenceSummary:
@@ -615,8 +589,3 @@ export function findOwnerTeamForQueueIncident(incidentId: string): string | null
 export function isGovernanceQueueIncidentId(incidentId: string): boolean {
   return findOwnerTeamForQueueIncident(incidentId) != null;
 }
-
-export {
-  pushMockActionCenterItem,
-  type MockActionCenterItem
-} from "@/lib/governance-demo-actions";

@@ -7,11 +7,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Circle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
-  INCIDENT_EVIDENCE_DETAILS,
   INCIDENT_LIFECYCLE_ORDER,
   lifecycleLabel,
   type IncidentEvidenceDetail,
   type StructuredEvidenceRow
+} from "@/lib/evidence-library-types";
+import {
+  INCIDENT_EVIDENCE_DETAILS
 } from "@/lib/evidence-library-mock";
 import {
   archiveIncidentInPackage,
@@ -19,9 +21,13 @@ import {
 } from "@/lib/evidence-library-package-state";
 import {
   INCIDENT_EVIDENCE_PACK_BY_ID,
-  pushMockActionCenterItem,
   type IncidentEvidencePackMock
 } from "@/lib/incident-queue-owner-review-mock";
+import { handoffIncidentToActionCenter } from "@/lib/governance-api";
+import { useGovernanceData } from "@/hooks/use-governance-data";
+import {
+  mapApiEvidenceToDetail
+} from "@/lib/governance-merge";
 import {
   routeToEvidenceLibraryOwnerPackage,
   routeToEvidenceLibraryTeam,
@@ -92,8 +98,16 @@ export function EvidenceLibraryIncidentRecord({
 }) {
   const router = useRouter();
   const pack = INCIDENT_EVIDENCE_PACK_BY_ID[incidentId];
-  const detail = INCIDENT_EVIDENCE_DETAILS[incidentId];
-  const resolvedOwner = ownerTeam ?? pack?.ownerTeam ?? "—";
+  const mockDetail = INCIDENT_EVIDENCE_DETAILS[incidentId];
+  const { evidenceByAlias } = useGovernanceData();
+  const detail = useMemo(() => {
+    const apiEvidence = evidenceByAlias[incidentId];
+    if (apiEvidence) {
+      return mapApiEvidenceToDetail(apiEvidence);
+    }
+    return undefined;
+  }, [incidentId, evidenceByAlias]);
+  const resolvedOwner = ownerTeam ?? pack?.ownerTeam ?? detail?.ownerTeam ?? "—";
 
   const resolvedArchiveRow = useMemo(() => {
     const p = livePackages[resolvedOwner];
@@ -115,35 +129,23 @@ export function EvidenceLibraryIncidentRecord({
     setNeedsMoreEvidence(false);
   }, [incidentId, detail]);
 
+  const structuredRows: StructuredEvidenceRow[] = useMemo(() => {
+    return detail?.structuredEvidence ?? [];
+  }, [detail]);
+
   const showToast = (msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2800);
   };
 
-  const structuredRows: StructuredEvidenceRow[] = useMemo(() => {
-    if (detail?.structuredEvidence?.length) return detail.structuredEvidence;
-    if (pack) return fallbackStructuredFromPack(pack);
-    return [];
-  }, [detail, pack]);
+  const subtitleLine = detail?.recordSubtitle ?? "";
 
-  const subtitleLine =
-    detail?.recordSubtitle ??
-    [pack?.systemName, pack?.riskCategory, pack?.severity, pack?.stage].filter(Boolean).join(" · ");
-
-  const sendToActionCenter = () => {
-    pushMockActionCenterItem({
-      source: "Evidence Library",
-      incidentId,
-      title: detail?.title ?? pack?.title ?? incidentId,
-      ownerTeam: resolvedOwner,
-      assignedTo: detail?.assigned ?? pack?.assignedReviewer,
-      systemName: detail?.systemName ?? pack?.systemName,
-      riskCategory: detail?.riskCategory ?? pack?.riskCategory,
-      severity: detail?.severity ?? pack?.severity,
-      recommendedAction: detail?.recommendedAction ?? pack?.recommendedAction,
-      status: "Awaiting approval",
-      verificationStatus: "Not started"
-    });
+  const sendToActionCenter = async () => {
+    const ok = await handoffIncidentToActionCenter(incidentId);
+    if (!ok) {
+      showToast("Could not send to Action Center — check API connection");
+      return;
+    }
     showToast("Sent to Action Center");
     if (!isArchived) {
       setLifecycle((prev) =>
@@ -185,14 +187,14 @@ export function EvidenceLibraryIncidentRecord({
   };
 
   const markFalsePositive = () => {
-    if (!pack || resolvedOwner === "—") return;
+    if (!detail || resolvedOwner === "—") return;
     setDecisionLabel("False positive");
     setLivePackages((prev) =>
       archiveIncidentInPackage(prev, resolvedOwner, incidentId, {
-        title: pack.title,
-        systemName: pack.systemName,
+        title: detail.title,
+        systemName: detail.systemName,
         outcome: "False positive",
-        evidenceCount: pack.evidenceItems.length,
+        evidenceCount: structuredRows.length,
         verificationResult: "Closed without material risk"
       })
     );
@@ -200,25 +202,29 @@ export function EvidenceLibraryIncidentRecord({
     router.push(scopeHref(routeToEvidenceLibraryOwnerPackage(resolvedOwner)));
   };
 
-  if (!pack && !detail) {
+  if (!detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white p-6 text-[13px] text-slate-600">
-        <nav className="mb-4 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
-          <Link href={scopeHref(routeToEvidenceLibraryTeam())}>Evidence Library</Link>
-          <ChevronRight className="h-3 w-3" />
-          <span>Unknown incident</span>
-        </nav>
-        No evidence record found for <span className="font-mono">{incidentId}</span>.
+      <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center shadow-sm">
+        <p className="text-[13px] text-slate-600">
+          No evidence record for <span className="font-medium text-slate-900">{incidentId}</span> yet.
+          Run a simulator pitch to generate governed evidence from live logs.
+        </p>
+        <Link
+          href={scopeHref(routeToEvidenceLibraryTeam())}
+          className="mt-3 inline-block text-[12px] font-semibold text-slate-800 hover:underline"
+        >
+          Back to Evidence Library
+        </Link>
       </div>
     );
   }
 
-  const title = detail?.title ?? pack?.title ?? incidentId;
-  const summary = detail?.summary ?? pack?.summary ?? "";
-  const timelineSource = lifecycle ?? detail?.lifecycleTimestamps;
+  const title = detail.title;
+  const summary = detail.summary ?? "";
+  const timelineSource = lifecycle ?? detail.lifecycleTimestamps;
   const stageDisplay = currentStageLabel(
     timelineSource,
-    pack?.stage ?? detail?.recordSubtitle?.split(" · ").pop() ?? "—"
+    detail.recordSubtitle?.split(" · ").pop() ?? "—"
   );
   const recordKind = isArchived ? "Resolved" : "Active";
   const handoffReady = decisionLabel === "Approved";

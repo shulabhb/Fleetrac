@@ -1,10 +1,14 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
-import { getTeamLibrarySummary, TEAM_LIBRARY_ROWS } from "@/lib/evidence-library-mock";
-import { createInitialLivePackages } from "@/lib/evidence-library-package-state";
+import {
+  buildLivePackagesFromApi,
+  buildTeamLibraryFromApi,
+  buildTeamLibrarySummaryFromApi
+} from "@/lib/governance-merge";
+import { createInitialLivePackages, type LivePackageState } from "@/lib/evidence-library-package-state";
 import type { EvidenceLibraryMode } from "@/lib/routes";
 import {
   normalizeAiScope,
@@ -15,6 +19,7 @@ import {
   routeToEvidenceLibraryOwnerPackage,
   routeToEvidenceLibraryTeam
 } from "@/lib/routes";
+import { useGovernanceData } from "@/hooks/use-governance-data";
 import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { SummaryMini } from "@/components/ui/summary-mini";
 import { EvidenceLibraryIncidentRecord } from "@/components/evidence-library/evidence-library-incident-record";
@@ -44,7 +49,16 @@ export function EvidenceLibraryApp() {
     [scope]
   );
 
-  const [livePackages, setLivePackages] = useState(createInitialLivePackages);
+  const { evidenceLibrary } = useGovernanceData();
+  const [livePackages, setLivePackages] = useState<LivePackageState>(() =>
+    createInitialLivePackages()
+  );
+
+  useEffect(() => {
+    if (evidenceLibrary) {
+      setLivePackages(buildLivePackagesFromApi(evidenceLibrary));
+    }
+  }, [evidenceLibrary]);
 
   const mode = useMemo(() => resolveEvidenceMode(params), [params]);
   const ownerDecoded = params.get("owner")
@@ -55,7 +69,7 @@ export function EvidenceLibraryApp() {
   return (
     <div className="space-y-6">
       {mode === "team-library" ? (
-        <TeamLibraryView scopeHref={scopeHref} />
+        <TeamLibraryView scopeHref={scopeHref} evidenceLibrary={evidenceLibrary} />
       ) : null}
 
       {mode === "owner-package" && ownerDecoded ? (
@@ -63,6 +77,7 @@ export function EvidenceLibraryApp() {
           ownerTeam={ownerDecoded}
           scopeHref={scopeHref}
           livePackages={livePackages}
+          evidenceLibrary={evidenceLibrary}
         />
       ) : null}
 
@@ -80,12 +95,24 @@ export function EvidenceLibraryApp() {
 }
 
 function TeamLibraryView({
-  scopeHref
+  scopeHref,
+  evidenceLibrary
 }: {
   scopeHref: (path: string) => string;
+  evidenceLibrary: ReturnType<typeof useGovernanceData>["evidenceLibrary"];
 }) {
   const router = useRouter();
-  const summary = getTeamLibrarySummary();
+  const apiOn = Boolean(evidenceLibrary);
+  const summary = evidenceLibrary
+    ? buildTeamLibrarySummaryFromApi(evidenceLibrary)
+    : {
+        activeOwnerPackages: 0,
+        activeIncidentRecords: 0,
+        awaitingReview: 0,
+        underVerification: 0,
+        archivedResolved: 0
+      };
+  const rows = evidenceLibrary ? buildTeamLibraryFromApi(evidenceLibrary) : [];
 
   return (
     <GovernancePageShell
@@ -123,45 +150,58 @@ function TeamLibraryView({
               <th className="px-3 py-2 text-left font-medium">Bottleneck</th>
               <th className="px-3 py-2 text-left font-medium">Evidence</th>
               <th className="px-3 py-2 text-left font-medium">Updated</th>
-              <th className="px-3 py-2 text-right font-medium"> </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {TEAM_LIBRARY_ROWS.map((row) => (
-              <tr key={row.ownerTeam} className="hover:bg-slate-50/80">
-                <td className="px-3 py-2.5 font-medium text-slate-900">{row.ownerTeam}</td>
-                <td className="px-3 py-2.5 text-slate-600">{row.handoff}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
-                  {row.activeIncidents}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums font-medium text-slate-900">
-                  {row.critical}
-                </td>
-                <td className="max-w-[140px] px-3 py-2.5 text-[12px] text-slate-700">
-                  {row.bottleneck}
-                </td>
-                <td className="px-3 py-2.5 text-[12px] text-slate-700">
-                  {row.evidenceStatus}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-slate-600">
-                  {row.lastUpdated}
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      router.push(scopeHref(routeToEvidenceLibraryOwnerPackage(row.ownerTeam)))
-                    }
-                    className="text-[12px] font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
-                  >
-                    Open package
-                  </button>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                  {apiOn
+                    ? "No evidence packages yet. Run a simulator scenario to generate incidents."
+                    : "No owner packages in catalog."}
                 </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((row) => (
+                <tr
+                  key={row.ownerTeam}
+                  onClick={() =>
+                    router.push(scopeHref(routeToEvidenceLibraryOwnerPackage(row.ownerTeam)))
+                  }
+                  className="cursor-pointer transition hover:bg-slate-50"
+                >
+                  <td className="px-3 py-2.5 font-medium text-slate-900">{row.ownerTeam}</td>
+                  <td className="px-3 py-2.5 text-slate-600">{row.handoff}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                    {row.activeIncidents}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">
+                    {row.critical}
+                  </td>
+                  <td className="px-3 py-2.5 text-slate-700">{row.bottleneck}</td>
+                  <td className="px-3 py-2.5">
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                        row.evidenceStatus === "Synced"
+                          ? "bg-emerald-50 text-emerald-800"
+                          : "bg-amber-50 text-amber-900"
+                      )}
+                    >
+                      {row.evidenceStatus}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 tabular-nums text-slate-500">{row.lastUpdated}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
+
+      <p className="text-center text-[12px] text-slate-600">
+        Select an owner team to open the living evidence package and incident records.
+      </p>
       </div>
     </GovernancePageShell>
   );

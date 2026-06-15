@@ -9,25 +9,24 @@ import { Select } from "@/components/ui/select";
 import { SummaryMini } from "@/components/ui/summary-mini";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
-import {
-  approveDemoWorkflowAction,
-  isDemoHighRisk,
-  readDemoWorkflowActions,
-  rejectDemoWorkflowAction
-} from "@/lib/governance-demo-actions";
-import { highestRiskOwnerTeam } from "@/lib/governance-demo-model";
+import { isDemoHighRisk } from "@/lib/governed-actions-types";
+import { mapApiActionsToGovernedList } from "@/lib/governance-actions-merge";
+import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
   governedInTab,
   governedSelectionId,
-  mergeGovernedActions,
   parseGovernedSelectionId,
   type GovernedAction
-} from "@/lib/governed-actions-mock";
+} from "@/lib/governed-actions-types";
 import {
   routeToEvidenceLibraryTeam,
   routeToIncidentsOwnerQueue,
   routes
 } from "@/lib/routes";
+import {
+  highestRiskOwnerTeamFromInsights,
+  buildOwnerInsightsFromApi
+} from "@/lib/dashboard-merge";
 import { RiskBadge } from "./index";
 import { ActionCenterDetailPanel } from "./action-center-detail-panel";
 import { ExecutionModeChip } from "@/components/fleetrac/execution-mode-chip";
@@ -94,23 +93,18 @@ export function ActionCenterWorkspace({
   const [risk, setRisk] = useState<"low" | "medium" | "high" | "all">(
     (searchParams?.get("risk") as "low" | "medium" | "high" | "all") ?? "all"
   );
-  const [actions, setActions] = useState<GovernedAction[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const reload = useCallback(() => {
-    setActions(mergeGovernedActions(readDemoWorkflowActions()));
-  }, []);
+  const { enabled: governanceEnabled, actions: apiActions, evidenceByAlias, refresh, ownerQueues, dashboard } =
+    useGovernanceData();
 
-  useEffect(() => {
-    reload();
-    window.addEventListener("fleetrac-demo-actions-updated", reload);
-    window.addEventListener("focus", reload);
-    return () => {
-      window.removeEventListener("fleetrac-demo-actions-updated", reload);
-      window.removeEventListener("focus", reload);
-    };
-  }, [reload]);
+  const actions = useMemo(() => {
+    if (governanceEnabled) {
+      return mapApiActionsToGovernedList(apiActions, evidenceByAlias);
+    }
+    return [];
+  }, [governanceEnabled, apiActions, evidenceByAlias]);
 
   useEffect(() => {
     const p = new URLSearchParams(searchParams?.toString() ?? "");
@@ -192,8 +186,18 @@ export function ActionCenterWorkspace({
     window.setTimeout(() => setToast(null), 3500);
   }, []);
 
+  const onDecision = useCallback(() => {
+    void refresh(true);
+  }, [refresh]);
+
   const tabDef = TABS.find((t) => t.id === tab)!;
-  const ownerTeam = highestRiskOwnerTeam();
+  const ownerTeam = useMemo(
+    () =>
+      highestRiskOwnerTeamFromInsights(
+        buildOwnerInsightsFromApi(ownerQueues, dashboard)
+      ),
+    [ownerQueues, dashboard]
+  );
 
   return (
     <GovernancePageShell
@@ -297,7 +301,7 @@ export function ActionCenterWorkspace({
                             >
                               Evidence Library
                             </Link>
-                            .
+                            {" to hand off a remediation."}
                           </span>
                         ) : (
                           "No governed actions in this tab."
@@ -350,7 +354,7 @@ export function ActionCenterWorkspace({
 
           <ActionCenterDetailPanel
             action={selected}
-            onDecision={reload}
+            onDecision={onDecision}
             onToast={showToast}
           />
         </div>

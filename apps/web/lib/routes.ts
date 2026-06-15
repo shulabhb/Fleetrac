@@ -1,4 +1,4 @@
-import { findOwnerTeamForQueueIncident } from "@/lib/incident-queue-owner-review-mock";
+import { findOwnerTeamForQueueIncident } from "@/lib/governance-incident-routing";
 
 /**
  * Canonical route builders for Fleetrac.

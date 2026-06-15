@@ -1,9 +1,11 @@
+import type {
+  OwnerIncidentRecord,
+  ResolvedArchiveRecord
+} from "@/lib/evidence-library-types";
 import {
-  OWNER_ACTIVE_INCIDENTS,
-  OWNER_RESOLVED_ARCHIVE,
-  type OwnerIncidentRecord,
-  type ResolvedArchiveRecord
-} from "@/lib/evidence-library-mock";
+  buildLivePackagesFromApi
+} from "@/lib/governance-merge";
+import type { EvidenceLibraryResponseDTO } from "@/lib/governance-api";
 
 /** Re-export for components that only need the type. */
 export type { OwnerIncidentRecord, ResolvedArchiveRecord };
@@ -13,18 +15,13 @@ export type LivePackageState = Record<
   { active: OwnerIncidentRecord[]; resolved: ResolvedArchiveRecord[] }
 >;
 
-export function createInitialLivePackages(): LivePackageState {
-  const out: LivePackageState = {};
-  for (const team of new Set([
-    ...Object.keys(OWNER_ACTIVE_INCIDENTS),
-    ...Object.keys(OWNER_RESOLVED_ARCHIVE)
-  ])) {
-    out[team] = {
-      active: [...(OWNER_ACTIVE_INCIDENTS[team] ?? [])],
-      resolved: [...(OWNER_RESOLVED_ARCHIVE[team] ?? [])]
-    };
+export function createInitialLivePackages(
+  library?: EvidenceLibraryResponseDTO | null
+): LivePackageState {
+  if (library) {
+    return buildLivePackagesFromApi(library);
   }
-  return out;
+  return {};
 }
 
 export function archiveIncidentInPackage(

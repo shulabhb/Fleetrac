@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "source_type": "azure_openai_invocation",
+  "source_provider": "azure",
+  "source_service": "azure-openai",
+  "tenant_id": "tenant-demo",
+  "environment": "production",
+  "system_id": "sys-agt-cs-002",
+  "invocation_id": "az-fixture-001",
+  "trace_id": "trc-fixture-azure",
+  "timestamp": "2026-06-02T14:22:03Z",
+  "deployment_name": "gpt-4o",
+  "latency_ms": 380,
+  "status_code": 200,
+  "content_filter_results": {},
+  "content_mode": "metadata_only",
+  "idempotency_key": "fixture:azure:healthy:1"
+}

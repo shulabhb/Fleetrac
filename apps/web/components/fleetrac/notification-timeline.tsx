@@ -1,4 +1,4 @@
-import type { NotificationEvent } from "@/lib/governance-demo-model";
+import type { NotificationEvent } from "@/lib/governance-notification-types";
 
 export function NotificationTimeline({
   events,

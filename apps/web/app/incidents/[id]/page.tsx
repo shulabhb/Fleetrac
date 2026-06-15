@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { findOwnerTeamForQueueIncident } from "@/lib/incident-queue-owner-review-mock";
+import { findOwnerTeamForQueueIncident } from "@/lib/governance-incident-routing";
 import { routeToIncidentsOwnerQueue, routes } from "@/lib/routes";
 
 type IncidentDetailPageProps = {

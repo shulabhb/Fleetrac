@@ -1,4 +1,5 @@
 import { migrateLegacyIncidentStatus } from "@/lib/incident-lifecycle";
+import { postSimulatorReset, notifyGovernanceUpdated } from "@/lib/governance-api";
 
 export type DemoIncidentState = {
   incidentStatus: string;
@@ -88,6 +89,7 @@ export function resetDemoState() {
   window.localStorage.removeItem(ACTION_LOG_KEY);
   window.localStorage.removeItem(OUTREACH_KEY);
   emitIncidentDemoEvent();
+  void postSimulatorReset().then(() => notifyGovernanceUpdated());
 }
 
 export function readIncidentActionLog(): DemoIncidentActionEntry[] {

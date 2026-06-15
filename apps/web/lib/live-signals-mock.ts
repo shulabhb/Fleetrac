@@ -1,32 +1,23 @@
 /**
- * Demo live governance signals — runtime log / eval / policy posture (Observe).
+ * Demo live governance signals — used only when governance API is disabled.
  */
 
 import { GOVERNED_SYSTEMS } from "@/lib/governance-dashboard-mock";
+import { canonicalSystemIdForDisplay } from "@/lib/governed-fleet-registry";
 
-export type LiveSignalSeverity = "Critical" | "High" | "Medium" | "Low";
+export type {
+  LiveSignalSeverity,
+  LiveSignalCategory,
+  LiveRuntimeSignal,
+  LiveSignalsSummary
+} from "@/lib/live-signals-types";
 
-export type LiveSignalCategory =
-  | "Drift"
-  | "Grounding"
-  | "Policy"
-  | "Latency"
-  | "Security"
-  | "Cost";
-
-export type LiveRuntimeSignal = {
-  id: string;
-  systemId: string;
-  systemName: string;
-  ownerTeam: string;
-  category: LiveSignalCategory;
-  severity: LiveSignalSeverity;
-  summary: string;
-  detectedAt: string;
-  /** Whether an incident record exists for this signal cluster */
-  incidentLinked: boolean;
-  incidentId?: string;
-};
+import type {
+  LiveSignalCategory,
+  LiveSignalSeverity,
+  LiveRuntimeSignal,
+  LiveSignalsSummary
+} from "@/lib/live-signals-types";
 
 const SIGNAL_TEMPLATES: Array<{
   category: LiveSignalCategory;
@@ -88,6 +79,7 @@ export function liveRuntimeSignals(): LiveRuntimeSignal[] {
     rows.push({
       id: `sig-${sys.id}-${i}`,
       systemId: sys.id,
+      canonicalSystemId: canonicalSystemIdForDisplay(sys.id),
       systemName: sys.name,
       ownerTeam: sys.ownerTeam,
       category: tpl.category,
@@ -103,7 +95,7 @@ export function liveRuntimeSignals(): LiveRuntimeSignal[] {
   return rows;
 }
 
-export const LIVE_SIGNALS_SUMMARY = {
+export const LIVE_SIGNALS_SUMMARY: LiveSignalsSummary = {
   active: 12,
   critical: 3,
   linkedIncidents: 3,
