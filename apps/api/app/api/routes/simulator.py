@@ -14,8 +14,10 @@ from app.db.seed import reset_to_seed
 from app.db.session import get_db
 from app.simulator.http_ingest_client import post_ingest_sequence
 from app.simulator.runner import is_running, start_continuous, stop_continuous
-from app.simulator.scenarios.catalog import PITCH_SEQUENCES
+from app.simulator.scenarios.catalog import IMPLEMENTED_SCENARIOS, PITCH_SEQUENCES, PLANNED_SCENARIOS
 from app.simulator.scenarios.healthy_baseline import healthy_baseline_batch
+from app.simulator.generators.healthy_traffic import healthy_trace_bundle
+from app.simulator.scenarios.platform import provider_latency_regression_sequence
 from app.simulator.scenarios.remediation_applied import remediation_applied_sequence
 from app.simulator.scenarios.tool_scope_violation import tool_scope_violation_sequence
 from app.simulator.scenarios.unsupported_claim_spike import unsupported_claim_spike_sequence
@@ -26,6 +28,7 @@ router = APIRouter(prefix="/simulator", tags=["simulator"])
 SCENARIO_FN = {
     "unsupported_claim_spike": unsupported_claim_spike_sequence,
     "tool_scope_violation": tool_scope_violation_sequence,
+    "provider_latency_regression": provider_latency_regression_sequence,
     "remediation_applied": remediation_applied_sequence,
 }
 
@@ -37,6 +40,13 @@ class ScenarioRequest(BaseModel):
 class StartRequest(BaseModel):
     mode: str = "continuous"
     rate_eps: float = Field(default=5.0, ge=0.1, le=20.0)
+    systems: list[str] | None = None
+    seed: int = Field(default=42, ge=0)
+
+
+class RunBatchRequest(BaseModel):
+    seed: int = Field(default=42, ge=0)
+    count: int = Field(default=5, ge=1, le=50)
     systems: list[str] | None = None
 
 
@@ -156,10 +166,11 @@ def simulator_start(body: StartRequest, db: Session = Depends(get_db)) -> dict:
     state.mode = body.mode
     state.rate_eps = body.rate_eps
     state.active_systems = body.systems or []
+    state.seed = body.seed
     db.commit()
     if body.mode == "continuous":
-        start_continuous(system_ids=body.systems, rate_eps=body.rate_eps)
-    return {"status": "started", "mode": body.mode}
+        start_continuous(system_ids=body.systems, rate_eps=body.rate_eps, seed=body.seed)
+    return {"status": "started", "mode": body.mode, "seed": body.seed}
 
 
 @router.post("/pause")
@@ -184,6 +195,44 @@ def simulator_stop(db: Session = Depends(get_db)) -> dict:
     return {"status": "stopped"}
 
 
+@router.get("/scenarios")
+def list_scenarios() -> dict:
+    def _dto(cfg) -> dict:
+        return {
+            "id": cfg.id,
+            "status": cfg.status,
+            "eligible_archetypes": list(cfg.eligible_archetypes),
+            "eligible_systems": list(cfg.eligible_systems or ()),
+            "expected_incident": bool(cfg.expected_incident),
+        }
+
+    return {
+        "implemented": [_dto(v) for v in IMPLEMENTED_SCENARIOS.values()],
+        "planned": [_dto(v) for v in PLANNED_SCENARIOS.values()],
+    }
+
+
+@router.post("/runs", response_model=ScenarioResponse)
+async def simulator_run_batch(
+    body: RunBatchRequest,
+    db: Session = Depends(get_db),
+) -> ScenarioResponse:
+    from app.fleet.registry import FLEET_SYSTEMS
+
+    systems = body.systems or [s.id for s in FLEET_SYSTEMS]
+    run_id = f"sim_run_{body.seed}"
+    envelopes = [
+        healthy_trace_bundle(
+            systems[i % len(systems)],
+            seed=body.seed,
+            seq=i,
+            simulator_run_id=run_id,
+        )
+        for i in range(body.count)
+    ]
+    return await _run_envelopes(db, "batch_run", envelopes)
+
+
 @router.post("/resume")
 def simulator_resume(db: Session = Depends(get_db)) -> dict:
     state = db.get(SimulatorState, 1)
@@ -191,6 +240,7 @@ def simulator_resume(db: Session = Depends(get_db)) -> dict:
         start_continuous(
             system_ids=state.active_systems or None,
             rate_eps=state.rate_eps or 5.0,
+            seed=getattr(state, "seed", 42) or 42,
         )
         state.running = True
         state.mode = "continuous"

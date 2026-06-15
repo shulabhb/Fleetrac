@@ -3,6 +3,7 @@
  */
 
 import { GOVERNED_SYSTEMS } from "@/lib/governance-dashboard-mock";
+import { canonicalSystemIdForDisplay } from "@/lib/governed-fleet-registry";
 
 export type {
   LiveSignalSeverity,
@@ -78,6 +79,7 @@ export function liveRuntimeSignals(): LiveRuntimeSignal[] {
     rows.push({
       id: `sig-${sys.id}-${i}`,
       systemId: sys.id,
+      canonicalSystemId: canonicalSystemIdForDisplay(sys.id),
       systemName: sys.name,
       ownerTeam: sys.ownerTeam,
       category: tpl.category,

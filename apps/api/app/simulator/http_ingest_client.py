@@ -7,6 +7,14 @@ import httpx
 
 from app.core.config import settings
 
+_test_asgi_app: Any | None = None
+
+
+def set_test_asgi_app(app: Any | None) -> None:
+    """Register FastAPI app for in-process ASGI loopback when base_url is http://test."""
+    global _test_asgi_app
+    _test_asgi_app = app
+
 
 @dataclass
 class IngestPostResult:
@@ -30,7 +38,16 @@ async def post_ingest_event(
 
     owns_client = client is None
     if client is None:
-        client = httpx.AsyncClient(timeout=timeout_seconds)
+        if url_base == "http://test" and _test_asgi_app is not None:
+            from httpx import ASGITransport
+
+            client = httpx.AsyncClient(
+                transport=ASGITransport(app=_test_asgi_app),
+                base_url=url_base,
+                timeout=timeout_seconds,
+            )
+        else:
+            client = httpx.AsyncClient(timeout=timeout_seconds)
 
     try:
         response = await client.post(ingest_url, json=envelope)
@@ -62,7 +79,16 @@ async def post_ingest_sequence(
     results: list[IngestPostResult] = []
     owns_client = client is None
     if client is None:
-        client = httpx.AsyncClient(timeout=settings.simulator_http_timeout_seconds)
+        if (base_url or settings.simulator_api_base_url).rstrip("/") == "http://test" and _test_asgi_app is not None:
+            from httpx import ASGITransport
+
+            client = httpx.AsyncClient(
+                transport=ASGITransport(app=_test_asgi_app),
+                base_url="http://test",
+                timeout=settings.simulator_http_timeout_seconds,
+            )
+        else:
+            client = httpx.AsyncClient(timeout=settings.simulator_http_timeout_seconds)
     try:
         for idx, envelope in enumerate(envelopes):
             result = await post_ingest_event(envelope, client=client, base_url=base_url)

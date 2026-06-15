@@ -1,6 +1,31 @@
 # AGENTS.md
 
-Context for agents and contributors working on Fleetrac. Reflects the **current** product state on `main` after the enterprise UX pass (governance shell, Fleetrac Analysis, governed Action Center, unified demo model).
+Context for agents and contributors working on Fleetrac. Branch **ImplementationV1**: phased transition from demo mocks to a real OTEL ingest → normalize → detect → mitigate pipeline.
+
+---
+
+## Implementation transition (mock → real)
+
+Fleetrac is **step-by-step** replacing mock behavior with a production-shaped governance runtime. Follow phase order; do not skip ahead.
+
+| Phase | Focus | Status |
+|-------|--------|--------|
+| **1 — OTEL ingest** | v2 multi-span bundles; `POST /api/v1/ingest/events`; raw persistence + ingest log UI | **Proven per slice** |
+| **2 — Normalize** | OTEL adapter → `FleetracEvent`; stable fields for system, model, evaluation signals | **Built** |
+| **3 — Risk engine** | Rule evaluation + correlator → incidents + evidence | **Built** |
+| **4 — Mitigate** | Notifications, owner queue, Action Center, verification | **Built** |
+| **5 — Expand fleet** | Multi-system continuous sim, trace-grouped Live Signals, governance systems API | **In progress** |
+
+### Transition rules (all contributors)
+
+1. **Ingest is canonical** — All telemetry (simulator today, OTEL Collector later) enters via `POST /api/v1/ingest/events`. No bypass writes to incidents or live signals.
+2. **OTEL-first envelopes** — Start with `otel_agent_trace` / `langgraph_trace` (`apps/api/app/schemas/ingestion.py`: `RawOtelEnvelope`). Metadata-only, realistic `trace_id` / `span_id` / `evaluation` blocks.
+3. **No new mock catalogs** — Do not add rows to `*-mock.ts` or expand `MOCK_STORE` fiction. Governance loop pages use API data or empty states.
+4. **One vertical slice at a time** — Default proof system: `sys-agt-treasury-001` (M40). Pass pytest + manual pitch before fleet-wide changes.
+5. **Extend, don't fork** — `ingest_pipeline.py`, `pipeline/`, `detection/`, `governance/read_models.py`, `governance-api.ts`, `governance-merge.ts`.
+6. **10 governed systems** — Fleet registry (`apps/api/app/fleet/registry.py`) is the System Registry scope; dashboard governed-system count stays **10**.
+
+Cursor rule: `.cursor/rules/implementation-transition.mdc` (always applied).
 
 ---
 
@@ -122,20 +147,21 @@ Local SQLite (`apps/api/data/fleetrac_sim.db`) is the **source of truth** for go
 
 | Layer | Path | Role |
 |-------|------|------|
-| Simulator | `apps/api/app/simulator/` | Scenario generators; **must** POST via HTTP loopback to ingest |
-| Ingest | `POST /api/v1/ingest/events` | Validate, persist raw, adapt, normalize, detect |
+| Simulator | `apps/api/app/simulator/` | Archetype generators + v2 trace bundles; **must** POST via HTTP loopback to ingest |
+| Ingest | `POST /api/v1/ingest/events` | Validate v1 flat + v2 nested bundles; one raw row per bundle; fan-out normalized spans |
 | Pipeline | `apps/api/app/pipeline/` | OTEL + AWS/Azure/GCP adapters → `FleetracEvent` |
 | Detection | `apps/api/app/detection/` | Rule engine + correlator → incidents |
 | Governance | `apps/api/app/governance/` | Evidence, Fleetrac Analysis, notifications, actions, verification |
-| Read APIs | `GET /api/v1/governance/*` | Live signals, owner queue, evidence library, dashboard summary |
+| Read APIs | `GET /api/v1/governance/*` | Live signals, owner queue, evidence library, dashboard summary, **`GET /governance/systems`** |
+| Simulator API | `GET /simulator/scenarios`, `POST /simulator/runs` | Scenario catalog (implemented vs planned); batch healthy runs |
 | SSE | `GET /api/v1/events/stream` | Live Signals push; 5s polling fallback in `use-event-stream.ts` |
 
 ### Feature flag
 
-- `NEXT_PUBLIC_GOVERNANCE_API=1` (default): frontend reads governance APIs first.
-- `NEXT_PUBLIC_GOVERNANCE_API=0`: legacy mock catalogs render unchanged demo rows.
+- `NEXT_PUBLIC_GOVERNANCE_API=1` (default): frontend reads governance APIs.
+- `NEXT_PUBLIC_GOVERNANCE_API=0`: legacy mock catalogs (deprecated on ImplementationV1; prefer API or empty states).
 
-**Merge rule:** API-sourced rows replace matching mock rows by alias (`inc-mrm-001`, `M40`); mocks remain as fallback only.
+**Merge rule:** API-sourced rows replace any remaining mock rows by alias; do not add new mock rows during implementation transition.
 
 ### Key client modules
 
@@ -148,11 +174,31 @@ Local SQLite (`apps/api/data/fleetrac_sim.db`) is the **source of truth** for go
 | `apps/web/hooks/use-governance-data.ts` | Polling refresh for governance surfaces |
 | `apps/web/hooks/use-event-stream.ts` | SSE + polling fallback |
 
+### OTEL v2 trace bundles
+
+- Envelope: `schema_version: "2.0"`, `source_type: "otel_agent_trace"`, nested `spans[]` with parent-child links.
+- One `raw_events` row per ingest POST; each span becomes a `normalized_events` row referencing `raw_envelope_id`.
+- Healthy spans: `signal_state=healthy`, `severity=null`, `confidence=null`.
+- Retention: 10k raw envelopes, 5k normalized rows (pruned on ingest).
+- Semconv: `apps/api/app/pipeline/adapters/genai_semconv.py` + `SEMCONV.md`.
+
+### E2E pitch scenarios (Phase 4)
+
+| Pitch | System | Incident alias | Responder queue |
+|-------|--------|----------------|-----------------|
+| `treasury_unsupported_claim` | `sys-agt-treasury-001` (M40) | `inc-mrm-001` | Model Risk Management |
+| `security_tool_scope` | `sys-agt-phish-008` | `inc-sec-001` | Security Operations |
+| `cs_latency_regression` | `sys-agt-cs-002` (A12) | `inc-plat-003` | Platform Reliability |
+
+Owner queue filters **`responder_team`**; incidents retain **`accountable_owner_team`** for routing context.
+
 ### Pitch commands
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/simulator/reset
 curl -X POST http://127.0.0.1:8000/api/v1/simulator/pitch/treasury_unsupported_claim
+curl -X POST http://127.0.0.1:8000/api/v1/simulator/pitch/security_tool_scope
+curl -X POST http://127.0.0.1:8000/api/v1/simulator/pitch/cs_latency_regression
 ```
 
 Full loop: Live Signals → Incident Queue (MRM) → Evidence Library → Action Center → Approve → Verify → Dashboard.
@@ -289,15 +335,15 @@ Tone: enterprise operational; avoid marketing copy.
 
 ## API vs prototype boundaries
 
-| Area | Source (API on) | Fallback (API off) |
-|------|-----------------|---------------------|
-| Live Signals | `GET /governance/live-signals` + SSE | `live-signals-mock.ts` |
+| Area | Source (target) | Legacy (do not extend) |
+|------|-----------------|------------------------|
+| Live Signals | `GET /governance/live-signals`, `GET /governance/ingest-log`, SSE | `live-signals-mock.ts` |
 | Incident Queue | `GET /governance/owner-queue` | `incident-queue-owner-review-mock.ts` |
 | Evidence Library | `GET /governance/evidence-library` | `evidence-library-mock.ts` |
-| Action Center | `GET /governance/actions` | Empty inbox |
-| Dashboard KPIs | `GET /governance/dashboard-summary` | `governance-dashboard-mock.ts` |
-| Notifications | `GET /governance/notifications` | Empty bell |
-| Systems list/detail, settings | API (`lib/api.ts`) | Sample backend data |
+| Action Center | `GET /governance/actions` | — |
+| Dashboard KPIs | `GET /governance/dashboard-summary` + static 10-system count | `governance-dashboard-mock.ts` |
+| Notifications | `GET /governance/notifications` | — |
+| Systems list/detail | API (`lib/api.ts`) — 10 fleet systems only | Excel `sys_m*` catalog |
 
 Bob API routes are deprecated; use governance evidence Fleetrac Analysis instead.
 
@@ -337,6 +383,8 @@ Bob API routes are deprecated; use governance evidence Fleetrac Analysis instead
 ## Out of scope (unless explicitly requested)
 
 - RBAC / per-team permissions
-- Real Slack, telemetry ingest, or policy engine backend
+- Replacing SQLite with Postgres (document path; implement when approved)
+- Real Slack or external policy engine connectors (Settings remains config UI)
 - Reintroducing Bob, Activity, Usage, or Controls as primary nav
 - Renaming `/outcomes` route (product name is already Evidence Library)
+- **New mock/demo data rows** during ImplementationV1 transition

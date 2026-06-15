@@ -1,53 +1,79 @@
-"""Background continuous simulation — posts healthy traffic via HTTP ingest loopback."""
+"""Background continuous simulation — posts healthy v2 trace bundles via HTTP loopback."""
 
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from typing import Any
 
 from app.core.config import settings
 from app.fleet.registry import FLEET_SYSTEMS
+from app.simulator.generators.healthy_traffic import healthy_trace_bundle
 from app.simulator.http_ingest_client import post_ingest_sequence
-from app.simulator.scenarios.healthy_baseline import healthy_baseline_event
 
-_runner_task: asyncio.Task | None = None
-_stop_event: asyncio.Event | None = None
+_runner_thread: threading.Thread | None = None
+_stop_flag: threading.Event | None = None
 _seq = 0
+_current_seed = 42
 
 
-async def _continuous_loop(system_ids: list[str], rate_eps: float) -> None:
+async def _continuous_loop(
+    system_ids: list[str],
+    rate_eps: float,
+    seed: int,
+    stop: threading.Event,
+) -> None:
     global _seq
-    assert _stop_event is not None
     delay = 1.0 / max(rate_eps, 0.1)
-    while not _stop_event.is_set():
+    run_id = f"sim_run_{seed}"
+    while not stop.is_set():
         sid = system_ids[_seq % len(system_ids)]
-        event = healthy_baseline_event(sid, seq=_seq)
+        bundle = healthy_trace_bundle(sid, seed=seed, seq=_seq, simulator_run_id=run_id)
         _seq += 1
-        await post_ingest_sequence([event], base_url=settings.simulator_api_base_url)
-        try:
-            await asyncio.wait_for(_stop_event.wait(), timeout=delay)
-            break
-        except asyncio.TimeoutError:
-            continue
+        await post_ingest_sequence([bundle], base_url=settings.simulator_api_base_url)
+        end = time.monotonic() + delay
+        while time.monotonic() < end and not stop.is_set():
+            await asyncio.sleep(0.05)
 
 
-def start_continuous(*, system_ids: list[str] | None = None, rate_eps: float = 5.0) -> None:
-    global _runner_task, _stop_event, _seq
+def _thread_main(system_ids: list[str], rate_eps: float, seed: int, stop: threading.Event) -> None:
+    asyncio.run(_continuous_loop(system_ids, rate_eps, seed, stop))
+
+
+def start_continuous(
+    *,
+    system_ids: list[str] | None = None,
+    rate_eps: float = 5.0,
+    seed: int = 42,
+) -> None:
+    global _runner_thread, _stop_flag, _seq, _current_seed
     stop_continuous()
+    _current_seed = seed
     ids = system_ids or [s.id for s in FLEET_SYSTEMS]
-    _stop_event = asyncio.Event()
-    _runner_task = asyncio.create_task(_continuous_loop(ids, rate_eps))
+    _stop_flag = threading.Event()
+    _runner_thread = threading.Thread(
+        target=_thread_main,
+        args=(ids, rate_eps, seed, _stop_flag),
+        daemon=True,
+        name="fleetrac-simulator",
+    )
+    _runner_thread.start()
 
 
 def stop_continuous() -> None:
-    global _runner_task, _stop_event
-    if _stop_event:
-        _stop_event.set()
-    if _runner_task and not _runner_task.done():
-        _runner_task.cancel()
-    _runner_task = None
-    _stop_event = None
+    global _runner_thread, _stop_flag
+    if _stop_flag:
+        _stop_flag.set()
+    if _runner_thread and _runner_thread.is_alive():
+        _runner_thread.join(timeout=3.0)
+    _runner_thread = None
+    _stop_flag = None
 
 
 def is_running() -> bool:
-    return _runner_task is not None and not _runner_task.done()
+    return _runner_thread is not None and _runner_thread.is_alive()
+
+
+def current_seed() -> int:
+    return _current_seed

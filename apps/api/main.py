@@ -45,6 +45,8 @@ except ModuleNotFoundError:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    from app.simulator.runner import stop_continuous
+
     init_db()
     factory = get_session_factory()
     db = factory()
@@ -53,6 +55,7 @@ async def lifespan(_app: FastAPI):
     finally:
         db.close()
     yield
+    stop_continuous()
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)

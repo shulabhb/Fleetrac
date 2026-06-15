@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Incident
 from app.detection.engine import DetectionMatch
-from app.fleet.registry import SYSTEM_BY_ID, canonical_incident_id, incident_alias
+from app.fleet.registry import (
+    SYSTEM_BY_ID,
+    canonical_incident_id,
+    incident_alias,
+    responder_team_for_risk,
+)
 from app.governance.evidence import append_recurrence_evidence, ensure_evidence_for_incident
 from app.governance.notifications import record_notification_and_assignment
 from app.schemas.fleetrac_event import FleetracEvent
@@ -35,6 +40,8 @@ def create_incident_from_detection(
     system_name = system.name if system else event.system_id
     canonical_id = canonical_incident_id(event.system_id, match.signal_type)
     alias_id = incident_alias(event.system_id, match.signal_type)
+    accountable = system.owner_team if system else (event.accountable_owner_team or "Model Risk Management")
+    responder = responder_team_for_risk(match.risk_category, fallback=accountable)
 
     summary = (
         f"{match.signal_type} detected: {match.metric_value:.4g} "
@@ -55,7 +62,9 @@ def create_incident_from_detection(
         severity=match.severity,
         priority=match.priority,
         lifecycle=match.lifecycle_final,
-        owner_team=system.owner_team if system else "Model Risk Management",
+        accountable_owner_team=accountable,
+        responder_team=responder,
+        owner_team=responder,
         title=_incident_title(system_name, match.signal_type),
         summary=summary,
         lifecycle_history=history,
@@ -69,7 +78,10 @@ def create_incident_from_detection(
         normalized_event_id=event.event_id,
         raw_event_id=event.raw_payload_reference,
         metric_value=match.metric_value,
-        summary="Threshold breach evaluation span",
+        summary=(
+            f"Evaluation span trace={event.trace_id} span={event.span_id} "
+            f"({match.signal_type})"
+        ),
         signal_type=match.signal_type,
         system_id=event.system_id,
     )
@@ -77,7 +89,7 @@ def create_incident_from_detection(
         db,
         incident_id=incident.id,
         title=incident.title,
-        owner_team=incident.owner_team,
+        owner_team=incident.responder_team,
     )
     return incident
 

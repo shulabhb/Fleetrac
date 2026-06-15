@@ -17,6 +17,11 @@ export type GovernedFleetSystem = {
   platform: "aws" | "azure" | "gcp";
 };
 
+export function canonicalSystemIdForDisplay(displayId: string): string {
+  const match = GOVERNED_FLEET_SYSTEMS.find((s) => s.displayId === displayId);
+  return match?.systemId ?? displayId;
+}
+
 export const GOVERNED_FLEET_SYSTEMS: GovernedFleetSystem[] = [
   {
     systemId: "sys-agt-refund-001",

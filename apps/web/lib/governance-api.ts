@@ -36,8 +36,9 @@ export type LiveSignalRowDTO = {
   timestamp: string;
   operation_type: string;
   normalized_signal_type: string | null;
-  severity: string;
-  confidence: number;
+  signal_state?: string;
+  severity: string | null;
+  confidence: number | null;
   incident_id: string | null;
   trace_id: string | null;
   owner_team?: string | null;
@@ -94,6 +95,8 @@ export type OwnerQueueRowDTO = {
   severity: string;
   priority: string;
   owner_team: string;
+  accountable_owner_team?: string;
+  responder_team?: string;
   title: string;
   summary: string;
   reviewer: string | null;
@@ -104,6 +107,36 @@ export type OwnerQueueRowDTO = {
 export type OwnerQueueResponseDTO = {
   items: OwnerQueueRowDTO[];
   total: number;
+};
+
+export type GovernanceSystemDTO = {
+  system_id: string;
+  display_system_id: string;
+  system_name: string;
+  system_name_alias: string | null;
+  owner_team: string;
+  platform: string;
+  archetype: string;
+  open_incidents: number;
+  last_signal_at: string | null;
+};
+
+export type GovernanceSystemsResponseDTO = {
+  items: GovernanceSystemDTO[];
+  total: number;
+};
+
+export type SimulatorScenarioDTO = {
+  id: string;
+  status: string;
+  eligible_archetypes: string[];
+  eligible_systems: string[];
+  expected_incident: boolean;
+};
+
+export type SimulatorScenariosResponseDTO = {
+  implemented: SimulatorScenarioDTO[];
+  planned: SimulatorScenarioDTO[];
 };
 
 export type EvidenceItemDTO = {
@@ -306,14 +339,24 @@ export async function postSimulatorReset(): Promise<void> {
   await governancePost("/simulator/reset");
 }
 
+export async function fetchGovernanceSystems(): Promise<GovernanceSystemsResponseDTO | null> {
+  return governanceFetch<GovernanceSystemsResponseDTO>("/governance/systems");
+}
+
+export async function fetchSimulatorScenarios(): Promise<SimulatorScenariosResponseDTO | null> {
+  return governanceFetch<SimulatorScenariosResponseDTO>("/simulator/scenarios");
+}
+
 export async function postSimulatorStart(opts?: {
   rate_eps?: number;
   systems?: string[];
+  seed?: number;
 }): Promise<void> {
   await governancePost("/simulator/start", {
     mode: "continuous",
     rate_eps: opts?.rate_eps ?? 5,
-    systems: opts?.systems
+    systems: opts?.systems,
+    seed: opts?.seed ?? 42
   });
 }
 

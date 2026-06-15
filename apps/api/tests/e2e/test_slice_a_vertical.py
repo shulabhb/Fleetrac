@@ -27,12 +27,12 @@ async def test_slice_a_vertical(client, app):
         db.close()
 
     assert result.failed is None
-    assert result.posted == 6
+    assert result.posted == 1
 
     db = factory()
     try:
-        assert db.query(RawEvent).count() == 6
-        assert db.query(NormalizedEvent).count() == 6
+        assert db.query(RawEvent).count() == 1
+        assert db.query(NormalizedEvent).count() >= 7
 
         inc = db.query(Incident).filter(Incident.id == INCIDENT_CANONICAL_ID).one()
         assert inc.alias_id == INCIDENT_ALIAS_ID

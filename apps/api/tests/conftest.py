@@ -25,6 +25,7 @@ def app(database_url: str):
     from app.db.session import reset_engine
 
     settings.database_url = database_url
+    settings.simulator_api_base_url = "http://test"
     reset_engine(database_url)
 
     import importlib
@@ -32,6 +33,9 @@ def app(database_url: str):
     import main as main_module
 
     importlib.reload(main_module)
+    from app.simulator.http_ingest_client import set_test_asgi_app
+
+    set_test_asgi_app(main_module.app)
     return main_module.app
 
 

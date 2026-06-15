@@ -75,15 +75,21 @@ function resolveUiIncidentId(row: LiveSignalRowDTO): string | undefined {
   return row.alias_id ?? row.incident_id;
 }
 
+function mapSeverity(row: LiveSignalRowDTO): LiveSignalSeverity {
+  if (!row.severity || row.signal_state === "healthy") return "Healthy";
+  return capitalizeWord(row.severity) as LiveSignalSeverity;
+}
+
 export function mapLiveSignalRow(row: LiveSignalRowDTO): GovernanceLiveSignal {
   const uiIncidentId = resolveUiIncidentId(row);
-  const severity = capitalizeWord(row.severity) as LiveSignalSeverity;
+  const severity = mapSeverity(row);
   const signalLabel = row.normalized_signal_type
     ? row.normalized_signal_type.replace(/_/g, " ")
     : "signal";
   return {
     id: row.event_id,
     systemId: row.display_system_id,
+    canonicalSystemId: row.system_id,
     systemName: row.system_name_alias ?? row.system_name,
     modelLabel: row.model ?? undefined,
     ownerTeam: row.owner_team ?? "Model Risk Management",
@@ -95,8 +101,26 @@ export function mapLiveSignalRow(row: LiveSignalRowDTO): GovernanceLiveSignal {
     detectedAt: formatSignalTimestamp(row.timestamp),
     incidentLinked: Boolean(row.incident_id),
     incidentId: uiIncidentId,
+    traceId: row.trace_id ?? undefined,
+    signalState: row.signal_state,
     governanceSource: "api"
   };
+}
+
+export function groupSignalsByTrace(
+  signals: GovernanceLiveSignal[]
+): { traceId: string; signals: GovernanceLiveSignal[] }[] {
+  const groups = new Map<string, GovernanceLiveSignal[]>();
+  for (const s of signals) {
+    const key = s.traceId ?? s.id;
+    const list = groups.get(key) ?? [];
+    list.push(s);
+    groups.set(key, list);
+  }
+  return Array.from(groups.entries()).map(([traceId, items]) => ({
+    traceId,
+    signals: items
+  }));
 }
 
 export function mapLiveSignalsFromApi(
@@ -110,6 +134,7 @@ export function buildLiveSignalsSummaryFromApi(
 ): LiveSignalsSummary {
   const items = api?.items ?? [];
   const critical = items.filter((row) => {
+    if (!row.severity) return false;
     const s = row.severity.toLowerCase();
     return s === "critical" || s === "high";
   }).length;

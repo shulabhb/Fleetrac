@@ -83,3 +83,61 @@ class IngestEventResponse(BaseModel):
     duplicate: bool = False
     incident_id: str | None = None
     normalized_signal_type: str | None = None
+    spans_accepted: int = 1
+    warnings: list[str] = Field(default_factory=list)
+
+
+class OtelSpanStatus(BaseModel):
+    code: str = "OK"
+    message: str | None = None
+
+
+class OtelSpanEvent(BaseModel):
+    name: str
+    time_unix_nano: int
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+
+class OtelSpan(BaseModel):
+    span_id: str
+    parent_span_id: str | None = None
+    name: str
+    kind: str = "INTERNAL"
+    start_time_unix_nano: int
+    end_time_unix_nano: int
+    status: OtelSpanStatus = Field(default_factory=OtelSpanStatus)
+    attributes: dict[str, Any] = Field(default_factory=dict)
+    events: list[OtelSpanEvent] = Field(default_factory=list)
+
+
+class OtelResource(BaseModel):
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+
+class OtelInstrumentationScope(BaseModel):
+    name: str = "fleetrac.agent-simulator"
+    version: str = "2026.06.1"
+    schema_url: str | None = None
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+
+class OtelTraceBundle(BaseModel):
+    """schema_version 2.0 nested trace bundle — source_type remains otel_agent_trace."""
+
+    schema_version: str = "2.0"
+    source_type: str = "otel_agent_trace"
+    tenant_id: str = "tenant-demo"
+    environment: str = "production"
+    system_id: str
+    content_mode: str = "metadata_only"
+    idempotency_key: str
+    payload_hash: str | None = None
+    trace_id: str
+    resource: OtelResource
+    instrumentation_scope: OtelInstrumentationScope
+    spans: list[OtelSpan]
+    logs: list[dict[str, Any]] = Field(default_factory=list)
+    metrics: list[dict[str, Any]] = Field(default_factory=list)
+    scenario: dict[str, Any] | None = None
+
+    model_config = {"extra": "allow"}

@@ -26,6 +26,8 @@ def test_correlator_reuses_incident_within_window(database_url: str):
             severity="Critical",
             priority="P1",
             lifecycle="Owner Review",
+            accountable_owner_team=OWNER_TEAM,
+            responder_team=OWNER_TEAM,
             owner_team=OWNER_TEAM,
             title="t",
             summary="s",

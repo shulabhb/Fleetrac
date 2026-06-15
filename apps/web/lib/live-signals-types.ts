@@ -1,6 +1,6 @@
 /** Live Signals display types — feed data from governance API when enabled. */
 
-export type LiveSignalSeverity = "Critical" | "High" | "Medium" | "Low";
+export type LiveSignalSeverity = "Critical" | "High" | "Medium" | "Low" | "Healthy";
 
 export type LiveSignalCategory =
   | "Drift"
@@ -13,6 +13,7 @@ export type LiveSignalCategory =
 export type LiveRuntimeSignal = {
   id: string;
   systemId: string;
+  canonicalSystemId: string;
   systemName: string;
   modelLabel?: string;
   ownerTeam: string;
@@ -22,6 +23,8 @@ export type LiveRuntimeSignal = {
   detectedAt: string;
   incidentLinked: boolean;
   incidentId?: string;
+  traceId?: string;
+  signalState?: string;
 };
 
 export type LiveSignalsSummary = {

@@ -37,4 +37,7 @@ async def ingest_events(payload: dict[str, Any], db: Session = Depends(get_db)) 
     try:
         return await process_ingest_event(db, payload)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        detail = str(exc)
+        if detail == "unknown_system":
+            raise HTTPException(status_code=422, detail={"error_code": "unknown_system", "message": detail}) from exc
+        raise HTTPException(status_code=422, detail=detail) from exc

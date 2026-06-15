@@ -21,11 +21,13 @@ class LiveSignalRow(GovernanceIdentityMixin):
     event_id: str
     timestamp: datetime
     operation_type: str
+    signal_state: str = "healthy"
     normalized_signal_type: str | None = None
-    severity: str
-    confidence: float
+    severity: str | None = None
+    confidence: float | None = None
     incident_id: str | None = None
     trace_id: str | None = None
+    accountable_owner_team: str | None = None
     owner_team: str | None = None
     source_type: str | None = None
     source_provider: str | None = None
@@ -44,7 +46,7 @@ class IngestLogNormalizedDTO(BaseModel):
     source_type: str
     operation_type: str
     model: str | None = None
-    severity: str
+    severity: str | None = None
     normalized_signal_type: str | None = None
     incident_id: str | None = None
     evaluation_signals: dict[str, Any] = Field(default_factory=dict)
@@ -73,6 +75,8 @@ class OwnerQueueRow(GovernanceIdentityMixin):
     classification_category: str
     severity: str
     priority: str
+    accountable_owner_team: str
+    responder_team: str
     owner_team: str
     title: str
     summary: str

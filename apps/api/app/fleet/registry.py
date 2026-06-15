@@ -246,13 +246,30 @@ RULE_SPECS: tuple[RuleSpec, ...] = (
     ),
 )
 
-# system_id + signal_type -> pitch alias for deep links
+# Operational responder team by risk category (incident queue routing).
+RESPONDER_TEAM_BY_RISK_CATEGORY: dict[str, str] = {
+    "Output Reliability": "Model Risk Management",
+    "Cyber": "Security Operations",
+    "Technology": "Platform Reliability",
+}
+
+
+def responder_team_for_risk(risk_category: str, *, fallback: str = "Model Risk Management") -> str:
+    return RESPONDER_TEAM_BY_RISK_CATEGORY.get(risk_category, fallback)
+
+
+def system_archetype(system_id: str) -> str:
+    from app.fleet.system_metadata import SYSTEM_METADATA
+
+    return str(SYSTEM_METADATA.get(system_id, {}).get("archetype", "decision"))
+
+
+# system_id + signal_type -> pitch alias for deep links (locked E2E aliases in plan)
 INCIDENT_ALIAS_BY_SIGNAL: dict[tuple[str, str], str] = {
     ("sys-agt-treasury-001", "unsupported_claim_elevated"): "inc-mrm-001",
     ("sys-agt-pep-003", "grounding_degraded"): "inc-mrm-002",
-    ("sys-agt-cs-002", "tool_scope_violation"): "inc-sec-001",
-    ("sys-agt-phish-008", "tool_scope_violation"): "inc-sec-002",
-    ("sys-agt-inv-005", "latency_regression"): "inc-plat-001",
+    ("sys-agt-phish-008", "tool_scope_violation"): "inc-sec-001",
+    ("sys-agt-cs-002", "latency_regression"): "inc-plat-003",
     ("sys-agt-rag-007", "retrieval_degradation"): "inc-plat-002",
 }
 

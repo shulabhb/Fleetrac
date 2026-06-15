@@ -16,7 +16,8 @@ const KNOWN_INCIDENT_OWNERS: Record<string, string> = {
   "inc-sec-001": "Security Operations",
   "inc-sec-002": "Security Operations",
   "inc-plat-001": "Platform Reliability",
-  "inc-plat-002": "Platform Reliability"
+  "inc-plat-002": "Platform Reliability",
+  "inc-plat-003": "Platform Reliability"
 };
 
 const SYSTEM_OWNER_BY_ID: Record<string, string> = {

@@ -69,16 +69,21 @@ class NormalizedEvent(Base):
     evaluation_signals: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     policy_result: Mapped[str | None] = mapped_column(String(32), nullable=True)
     normalized_signal_type: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    severity: Mapped[str] = mapped_column(String(32), nullable=False)
-    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    signal_state: Mapped[str] = mapped_column(String(32), default="healthy", nullable=False)
+    severity: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     evidence_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
     raw_payload_reference: Mapped[str] = mapped_column(String(64), nullable=False)
+    raw_envelope_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    accountable_owner_team: Mapped[str | None] = mapped_column(String(128), nullable=True)
     owner_team: Mapped[str | None] = mapped_column(String(128), nullable=True)
     applicable_control_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     correlation_key: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
     incident_id: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
     content_mode: Mapped[str] = mapped_column(String(32), default="metadata_only")
     payload_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    scenario_run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    simulator_run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -95,6 +100,8 @@ class Incident(Base):
     severity: Mapped[str] = mapped_column(String(32), nullable=False)
     priority: Mapped[str] = mapped_column(String(16), nullable=False)
     lifecycle: Mapped[str] = mapped_column(String(64), nullable=False)
+    accountable_owner_team: Mapped[str] = mapped_column(String(128), nullable=False)
+    responder_team: Mapped[str] = mapped_column(String(128), nullable=False)
     owner_team: Mapped[str] = mapped_column(String(128), nullable=False)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
@@ -169,6 +176,8 @@ class SimulatorState(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     pitch_step: Mapped[int] = mapped_column(default=0)
     active_systems: Mapped[list[str]] = mapped_column(JSON, default=list)
+    seed: Mapped[int] = mapped_column(default=42)
+    simulator_run_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class GovernedActionRow(Base):

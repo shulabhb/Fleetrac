@@ -15,7 +15,7 @@ from app.simulator.scenarios.tool_scope_violation import tool_scope_violation_se
 async def test_tool_scope_violation_creates_secops_incident(client, app):
     assert client.post("/api/v1/simulator/reset").status_code == 200
     transport = ASGITransport(app=app)
-    envelopes = tool_scope_violation_sequence("sys-agt-cs-002")
+    envelopes = tool_scope_violation_sequence("sys-agt-phish-008")
 
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         results = await post_ingest_sequence(envelopes, client=http_client, base_url="http://test")
@@ -28,7 +28,7 @@ async def test_tool_scope_violation_creates_secops_incident(client, app):
         if inc is None:
             inc = db.query(Incident).filter(Incident.signal_type == "tool_scope_violation").first()
         assert inc is not None
-        assert inc.owner_team == "Security Operations"
+        assert inc.responder_team == "Security Operations"
         assert inc.lifecycle == "Action Approval"
     finally:
         db.close()

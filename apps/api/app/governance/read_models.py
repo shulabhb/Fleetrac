@@ -16,6 +16,8 @@ from app.db.models import (
     VerificationOutcomeRow,
 )
 from app.schemas.analysis import FleetracAnalysis
+from app.fleet.registry import SYSTEM_BY_ID
+from app.fleet.system_metadata import SYSTEM_METADATA
 from app.schemas.governance import (
     EvidenceItemDTO,
     EvidenceRecordDTO,
@@ -79,12 +81,15 @@ def live_signals(
                 event_id=row.event_id,
                 timestamp=row.timestamp,
                 operation_type=row.operation_type,
+                signal_state=row.signal_state or "healthy",
                 normalized_signal_type=row.normalized_signal_type,
                 severity=row.severity,
                 confidence=row.confidence,
                 incident_id=row.incident_id,
                 trace_id=row.trace_id,
-                owner_team=row.owner_team or (system.owner_team if system else None),
+                accountable_owner_team=row.accountable_owner_team
+                or (system.owner_team if system else None),
+                owner_team=row.accountable_owner_team or (system.owner_team if system else None),
                 source_type=row.source_type,
                 source_provider=row.source_provider,
                 model=row.model,
@@ -150,7 +155,7 @@ def ingest_log(
 def owner_queue(db: Session, *, owner_team: str) -> OwnerQueueResponse:
     rows = (
         db.query(Incident)
-        .filter(Incident.owner_team == owner_team)
+        .filter(Incident.responder_team == owner_team)
         .order_by(Incident.updated_at.desc())
         .all()
     )
@@ -170,7 +175,9 @@ def owner_queue(db: Session, *, owner_team: str) -> OwnerQueueResponse:
                 classification_category=inc.classification_category,
                 severity=inc.severity,
                 priority=inc.priority,
-                owner_team=inc.owner_team,
+                accountable_owner_team=inc.accountable_owner_team,
+                responder_team=inc.responder_team,
+                owner_team=inc.responder_team,
                 title=inc.title,
                 summary=inc.summary,
                 reviewer=assignment.reviewer_name if assignment else None,
@@ -317,6 +324,38 @@ def evidence_library(db: Session, *, owner_team: str | None = None) -> dict:
             }
         )
     return {"items": records, "total": len(records)}
+
+
+def governance_systems(db: Session) -> dict:
+    items: list[dict] = []
+    for system in db.query(System).order_by(System.display_id).all():
+        meta = SYSTEM_METADATA.get(system.id, {})
+        open_count = (
+            db.query(Incident)
+            .filter(Incident.system_id == system.id, Incident.lifecycle != "Closed")
+            .count()
+        )
+        last = (
+            db.query(NormalizedEvent)
+            .filter(NormalizedEvent.system_id == system.id)
+            .order_by(NormalizedEvent.timestamp.desc())
+            .first()
+        )
+        fleet = SYSTEM_BY_ID.get(system.id)
+        items.append(
+            {
+                "system_id": system.id,
+                "display_system_id": system.display_id,
+                "system_name": system.name,
+                "system_name_alias": system.name_alias,
+                "owner_team": system.owner_team,
+                "platform": fleet.platform if fleet else meta.get("cloud_provider", ""),
+                "archetype": meta.get("archetype", "decision"),
+                "open_incidents": open_count,
+                "last_signal_at": last.timestamp.isoformat() if last else None,
+            }
+        )
+    return {"items": items, "total": len(items)}
 
 
 def list_notifications(db: Session, *, limit: int = 50) -> list[dict]:

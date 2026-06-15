@@ -7,9 +7,15 @@ import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { LiveSignalsRawLogPanel } from "@/components/live-signals/live-signals-raw-log-panel";
 import { SimulatorControls } from "@/components/live-signals/simulator-controls";
+import { TraceGroupPanel } from "@/components/live-signals/trace-group-panel";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { useEventStream } from "@/hooks/use-event-stream";
-import { mapLiveSignalsFromApi, type GovernanceLiveSignal } from "@/lib/governance-merge";
+import { GOVERNED_FLEET_SYSTEMS } from "@/lib/governed-fleet-registry";
+import {
+  groupSignalsByTrace,
+  mapLiveSignalsFromApi,
+  type GovernanceLiveSignal
+} from "@/lib/governance-merge";
 import type { LiveSignalSeverity } from "@/lib/live-signals-types";
 import {
   routeToEvidenceLibraryIncidentRecord,
@@ -28,8 +34,10 @@ function severityTone(sev: LiveSignalSeverity): "high" | "medium" | "low" {
 
 export function LiveSignalsFeed() {
   const [tab, setTab] = useState<FeedTab>("governed");
-  const [severity, setSeverity] = useState<LiveSignalSeverity | "all">("all");
+  const [severity, setSeverity] = useState<LiveSignalSeverity | "all" | "healthy">("all");
   const [category, setCategory] = useState<string>("all");
+  const [systemFilter, setSystemFilter] = useState<string>("all");
+  const [groupByTrace, setGroupByTrace] = useState(true);
   const { enabled, liveSignals, ingestLog, simulatorStatus, refresh } = useGovernanceData();
   useEventStream(refresh, enabled);
 
@@ -44,11 +52,15 @@ export function LiveSignalsFeed() {
 
   const filtered = useMemo(() => {
     return signals.filter((s) => {
-      if (severity !== "all" && s.severity !== severity) return false;
+      if (severity === "healthy" && s.severity !== "Healthy") return false;
+      if (severity !== "all" && severity !== "healthy" && s.severity !== severity) return false;
       if (category !== "all" && s.category !== category) return false;
+      if (systemFilter !== "all" && s.canonicalSystemId !== systemFilter) return false;
       return true;
     });
-  }, [signals, severity, category]);
+  }, [signals, severity, category, systemFilter]);
+
+  const traceGroups = useMemo(() => groupSignalsByTrace(filtered), [filtered]);
 
   return (
     <div className="space-y-5">
@@ -80,46 +92,71 @@ export function LiveSignalsFeed() {
       {tab === "raw" ? (
         <LiveSignalsRawLogPanel rows={ingestLog?.items ?? []} />
       ) : (
-      <Card className="overflow-hidden shadow-none">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2.5">
-          <Select
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value as LiveSignalSeverity | "all")}
-          >
-            <option value="all">Any severity</option>
-            <option value="Critical">Critical</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
-          </Select>
-          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="all">Any category</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-          <p className="ml-auto text-[11px] tabular-nums text-slate-500">
-            {filtered.length} signals · live from API
-          </p>
-        </div>
-
-        {filtered.length === 0 ? (
-          <div className="px-4 py-10 text-center text-[13px] text-slate-600">
-            No live signals yet. Use{" "}
-            <span className="font-medium text-slate-800">Run pitch</span> or{" "}
-            <span className="font-medium text-slate-800">Start continuous</span> above to ingest
-            telemetry.
+        <Card className="overflow-hidden shadow-none">
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2.5">
+            <Select
+              value={severity}
+              onChange={(e) =>
+                setSeverity(e.target.value as LiveSignalSeverity | "all" | "healthy")
+              }
+            >
+              <option value="all">Any severity</option>
+              <option value="healthy">Healthy only</option>
+              <option value="Critical">Critical</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </Select>
+            <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="all">Any category</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+            <Select value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
+              <option value="all">All systems</option>
+              {GOVERNED_FLEET_SYSTEMS.map((s) => (
+                <option key={s.systemId} value={s.systemId}>
+                  {s.displayId} — {s.name}
+                </option>
+              ))}
+            </Select>
+            <button
+              type="button"
+              onClick={() => setGroupByTrace((v) => !v)}
+              className={cn(
+                "rounded-md border px-2.5 py-1.5 text-[11px] font-semibold shadow-sm",
+                groupByTrace
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-800"
+              )}
+            >
+              Group by trace
+            </button>
+            <p className="ml-auto text-[11px] tabular-nums text-slate-500">
+              {filtered.length} signals · live from API
+            </p>
           </div>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {filtered.map((s) => (
-              <SignalRow key={s.id} signal={s} />
-            ))}
-          </ul>
-        )}
-      </Card>
+
+          {filtered.length === 0 ? (
+            <div className="px-4 py-10 text-center text-[13px] text-slate-600">
+              No live signals yet. Use{" "}
+              <span className="font-medium text-slate-800">Run pitch</span> or{" "}
+              <span className="font-medium text-slate-800">Start continuous</span> above to ingest
+              telemetry.
+            </div>
+          ) : groupByTrace ? (
+            <TraceGroupPanel groups={traceGroups} />
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {filtered.map((s) => (
+                <SignalRow key={s.id} signal={s} />
+              ))}
+            </ul>
+          )}
+        </Card>
       )}
     </div>
   );
@@ -141,6 +178,11 @@ function SignalRow({ signal }: { signal: GovernanceLiveSignal }) {
           <Badge tone="outline" size="xs">
             {signal.category}
           </Badge>
+          {signal.traceId ? (
+            <Badge tone="neutral" size="xs">
+              trace {signal.traceId.slice(0, 8)}…
+            </Badge>
+          ) : null}
           {signal.governanceSource === "api" ? (
             <Badge tone="info" size="xs">
               Live API
@@ -164,7 +206,10 @@ function SignalRow({ signal }: { signal: GovernanceLiveSignal }) {
               <span className="text-slate-300"> · </span>
             </>
           ) : null}
-          <Link href={routeToSystem(signal.systemId)} className="font-medium hover:text-slate-900">
+          <Link
+            href={routeToSystem(signal.canonicalSystemId)}
+            className="font-medium hover:text-slate-900"
+          >
             {signal.systemName}
           </Link>
           <span className="text-slate-300"> · </span>

@@ -1,35 +1,24 @@
-"""Slice A constants — re-export treasury system from fleet registry for backward compatibility."""
+"""Slice A constants — thin re-export from simulator.config.pitch_aliases (deprecated path)."""
 
-from app.fleet.registry import (
-    RULE_BY_ID,
-    SYSTEM_BY_ID,
-    canonical_incident_id,
-    incident_alias,
+from app.simulator.config.pitch_aliases import (  # noqa: F401
+    ACCOUNTABLE_OWNER_TEAM,
+    CLASSIFICATION_CATEGORY,
+    CLASSIFICATION_PRIORITY,
+    CLASSIFICATION_SEVERITY,
+    CORRELATION_WINDOW_MINUTES,
+    DEFAULT_REVIEWER,
+    INCIDENT_ALIAS_ID,
+    INCIDENT_CANONICAL_ID,
+    LIFECYCLE_FINAL,
+    OWNER_TEAM,
+    PITCH_ALIASES,
+    RULE_ID,
+    SIGNAL_TYPE,
+    SYSTEM_DISPLAY_ID,
+    SYSTEM_ID,
+    SYSTEM_NAME,
+    SYSTEM_NAME_ALIAS,
+    TEAM_LEAD,
+    THRESHOLD_FIELD,
+    THRESHOLD_VALUE,
 )
-
-_treasury = SYSTEM_BY_ID["sys-agt-treasury-001"]
-_rule = RULE_BY_ID["rule_unsupported_claim_high"]
-
-SYSTEM_ID = _treasury.id
-SYSTEM_DISPLAY_ID = _treasury.display_id
-SYSTEM_NAME = _treasury.name
-SYSTEM_NAME_ALIAS = _treasury.name_alias
-
-OWNER_TEAM = _treasury.owner_team
-TEAM_LEAD = _treasury.team_lead
-DEFAULT_REVIEWER = _treasury.default_reviewer
-
-RULE_ID = _rule.id
-SIGNAL_TYPE = _rule.signal_type
-THRESHOLD_FIELD = _rule.threshold_field
-THRESHOLD_VALUE = _rule.threshold_value
-
-CLASSIFICATION_CATEGORY = _rule.risk_category
-CLASSIFICATION_SEVERITY = _rule.severity
-CLASSIFICATION_PRIORITY = _rule.priority
-LIFECYCLE_FINAL = _rule.lifecycle_final
-
-INCIDENT_CANONICAL_ID = canonical_incident_id(SYSTEM_ID, SIGNAL_TYPE)
-INCIDENT_ALIAS_ID = incident_alias(SYSTEM_ID, SIGNAL_TYPE)
-
-CORRELATION_WINDOW_MINUTES = 30

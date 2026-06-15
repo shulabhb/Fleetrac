@@ -18,6 +18,7 @@ from app.governance.read_models import (
     dashboard_summary,
     evidence_for_incident,
     evidence_library,
+    governance_systems,
     ingest_log,
     list_notifications,
     live_signals,
@@ -65,6 +66,11 @@ def get_ingest_log(
     db: Session = Depends(get_db),
 ) -> IngestLogResponse:
     return ingest_log(db, limit=limit, system_id=system_id)
+
+
+@router.get("/systems")
+def get_governance_systems(db: Session = Depends(get_db)) -> dict:
+    return governance_systems(db)
 
 
 @router.get("/owner-queue", response_model=OwnerQueueResponse)
