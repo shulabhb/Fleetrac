@@ -158,10 +158,9 @@ Local SQLite (`apps/api/data/fleetrac_sim.db`) is the **source of truth** for go
 
 ### Feature flag
 
-- `NEXT_PUBLIC_GOVERNANCE_API=1` (default): frontend reads governance APIs.
-- `NEXT_PUBLIC_GOVERNANCE_API=0`: legacy mock catalogs (deprecated on ImplementationV1; prefer API or empty states).
+Governance API is **always on** in ImplementationV1. Operational UI reads SQLite via `GET /api/v1/governance/*`; empty states when the simulator has not ingested telemetry.
 
-**Merge rule:** API-sourced rows replace any remaining mock rows by alias; do not add new mock rows during implementation transition.
+**No frontend mock catalogs** — `*-mock.ts` and `governance-demo-model*` have been removed from `apps/web`. System Registry and dashboard derive state from ingest pipeline output only.
 
 ### Key client modules
 
@@ -211,18 +210,17 @@ Simulator generators → OTEL Collector / cloud log sinks → same `POST /ingest
 
 ## Demo data architecture
 
-**Import rule:** Prefer `apps/web/lib/governance-types.ts` and `governance-incident-routing.ts` for IDs and routing. Use `governance-demo-model.ts` only for API-off fallback constants.
+**Import rule:** Prefer `apps/web/lib/governance-types.ts` and `governance-incident-routing.ts` for IDs and routing. Operational rows come from governance APIs only.
 
 ### Canonical modules
 
 | Module | Contents | When used |
 |--------|----------|-----------|
-| `governance-api.ts` + `governance-merge.ts` | Live API data | `NEXT_PUBLIC_GOVERNANCE_API=1` (default) |
-| `governance-dashboard-mock.ts` | KPI/owner fiction | API-off fallback only |
-| `incident-queue-owner-review-mock.ts` | Queue rows | API-off fallback only |
-| `evidence-library-mock.ts` | Library catalog | API-off fallback only |
-| `live-signals-mock.ts` | Signal catalog | API-off fallback only |
+| `governance-api.ts` + `governance-merge.ts` | Live API data | All governance loop pages |
+| `dashboard-types.ts` | Dashboard display types | Dashboard KPIs and owner pivot |
 | `governed-actions-types.ts` | Action types + tab helpers | Always (types only) |
+
+Frontend `*-mock.ts` and `governance-demo-model*` catalogs have been **removed** (ImplementationV1).
 
 ### Pitchable fleet (10 systems)
 
@@ -335,17 +333,17 @@ Tone: enterprise operational; avoid marketing copy.
 
 ## API vs prototype boundaries
 
-| Area | Source (target) | Legacy (do not extend) |
-|------|-----------------|------------------------|
-| Live Signals | `GET /governance/live-signals`, `GET /governance/ingest-log`, SSE | `live-signals-mock.ts` |
-| Incident Queue | `GET /governance/owner-queue` | `incident-queue-owner-review-mock.ts` |
-| Evidence Library | `GET /governance/evidence-library` | `evidence-library-mock.ts` |
-| Action Center | `GET /governance/actions` | — |
-| Dashboard KPIs | `GET /governance/dashboard-summary` + static 10-system count | `governance-dashboard-mock.ts` |
-| Notifications | `GET /governance/notifications` | — |
-| Systems list/detail | API (`lib/api.ts`) — 10 fleet systems only | Excel `sys_m*` catalog |
+| Area | Source |
+|------|--------|
+| Live Signals | `GET /governance/live-signals`, `GET /governance/ingest-log`, SSE |
+| Incident Queue | `GET /governance/owner-queue` |
+| Evidence Library | `GET /governance/evidence-library` |
+| Action Center | `GET /governance/actions` |
+| Dashboard KPIs | `GET /governance/dashboard-summary` + `GET /governance/systems` |
+| Notifications | `GET /governance/notifications` |
+| Systems list/detail | `GET /governance/systems` + system-scoped signals/telemetry/controls |
 
-Bob API routes are deprecated; use governance evidence Fleetrac Analysis instead.
+Legacy `lib/api.ts` / `MOCK_STORE` paths are not used on governance loop pages. Bob API routes are deprecated; use governance evidence Fleetrac Analysis instead.
 
 ---
 
@@ -387,4 +385,4 @@ Bob API routes are deprecated; use governance evidence Fleetrac Analysis instead
 - Real Slack or external policy engine connectors (Settings remains config UI)
 - Reintroducing Bob, Activity, Usage, or Controls as primary nav
 - Renaming `/outcomes` route (product name is already Evidence Library)
-- **New mock/demo data rows** during ImplementationV1 transition
+- **New mock/demo data rows** — frontend mock catalogs removed; do not reintroduce

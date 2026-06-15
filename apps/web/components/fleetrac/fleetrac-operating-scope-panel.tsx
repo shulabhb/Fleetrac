@@ -1,4 +1,4 @@
-import { FLEETRAC_OPERATING_SCOPE } from "@/lib/governance-demo-model";
+import { FLEETRAC_OPERATING_SCOPE } from "@/lib/fleetrac-operating-scope";
 
 export function FleetracOperatingScopePanel() {
   return (
@@ -24,7 +24,7 @@ export function FleetracOperatingScopePanel() {
             Approval required
           </p>
           <ul className="mt-2 list-inside list-disc text-[12px] text-slate-700">
-            {FLEETRAC_OPERATING_SCOPE.approvalRequired.map((item) => (
+            {FLEETRAC_OPERATING_SCOPE.approvalGated.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>

@@ -24,6 +24,9 @@ export type LiveRuntimeSignal = {
   incidentLinked: boolean;
   incidentId?: string;
   traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  latencyMs?: number;
   signalState?: string;
 };
 

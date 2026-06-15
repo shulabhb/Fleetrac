@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     Assignment,
+    DetectionRule,
     EvidenceItem,
     EvidenceRecord,
     FleetracAnalysisRow,
@@ -52,6 +53,63 @@ def _system_identity(system: System | None, system_id: str) -> dict:
     }
 
 
+def _norm_to_ingest_dto(norm: NormalizedEvent) -> IngestLogNormalizedDTO:
+    return IngestLogNormalizedDTO(
+        event_id=norm.event_id,
+        timestamp=norm.timestamp,
+        source_provider=norm.source_provider,
+        source_type=norm.source_type,
+        operation_type=norm.operation_type,
+        model=norm.model,
+        severity=norm.severity,
+        normalized_signal_type=norm.normalized_signal_type,
+        incident_id=norm.incident_id,
+        trace_id=norm.trace_id,
+        span_id=norm.span_id,
+        latency_ms=norm.latency_ms,
+        evaluation_signals=norm.evaluation_signals or {},
+    )
+
+
+def _parent_span_id(norm: NormalizedEvent) -> str | None:
+    ev = norm.evaluation_signals or {}
+    val = ev.get("parent_span_id")
+    return str(val) if val else None
+
+
+def _live_signal_row(db: Session, row: NormalizedEvent) -> LiveSignalRow:
+    system = db.get(System, row.system_id)
+    ident = _system_identity(system, row.system_id)
+    incident_alias_id = None
+    if row.incident_id:
+        inc = db.get(Incident, row.incident_id)
+        incident_alias_id = inc.alias_id if inc else None
+    return LiveSignalRow(
+        id=row.event_id,
+        alias_id=incident_alias_id,
+        system_id=row.system_id,
+        event_id=row.event_id,
+        timestamp=row.timestamp,
+        operation_type=row.operation_type,
+        signal_state=row.signal_state or "healthy",
+        normalized_signal_type=row.normalized_signal_type,
+        severity=row.severity,
+        confidence=row.confidence,
+        incident_id=row.incident_id,
+        trace_id=row.trace_id,
+        span_id=row.span_id,
+        parent_span_id=_parent_span_id(row),
+        latency_ms=row.latency_ms,
+        evaluation_signals=row.evaluation_signals or {},
+        accountable_owner_team=row.accountable_owner_team or (system.owner_team if system else None),
+        owner_team=row.accountable_owner_team or (system.owner_team if system else None),
+        source_type=row.source_type,
+        source_provider=row.source_provider,
+        model=row.model,
+        **ident,
+    )
+
+
 def live_signals(
     db: Session,
     *,
@@ -65,37 +123,7 @@ def live_signals(
     if severity:
         q = q.filter(NormalizedEvent.severity == severity)
     rows = q.limit(limit).all()
-    items: list[LiveSignalRow] = []
-    for row in rows:
-        system = db.get(System, row.system_id)
-        ident = _system_identity(system, row.system_id)
-        incident_alias_id = None
-        if row.incident_id:
-            inc = db.get(Incident, row.incident_id)
-            incident_alias_id = inc.alias_id if inc else None
-        items.append(
-            LiveSignalRow(
-                id=row.event_id,
-                alias_id=incident_alias_id,
-                system_id=row.system_id,
-                event_id=row.event_id,
-                timestamp=row.timestamp,
-                operation_type=row.operation_type,
-                signal_state=row.signal_state or "healthy",
-                normalized_signal_type=row.normalized_signal_type,
-                severity=row.severity,
-                confidence=row.confidence,
-                incident_id=row.incident_id,
-                trace_id=row.trace_id,
-                accountable_owner_team=row.accountable_owner_team
-                or (system.owner_team if system else None),
-                owner_team=row.accountable_owner_team or (system.owner_team if system else None),
-                source_type=row.source_type,
-                source_provider=row.source_provider,
-                model=row.model,
-                **ident,
-            )
-        )
+    items = [_live_signal_row(db, row) for row in rows]
     return LiveSignalsResponse(items=items, total=len(items))
 
 
@@ -115,26 +143,14 @@ def ingest_log(
         ident = _system_identity(system, raw.system_id)
         payload = raw.payload or {}
         source_type = str(payload.get("source_type", "unknown"))
-        norm = (
+        norm_rows = (
             db.query(NormalizedEvent)
             .filter(NormalizedEvent.raw_payload_reference == raw.id)
-            .order_by(NormalizedEvent.created_at.desc())
-            .first()
+            .order_by(NormalizedEvent.created_at.asc())
+            .all()
         )
-        normalized = None
-        if norm:
-            normalized = IngestLogNormalizedDTO(
-                event_id=norm.event_id,
-                timestamp=norm.timestamp,
-                source_provider=norm.source_provider,
-                source_type=norm.source_type,
-                operation_type=norm.operation_type,
-                model=norm.model,
-                severity=norm.severity,
-                normalized_signal_type=norm.normalized_signal_type,
-                incident_id=norm.incident_id,
-                evaluation_signals=norm.evaluation_signals or {},
-            )
+        normalized_spans = [_norm_to_ingest_dto(n) for n in norm_rows]
+        normalized = normalized_spans[0] if normalized_spans else None
         items.append(
             IngestLogRow(
                 raw_event_id=raw.id,
@@ -147,6 +163,7 @@ def ingest_log(
                 source_type=source_type,
                 raw_payload=payload,
                 normalized=normalized,
+                normalized_spans=normalized_spans,
             )
         )
     return IngestLogResponse(items=items, total=len(items))
@@ -211,6 +228,31 @@ def evidence_for_incident(db: Session, incident_id: str) -> EvidenceRecordDTO | 
     assignment = (
         db.query(Assignment).filter(Assignment.incident_id == inc.id).order_by(Assignment.created_at.desc()).first()
     )
+
+    def _evidence_item_dto(i: EvidenceItem) -> EvidenceItemDTO:
+        trace_id = None
+        span_id = None
+        operation_type = None
+        evaluation_signals: dict = {}
+        if i.kind == "normalized_event":
+            norm = db.query(NormalizedEvent).filter(NormalizedEvent.event_id == i.reference_id).one_or_none()
+            if norm:
+                trace_id = norm.trace_id
+                span_id = norm.span_id
+                operation_type = norm.operation_type
+                evaluation_signals = norm.evaluation_signals or {}
+        return EvidenceItemDTO(
+            id=i.id,
+            kind=i.kind,
+            reference_id=i.reference_id,
+            summary=i.summary,
+            created_at=i.created_at,
+            trace_id=trace_id,
+            span_id=span_id,
+            operation_type=operation_type,
+            evaluation_signals=evaluation_signals,
+        )
+
     return EvidenceRecordDTO(
         id=record.id,
         alias_id=inc.alias_id,
@@ -224,16 +266,7 @@ def evidence_for_incident(db: Session, incident_id: str) -> EvidenceRecordDTO | 
         lifecycle=inc.lifecycle,
         classification_category=inc.classification_category,
         reviewer=assignment.reviewer_name if assignment else None,
-        items=[
-            EvidenceItemDTO(
-                id=i.id,
-                kind=i.kind,
-                reference_id=i.reference_id,
-                summary=i.summary,
-                created_at=i.created_at,
-            )
-            for i in items
-        ],
+        items=[_evidence_item_dto(i) for i in items],
         fleetrac_analysis=analysis,
         lifecycle_history=list(inc.lifecycle_history or []),
         **ident,
@@ -353,6 +386,143 @@ def governance_systems(db: Session) -> dict:
                 "archetype": meta.get("archetype", "decision"),
                 "open_incidents": open_count,
                 "last_signal_at": last.timestamp.isoformat() if last else None,
+            }
+        )
+    return {"items": items, "total": len(items)}
+
+
+def governance_system_detail(db: Session, system_id: str) -> dict | None:
+    system = db.get(System, system_id)
+    if system is None:
+        return None
+    meta = SYSTEM_METADATA.get(system.id, {})
+    fleet = SYSTEM_BY_ID.get(system.id)
+    open_count = (
+        db.query(Incident)
+        .filter(Incident.system_id == system.id, Incident.lifecycle != "Closed")
+        .count()
+    )
+    last = (
+        db.query(NormalizedEvent)
+        .filter(NormalizedEvent.system_id == system.id)
+        .order_by(NormalizedEvent.timestamp.desc())
+        .first()
+    )
+    return {
+        "system_id": system.id,
+        "display_system_id": system.display_id,
+        "system_name": system.name,
+        "system_name_alias": system.name_alias,
+        "owner_team": system.owner_team,
+        "team_lead": system.team_lead,
+        "default_reviewer": system.default_reviewer,
+        "platform": fleet.platform if fleet else meta.get("cloud_provider", ""),
+        "archetype": meta.get("archetype", "decision"),
+        "description": meta.get("description", ""),
+        "business_function": meta.get("business_function", ""),
+        "data_sensitivity": meta.get("data_sensitivity", ""),
+        "cloud_provider": meta.get("cloud_provider", ""),
+        "cloud_region": meta.get("cloud_region", ""),
+        "approved_model_name": meta.get("approved_model_name", ""),
+        "approved_tools": list(meta.get("approved_tools") or ()),
+        "blocked_tools": list(meta.get("blocked_tools") or ()),
+        "baseline_metrics": system.baseline_metrics or {},
+        "applicable_control_ids": system.applicable_control_ids or [],
+        "open_incidents": open_count,
+        "last_signal_at": last.timestamp.isoformat() if last else None,
+    }
+
+
+def system_incidents(db: Session, system_id: str) -> dict:
+    rows = (
+        db.query(Incident)
+        .filter(Incident.system_id == system_id)
+        .order_by(Incident.updated_at.desc())
+        .all()
+    )
+    items = []
+    for inc in rows:
+        system = db.get(System, inc.system_id)
+        ident = _system_identity(system, inc.system_id)
+        items.append(
+            {
+                "id": inc.id,
+                "alias_id": inc.alias_id,
+                "system_id": inc.system_id,
+                "lifecycle": inc.lifecycle,
+                "severity": inc.severity,
+                "priority": inc.priority,
+                "title": inc.title,
+                "summary": inc.summary,
+                "signal_type": inc.signal_type,
+                "opened_at": inc.opened_at.isoformat(),
+                "updated_at": inc.updated_at.isoformat(),
+                **ident,
+            }
+        )
+    return {"items": items, "total": len(items)}
+
+
+def system_telemetry(db: Session, system_id: str, *, limit: int = 120) -> dict:
+    rows = (
+        db.query(NormalizedEvent)
+        .filter(NormalizedEvent.system_id == system_id)
+        .order_by(NormalizedEvent.timestamp.asc())
+        .limit(limit)
+        .all()
+    )
+    points = []
+    for row in rows:
+        ev = row.evaluation_signals or {}
+        points.append(
+            {
+                "timestamp": row.timestamp.isoformat(),
+                "latency_ms": row.latency_ms or ev.get("latency_ms"),
+                "grounding_score": ev.get("grounding_score"),
+                "unsupported_claim_rate": ev.get("unsupported_claim_rate"),
+                "signal_type": row.normalized_signal_type,
+                "severity": row.severity,
+            }
+        )
+    return {"items": points, "total": len(points)}
+
+
+def system_controls(db: Session, system_id: str) -> dict:
+    system = db.get(System, system_id)
+    if system is None:
+        return {"items": [], "total": 0}
+    control_ids = set(system.applicable_control_ids or [])
+    rules = db.query(DetectionRule).filter(DetectionRule.id.in_(control_ids)).all() if control_ids else []
+    items = []
+    for rule in rules:
+        last_norm = (
+            db.query(NormalizedEvent)
+            .filter(
+                NormalizedEvent.system_id == system_id,
+                NormalizedEvent.normalized_signal_type == rule.signal_type,
+            )
+            .order_by(NormalizedEvent.timestamp.desc())
+            .first()
+        )
+        open_inc = (
+            db.query(Incident)
+            .filter(
+                Incident.system_id == system_id,
+                Incident.rule_id == rule.id,
+                Incident.lifecycle != "Closed",
+            )
+            .order_by(Incident.updated_at.desc())
+            .first()
+        )
+        items.append(
+            {
+                "rule_id": rule.id,
+                "signal_type": rule.signal_type,
+                "threshold_field": rule.threshold_field,
+                "threshold_value": rule.threshold_value,
+                "severity": rule.severity,
+                "last_fired_at": last_norm.timestamp.isoformat() if last_norm else None,
+                "open_incident_id": open_inc.alias_id or open_inc.id if open_inc else None,
             }
         )
     return {"items": items, "total": len(items)}

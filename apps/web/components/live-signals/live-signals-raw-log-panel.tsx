@@ -1,31 +1,193 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Select } from "@/components/ui/select";
-import type { IngestLogRowDTO } from "@/lib/governance-api";
+import type { IngestLogRowDTO, SimulatorStatusDTO } from "@/lib/governance-api";
 import { cn } from "@/lib/cn";
 
 type Props = {
   rows: IngestLogRowDTO[];
+  simulatorStatus?: SimulatorStatusDTO | null;
 };
 
-function formatTimestamp(value: string): string {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  });
+type ConsoleLine = {
+  key: string;
+  level: "dim" | "sim" | "ingest" | "span" | "log" | "metric" | "norm" | "warn" | "ok";
+  text: string;
+  json?: string;
+};
+
+const LEVEL_CLASS: Record<ConsoleLine["level"], string> = {
+  dim: "text-slate-500",
+  sim: "text-violet-400",
+  ingest: "text-cyan-400",
+  span: "text-sky-300",
+  log: "text-amber-200",
+  metric: "text-teal-300",
+  norm: "text-emerald-400",
+  warn: "text-rose-400",
+  ok: "text-green-400"
+};
+
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  const s = String(d.getSeconds()).padStart(2, "0");
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  return `${h}:${m}:${s}.${ms}`;
 }
 
-export function LiveSignalsRawLogPanel({ rows }: Props) {
+function shortId(value: string | undefined | null, keep = 8): string {
+  if (!value) return "—";
+  return value.length <= keep ? value : `${value.slice(0, keep)}…`;
+}
+
+function evalSummary(evaluation: Record<string, unknown> | undefined): string {
+  if (!evaluation || !Object.keys(evaluation).length) return "";
+  const parts = Object.entries(evaluation)
+    .slice(0, 4)
+    .map(([k, v]) => `${k}=${v}`);
+  return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
+function bundleToLines(row: IngestLogRowDTO): ConsoleLine[] {
+  const payload = row.raw_payload ?? {};
+  const ts = formatClock(row.ingested_at);
+  const lines: ConsoleLine[] = [];
+
+  const schema = String(payload.schema_version ?? "1.0");
+  const traceId = String(payload.trace_id ?? payload.invocation_id ?? "—");
+  const spans = Array.isArray(payload.spans) ? payload.spans : [];
+  const logs = Array.isArray(payload.logs) ? payload.logs : [];
+  const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+
+  lines.push({
+    key: `${row.raw_event_id}-gen`,
+    level: "sim",
+    text: `[${ts}] SIM generate  system=${row.display_system_id} schema=${schema} trace=${shortId(traceId)} spans=${spans.length} logs=${logs.length}`
+  });
+
+  if (payload.scenario && typeof payload.scenario === "object") {
+    const sc = payload.scenario as Record<string, unknown>;
+    lines.push({
+      key: `${row.raw_event_id}-scenario`,
+      level: "dim",
+      text: `           scenario=${sc.id ?? "—"} run=${shortId(String(sc.run_id ?? ""), 12)}`
+    });
+  }
+  if (payload.simulator_run_id) {
+    lines.push({
+      key: `${row.raw_event_id}-run`,
+      level: "dim",
+      text: `           simulator_run_id=${payload.simulator_run_id}`
+    });
+  }
+
+  lines.push({
+    key: `${row.raw_event_id}-post`,
+    level: "ingest",
+    text: `[${ts}] POST /api/v1/ingest/events  source=${row.source_type} idempotency=${row.idempotency_key}`
+  });
+
+  if (schema.startsWith("2") && spans.length > 0) {
+    for (const span of spans) {
+      const s = span as Record<string, unknown>;
+      const name = String(s.name ?? "span");
+      const op = String(s.operation ?? "—");
+      const lat = s.latency_ms != null ? ` ${s.latency_ms}ms` : "";
+      const evalBlock = s.evaluation as Record<string, unknown> | undefined;
+      lines.push({
+        key: `${row.raw_event_id}-span-${String(s.span_id ?? name)}`,
+        level: "span",
+        text: `           ├─ span ${name}  op=${op}${lat}${evalSummary(evalBlock)}`
+      });
+      if (Array.isArray(s.events) && s.events.length > 0) {
+        for (const ev of s.events as Record<string, unknown>[]) {
+          lines.push({
+            key: `${row.raw_event_id}-ev-${String(ev.name ?? "event")}`,
+            level: "log",
+            text: `           │  event ${String(ev.name ?? "log")}  ${String(ev.message ?? JSON.stringify(ev)).slice(0, 80)}`
+          });
+        }
+      }
+    }
+  } else {
+    const evaluation = payload.evaluation as Record<string, unknown> | undefined;
+    const model =
+      payload.registry_model_code ??
+      (payload.model as Record<string, unknown> | undefined)?.registry_code ??
+      payload.model_version ??
+      payload.deployment_name ??
+      "";
+    lines.push({
+      key: `${row.raw_event_id}-payload`,
+      level: "span",
+      text: `           payload  model=${model} trace=${shortId(traceId)}${evalSummary(evaluation)}`
+    });
+  }
+
+  for (const log of logs.slice(0, 3)) {
+    const l = log as Record<string, unknown>;
+    lines.push({
+      key: `${row.raw_event_id}-log-${String(l.body ?? lines.length)}`,
+      level: "log",
+      text: `           log  ${String(l.severity_text ?? "INFO")}  ${String(l.body ?? l.message ?? "").slice(0, 96)}`
+    });
+  }
+
+  for (const metric of metrics.slice(0, 2)) {
+    const m = metric as Record<string, unknown>;
+    lines.push({
+      key: `${row.raw_event_id}-metric-${String(m.name ?? "m")}`,
+      level: "metric",
+      text: `           metric  ${String(m.name ?? "—")}=${String(m.value ?? m.sum ?? "—")}`
+    });
+  }
+
+  const norm = row.normalized;
+  const normalizedSpans =
+    row.normalized_spans && row.normalized_spans.length > 0
+      ? row.normalized_spans
+      : norm
+        ? [norm]
+        : [];
+  if (normalizedSpans.length > 0) {
+    for (const spanNorm of normalizedSpans) {
+      const signal = spanNorm.normalized_signal_type
+        ? ` signal=${spanNorm.normalized_signal_type}`
+        : "";
+      const inc = spanNorm.incident_id ? ` incident=${shortId(spanNorm.incident_id, 16)}` : "";
+      const sev = spanNorm.severity ?? "healthy";
+      lines.push({
+        key: `${row.raw_event_id}-norm-${spanNorm.event_id}`,
+        level: sev === "critical" || sev === "high" ? "warn" : "norm",
+        text: `[${ts}] FLEETRAC normalize  span=${shortId(spanNorm.span_id ?? spanNorm.event_id, 8)} severity=${sev} op=${spanNorm.operation_type}${signal}${inc}`
+      });
+    }
+  } else {
+    lines.push({
+      key: `${row.raw_event_id}-norm-pending`,
+      level: "dim",
+      text: `[${ts}] FLEETRAC normalize  pending…`
+    });
+  }
+
+  lines.push({
+    key: `${row.raw_event_id}-ok`,
+    level: "ok",
+    text: `[${ts}] ✓ ingested raw_event_id=${shortId(row.raw_event_id, 12)} hash=${shortId(row.payload_hash, 16)}`
+  });
+
+  return lines;
+}
+
+export function LiveSignalsRawLogPanel({ rows, simulatorStatus }: Props) {
   const [sourceType, setSourceType] = useState<string>("all");
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [expandedJson, setExpandedJson] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const sourceTypes = useMemo(
     () => Array.from(new Set(rows.map((r) => r.source_type))).sort(),
@@ -33,168 +195,126 @@ export function LiveSignalsRawLogPanel({ rows }: Props) {
   );
 
   const filtered = useMemo(() => {
-    if (sourceType === "all") return rows;
-    return rows.filter((r) => r.source_type === sourceType);
+    const list = sourceType === "all" ? rows : rows.filter((r) => r.source_type === sourceType);
+    return [...list].reverse();
   }, [rows, sourceType]);
 
+  const entries = useMemo(
+    () =>
+      filtered.map((row) => ({
+        row,
+        lines: bundleToLines(row)
+      })),
+    [filtered]
+  );
+
+  const lineCount = useMemo(
+    () => entries.reduce((n, e) => n + e.lines.length, 0),
+    [entries]
+  );
+
+  useEffect(() => {
+    if (!autoScroll || !scrollRef.current) return;
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [lineCount, autoScroll]);
+
+  const statusLine = simulatorStatus?.running
+    ? `running · ${simulatorStatus.mode} · ${simulatorStatus.rate_eps ?? "—"}/s · ${simulatorStatus.event_count} events generated`
+    : simulatorStatus
+      ? `idle · ${simulatorStatus.event_count} events in session`
+      : "disconnected";
+
   return (
-    <Card className="overflow-hidden shadow-none">
-      <div className="border-b border-slate-100 bg-slate-50/80 px-3 py-2.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Raw ingest log
-        </p>
-        <p className="mt-0.5 text-[12px] text-slate-600">
-          Payloads as received by Fleetrac before governed signal surfacing — use to validate the
-          simulator pipeline.
-        </p>
+    <div className="overflow-hidden rounded-lg border border-slate-700 bg-[#0d1117] font-mono text-[11px] leading-relaxed shadow-lg">
+      <div className="flex items-center gap-2 border-b border-slate-700 bg-[#161b22] px-3 py-2">
+        <span className="inline-flex gap-1">
+          <span className="h-2.5 w-2.5 rounded-full bg-rose-500/80" />
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
+        </span>
+        <span className="text-slate-400">simulator</span>
+        <span className="text-slate-600">→</span>
+        <span className="text-cyan-400">ingest pipeline</span>
+        <span className="ml-auto text-[10px] text-slate-500">{statusLine}</span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2.5">
-        <Select value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
-          <option value="all">Any source type</option>
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-[#0d1117] px-3 py-2">
+        <Select
+          value={sourceType}
+          onChange={(e) => setSourceType(e.target.value)}
+          className="border-slate-700 bg-[#161b22] text-slate-200"
+        >
+          <option value="all">all source types</option>
           {sourceTypes.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
           ))}
         </Select>
-        <p className="ml-auto text-[11px] tabular-nums text-slate-500">
-          {filtered.length} raw events
-        </p>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="px-4 py-10 text-center text-[13px] text-slate-600">
-          No raw ingest events yet. Run a pitch or start continuous simulation to populate the log.
-        </div>
-      ) : (
-        <ul className="divide-y divide-slate-100">
-          {filtered.map((row) => (
-            <RawLogRow
-              key={row.raw_event_id}
-              row={row}
-              expanded={expanded === row.raw_event_id}
-              onToggle={() =>
-                setExpanded((prev) => (prev === row.raw_event_id ? null : row.raw_event_id))
-              }
-            />
-          ))}
-        </ul>
-      )}
-    </Card>
-  );
-}
-
-function RawLogRow({
-  row,
-  expanded,
-  onToggle
-}: {
-  row: IngestLogRowDTO;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const norm = row.normalized;
-
-  return (
-    <li className="px-4 py-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge tone="outline" size="xs">
-              {row.source_type}
-            </Badge>
-            {norm ? (
-              <>
-                <Badge tone="info" size="xs">
-                  Normalized
-                </Badge>
-                <Badge tone={severityTone(norm.severity)} size="xs">
-                  {norm.severity}
-                </Badge>
-              </>
-            ) : (
-              <Badge tone="neutral" size="xs">
-                Pending normalization
-              </Badge>
-            )}
-          </div>
-          <p className="mt-1.5 text-sm font-semibold text-slate-900">
-            {row.system_name}{" "}
-            <span className="font-normal text-slate-500">({row.display_system_id})</span>
-          </p>
-          <p className="mt-0.5 text-[11px] text-slate-600">
-            Ingested {formatTimestamp(row.ingested_at)}
-            <span className="text-slate-300"> · </span>
-            <span className="font-mono text-[10px] text-slate-500">{row.idempotency_key}</span>
-          </p>
-          {norm ? (
-            <p className="mt-1 text-[11px] text-slate-600">
-              {norm.model ? (
-                <>
-                  <span className="font-medium text-slate-700">{norm.model}</span>
-                  <span className="text-slate-300"> · </span>
-                </>
-              ) : null}
-              {norm.operation_type}
-              {norm.normalized_signal_type ? (
-                <>
-                  <span className="text-slate-300"> · </span>
-                  {norm.normalized_signal_type}
-                </>
-              ) : null}
-              {norm.incident_id ? (
-                <>
-                  <span className="text-slate-300"> · </span>
-                  incident {norm.incident_id}
-                </>
-              ) : null}
-            </p>
-          ) : null}
-        </div>
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => setAutoScroll((v) => !v)}
           className={cn(
-            "shrink-0 rounded-md border px-2.5 py-1.5 text-[11px] font-semibold shadow-sm",
-            expanded
-              ? "border-slate-300 bg-slate-100 text-slate-900"
-              : "border-slate-200 bg-white text-slate-800 hover:border-slate-300"
+            "rounded border px-2 py-1 text-[10px] font-semibold",
+            autoScroll
+              ? "border-emerald-700/60 bg-emerald-950/40 text-emerald-400"
+              : "border-slate-700 text-slate-500"
           )}
         >
-          {expanded ? "Hide payload" : "View payload"}
+          {autoScroll ? "auto-scroll on" : "auto-scroll off"}
         </button>
+        <span className="ml-auto text-[10px] text-slate-500">
+          {filtered.length} bundles · {lineCount} lines
+        </span>
       </div>
 
-      {expanded ? (
-        <div className="mt-3 space-y-2">
-          <div className="rounded-md border border-slate-200 bg-slate-950 p-3">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Raw payload
+      <div
+        ref={scrollRef}
+        className="max-h-[min(560px,62vh)] min-h-[280px] overflow-y-auto px-3 py-3"
+      >
+        {filtered.length === 0 ? (
+          <div className="space-y-1 text-slate-500">
+            <p className="text-violet-400">$ fleetrac-simulator --watch ingest</p>
+            <p>Waiting for simulator output…</p>
+            <p className="text-slate-600">
+              Start continuous simulation or trigger a scenario above. Each OTEL bundle will appear
+              here as it is POSTed to /api/v1/ingest/events.
             </p>
-            <pre className="max-h-72 overflow-auto text-[11px] leading-relaxed text-emerald-100">
-              {JSON.stringify(row.raw_payload, null, 2)}
-            </pre>
           </div>
-          {norm ? (
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Normalized fields
-              </p>
-              <pre className="max-h-48 overflow-auto text-[11px] leading-relaxed text-slate-800">
-                {JSON.stringify(norm, null, 2)}
-              </pre>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </li>
+        ) : (
+          <div className="space-y-0.5">
+            {entries.map(({ row, lines }) => (
+              <div key={row.raw_event_id} className="group">
+                {lines.map((line) => (
+                  <div key={line.key} className="flex gap-2">
+                    <span className={cn("whitespace-pre-wrap break-all", LEVEL_CLASS[line.level])}>
+                      {line.text}
+                    </span>
+                    {line.key.endsWith("-post") ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedJson((id) =>
+                            id === row.raw_event_id ? null : row.raw_event_id
+                          )
+                        }
+                        className="shrink-0 text-[10px] text-slate-600 opacity-0 transition group-hover:opacity-100 hover:text-slate-400"
+                      >
+                        {expandedJson === row.raw_event_id ? "[hide json]" : "[json]"}
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+                {expandedJson === row.raw_event_id ? (
+                  <pre className="mb-3 mt-1 overflow-x-auto rounded border border-slate-800 bg-black/40 p-2 text-[10px] text-emerald-100/90">
+                    {JSON.stringify(row.raw_payload, null, 2)}
+                  </pre>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
-}
-
-function severityTone(sev: string): "high" | "medium" | "low" {
-  const s = sev.toLowerCase();
-  if (s === "critical" || s === "high") return "high";
-  if (s === "medium") return "medium";
-  return "low";
 }

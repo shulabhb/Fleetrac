@@ -102,6 +102,8 @@ def normalize_adapted(
     model_label = normalized_model_name(system_id)
     if adapted.get("model"):
         evaluation.setdefault("invocation_model", adapted.get("model"))
+    if adapted.get("parent_span_id"):
+        evaluation.setdefault("parent_span_id", adapted.get("parent_span_id"))
 
     envelope_id = raw_envelope_id or raw_event_id
 

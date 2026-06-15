@@ -18,11 +18,15 @@ from app.governance.read_models import (
     dashboard_summary,
     evidence_for_incident,
     evidence_library,
+    governance_system_detail,
     governance_systems,
     ingest_log,
     list_notifications,
     live_signals,
     owner_queue,
+    system_controls,
+    system_incidents,
+    system_telemetry,
 )
 from app.governance.verification import verify_action
 from app.schemas.governance import (
@@ -71,6 +75,42 @@ def get_ingest_log(
 @router.get("/systems")
 def get_governance_systems(db: Session = Depends(get_db)) -> dict:
     return governance_systems(db)
+
+
+@router.get("/systems/{system_id}")
+def get_governance_system_detail(system_id: str, db: Session = Depends(get_db)) -> dict:
+    detail = governance_system_detail(db, system_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="System not found")
+    return detail
+
+
+@router.get("/systems/{system_id}/incidents")
+def get_system_incidents(system_id: str, db: Session = Depends(get_db)) -> dict:
+    return system_incidents(db, system_id)
+
+
+@router.get("/systems/{system_id}/signals", response_model=LiveSignalsResponse)
+def get_system_signals(
+    system_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> LiveSignalsResponse:
+    return live_signals(db, limit=limit, system_id=system_id)
+
+
+@router.get("/systems/{system_id}/telemetry")
+def get_system_telemetry(
+    system_id: str,
+    limit: int = Query(120, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> dict:
+    return system_telemetry(db, system_id, limit=limit)
+
+
+@router.get("/systems/{system_id}/controls")
+def get_system_controls(system_id: str, db: Session = Depends(get_db)) -> dict:
+    return system_controls(db, system_id)
 
 
 @router.get("/owner-queue", response_model=OwnerQueueResponse)

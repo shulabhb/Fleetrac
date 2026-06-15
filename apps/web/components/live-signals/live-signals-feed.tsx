@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -10,7 +10,7 @@ import { SimulatorControls } from "@/components/live-signals/simulator-controls"
 import { TraceGroupPanel } from "@/components/live-signals/trace-group-panel";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { useEventStream } from "@/hooks/use-event-stream";
-import { GOVERNED_FLEET_SYSTEMS } from "@/lib/governed-fleet-registry";
+import { fetchIngestLog, type IngestLogRowDTO } from "@/lib/governance-api";
 import {
   groupSignalsByTrace,
   mapLiveSignalsFromApi,
@@ -38,8 +38,37 @@ export function LiveSignalsFeed() {
   const [category, setCategory] = useState<string>("all");
   const [systemFilter, setSystemFilter] = useState<string>("all");
   const [groupByTrace, setGroupByTrace] = useState(true);
-  const { enabled, liveSignals, ingestLog, simulatorStatus, refresh } = useGovernanceData();
+  const { enabled, liveSignals, simulatorStatus, governanceSystems, refresh } = useGovernanceData();
+  const [rawRows, setRawRows] = useState<IngestLogRowDTO[]>([]);
+  const [rawLoadError, setRawLoadError] = useState<string | null>(null);
   useEventStream(refresh, enabled);
+
+  useEffect(() => {
+    if (tab !== "raw" || !enabled) return;
+
+    let cancelled = false;
+    const loadRaw = async () => {
+      const data = await fetchIngestLog(150);
+      if (cancelled) return;
+      if (!data) {
+        setRawLoadError(
+          "Ingest log API unavailable (500). Restart the API — it will auto-migrate the SQLite schema."
+        );
+        return;
+      }
+      setRawLoadError(null);
+      setRawRows(data.items);
+    };
+
+    void loadRaw();
+    const pollId = window.setInterval(() => void loadRaw(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(pollId);
+    };
+  }, [tab, enabled]);
+
+  const fleetSystems = governanceSystems?.items ?? [];
 
   const signals = useMemo((): GovernanceLiveSignal[] => {
     return mapLiveSignalsFromApi(liveSignals);
@@ -90,7 +119,14 @@ export function LiveSignalsFeed() {
       </div>
 
       {tab === "raw" ? (
-        <LiveSignalsRawLogPanel rows={ingestLog?.items ?? []} />
+        <>
+          {rawLoadError ? (
+            <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-900">
+              {rawLoadError}
+            </p>
+          ) : null}
+          <LiveSignalsRawLogPanel rows={rawRows} simulatorStatus={simulatorStatus} />
+        </>
       ) : (
         <Card className="overflow-hidden shadow-none">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-3 py-2.5">
@@ -117,9 +153,9 @@ export function LiveSignalsFeed() {
             </Select>
             <Select value={systemFilter} onChange={(e) => setSystemFilter(e.target.value)}>
               <option value="all">All systems</option>
-              {GOVERNED_FLEET_SYSTEMS.map((s) => (
-                <option key={s.systemId} value={s.systemId}>
-                  {s.displayId} — {s.name}
+              {fleetSystems.map((s) => (
+                <option key={s.system_id} value={s.system_id}>
+                  {s.display_system_id} — {s.system_name_alias ?? s.system_name}
                 </option>
               ))}
             </Select>

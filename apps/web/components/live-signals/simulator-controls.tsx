@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Select } from "@/components/ui/select";
-import { GOVERNED_FLEET_SYSTEMS } from "@/lib/governed-fleet-registry";
+import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
   postPitch,
   postScenario,
@@ -55,6 +55,8 @@ function SimButton({
 }
 
 export function SimulatorControls({ status, onRefresh }: Props) {
+  const { governanceSystems } = useGovernanceData();
+  const fleetSystems = governanceSystems?.items ?? [];
   const [busy, setBusy] = useState(false);
   const [scenario, setScenario] = useState("unsupported_claim_spike");
   const [rate, setRate] = useState("5");
@@ -123,9 +125,9 @@ export function SimulatorControls({ status, onRefresh }: Props) {
         className="min-w-[140px]"
       >
         <option value="all">All 10 systems</option>
-        {GOVERNED_FLEET_SYSTEMS.map((s) => (
-          <option key={s.systemId} value={s.systemId}>
-            {s.displayId}
+        {fleetSystems.map((s) => (
+          <option key={s.system_id} value={s.system_id}>
+            {s.display_system_id}
           </option>
         ))}
       </Select>
