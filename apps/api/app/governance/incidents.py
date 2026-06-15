@@ -79,8 +79,8 @@ def create_incident_from_detection(
         raw_event_id=event.raw_payload_reference,
         metric_value=match.metric_value,
         summary=(
-            f"Evaluation span trace={event.trace_id} span={event.span_id} "
-            f"({match.signal_type})"
+            f"Source span {(event.evaluation_signals or {}).get('span_name') or event.operation_type} "
+            f"trace={event.trace_id} span={event.span_id} ({match.signal_type})"
         ),
         signal_type=match.signal_type,
         system_id=event.system_id,

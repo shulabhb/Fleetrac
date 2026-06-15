@@ -70,8 +70,18 @@ def normalize_adapted(
             signal_state = "warning"
             severity = "high"
             confidence = 0.75
+        elif evaluation.get("citation_verified") is False:
+            signal_type = "citation_control_failure"
+            signal_state = "warning"
+            severity = "high"
+            confidence = 0.78
+        elif evaluation.get("ocr_confidence") is not None and float(evaluation.get("ocr_confidence", 1.0)) < 0.75:
+            signal_type = "extraction_quality_degraded"
+            signal_state = "warning"
+            severity = "medium"
+            confidence = 0.72
         else:
-            signal_type = "healthy_runtime_activity"
+            signal_type = None
             severity = None
             confidence = None
 
@@ -104,6 +114,8 @@ def normalize_adapted(
         evaluation.setdefault("invocation_model", adapted.get("model"))
     if adapted.get("parent_span_id"):
         evaluation.setdefault("parent_span_id", adapted.get("parent_span_id"))
+    if adapted.get("span_name"):
+        evaluation.setdefault("span_name", adapted.get("span_name"))
 
     envelope_id = raw_envelope_id or raw_event_id
 
@@ -136,7 +148,7 @@ def normalize_adapted(
         applicable_control_ids=applicable_control_ids or [],
         correlation_key=correlation_key_for(
             system_id,
-            signal_type or "healthy_runtime_activity",
+            signal_type or "idle",
             env,
         ),
         content_mode=content_mode,  # type: ignore[arg-type]

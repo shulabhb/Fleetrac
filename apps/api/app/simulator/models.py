@@ -45,6 +45,7 @@ class RunContext:
     deterministic: bool = True
     simulator_run_id: str | None = None
     scenario_run_id: str | None = None
+    impact_mode: str | None = None
 
 
 @dataclass

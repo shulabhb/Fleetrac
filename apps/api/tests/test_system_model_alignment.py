@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import pytest
-from httpx import ASGITransport
-
-from app.api.routes.simulator import run_scenario_with_transport
-from app.db.session import get_session_factory
 from app.simulator.system_profiles import normalized_model_name, profile_for
 from app.slice_a.constants import SYSTEM_ID
+from tests.e2e.helpers import reset_simulator, run_scenario_via_api
 
 
 def test_treasury_profile_matches_registry_model():
@@ -16,16 +12,9 @@ def test_treasury_profile_matches_registry_model():
     assert normalized_model_name(SYSTEM_ID) == "M40 · NII sensitivity"
 
 
-@pytest.mark.asyncio
-async def test_normalizer_uses_registry_model_label(client, app):
-    assert client.post("/api/v1/simulator/reset").status_code == 200
-    transport = ASGITransport(app=app)
-    factory = get_session_factory()
-    db = factory()
-    try:
-        await run_scenario_with_transport(transport, db=db)
-    finally:
-        db.close()
+def test_normalizer_uses_registry_model_label(client):
+    reset_simulator(client)
+    run_scenario_via_api(client, "unsupported_claim_spike", SYSTEM_ID)
 
     signals = client.get("/api/v1/governance/live-signals").json()
     assert signals["total"] >= 1

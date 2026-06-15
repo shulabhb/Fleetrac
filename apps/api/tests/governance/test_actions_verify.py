@@ -1,23 +1,12 @@
 from __future__ import annotations
 
-import pytest
-from httpx import ASGITransport
-
-from app.api.routes.simulator import run_scenario_with_transport
-from app.db.session import get_session_factory
-from app.slice_a.constants import INCIDENT_ALIAS_ID
+from app.slice_a.constants import INCIDENT_ALIAS_ID, SYSTEM_ID
+from tests.e2e.helpers import reset_simulator, run_scenario_via_api
 
 
-@pytest.mark.asyncio
-async def test_action_handoff_approve_reject(client, app):
-    assert client.post("/api/v1/simulator/reset").status_code == 200
-    transport = ASGITransport(app=app)
-    factory = get_session_factory()
-    db = factory()
-    try:
-        await run_scenario_with_transport(transport, db=db)
-    finally:
-        db.close()
+def test_action_handoff_approve_reject(client):
+    reset_simulator(client)
+    run_scenario_via_api(client, "unsupported_claim_spike", SYSTEM_ID)
 
     create = client.post(
         f"/api/v1/governance/incidents/{INCIDENT_ALIAS_ID}/actions",
@@ -31,16 +20,9 @@ async def test_action_handoff_approve_reject(client, app):
     assert reject.json()["status"] == "Rejected"
 
 
-@pytest.mark.asyncio
-async def test_verification_regression_outcome(client, app):
-    assert client.post("/api/v1/simulator/reset").status_code == 200
-    transport = ASGITransport(app=app)
-    factory = get_session_factory()
-    db = factory()
-    try:
-        await run_scenario_with_transport(transport, db=db)
-    finally:
-        db.close()
+def test_verification_regression_outcome(client):
+    reset_simulator(client)
+    run_scenario_via_api(client, "unsupported_claim_spike", SYSTEM_ID)
 
     create = client.post(
         f"/api/v1/governance/incidents/{INCIDENT_ALIAS_ID}/actions",

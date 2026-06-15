@@ -25,6 +25,7 @@ import {
   routeToIncidentsQueue,
   routes
 } from "@/lib/routes";
+import type { FleetracAnalysisDTO } from "@/lib/governance-api";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
   buildGlobalOwnerQueueRowsFromApi,
@@ -685,6 +686,7 @@ function IncidentQueueWorkbench({
                 evidenceByAlias[selectedRow.incidentId]?.fleetrac_analysis?.summary ??
                 selectedRow.evidenceSummary
               }
+              fleetracAnalysis={evidenceByAlias[selectedRow.incidentId]?.fleetrac_analysis}
               onSendToActionCenter={sendToActionCenter}
               onOpenOwnerQueue={
                 !isOwnerMode
@@ -717,6 +719,7 @@ function IncidentDetailPanel({
   scopeHref,
   isOwnerMode,
   fleetracSummary,
+  fleetracAnalysis,
   onSendToActionCenter,
   onOpenOwnerQueue
 }: {
@@ -726,6 +729,7 @@ function IncidentDetailPanel({
   scopeHref: (path: string) => string;
   isOwnerMode: boolean;
   fleetracSummary: string;
+  fleetracAnalysis?: FleetracAnalysisDTO;
   onSendToActionCenter: () => void;
   onOpenOwnerQueue?: () => void;
 }) {
@@ -779,6 +783,22 @@ function IncidentDetailPanel({
             Fleetrac analysis
           </p>
           <p className="mt-1 text-slate-700">{fleetracSummary}</p>
+          {fleetracAnalysis?.diagnosis ? (
+            <p className="mt-2 text-[11px] text-slate-600">
+              Diagnosis: <span className="font-medium text-slate-800">{fleetracAnalysis.diagnosis}</span>
+              {fleetracAnalysis.occurrence_count != null ? (
+                <span className="text-slate-500">
+                  {" "}
+                  · {fleetracAnalysis.trace_count ?? 0} traces · {fleetracAnalysis.occurrence_count} signals
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          {fleetracAnalysis?.why_not_higher?.length ? (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Why not higher: {fleetracAnalysis.why_not_higher[0]}
+            </p>
+          ) : null}
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">

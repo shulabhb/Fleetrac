@@ -45,7 +45,7 @@ except ModuleNotFoundError:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    from app.simulator.runner import stop_continuous
+    from app.simulator.runner import is_running, start_continuous, stop_continuous
 
     init_db()
     factory = get_session_factory()
@@ -54,6 +54,10 @@ async def lifespan(_app: FastAPI):
         seed_config(db)
     finally:
         db.close()
+
+    if settings.app_env == "development" and not is_running():
+        start_continuous(rate_eps=5.0, seed=42)
+
     yield
     stop_continuous()
 

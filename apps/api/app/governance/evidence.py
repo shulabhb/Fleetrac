@@ -42,26 +42,83 @@ def ensure_evidence_for_incident(
                 template=template,
             )
         )
+        db.flush()
+
+    existing = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.evidence_record_id == record.id,
+            EvidenceItem.reference_id == normalized_event_id,
+        )
+        .one_or_none()
+    )
+    if existing is None:
+        db.add(
+            EvidenceItem(
+                id=str(uuid.uuid4()),
+                evidence_record_id=record.id,
+                kind="normalized_event",
+                reference_id=normalized_event_id,
+                summary=summary,
+            )
+        )
+    raw_existing = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.evidence_record_id == record.id,
+            EvidenceItem.kind == "raw_event",
+            EvidenceItem.reference_id == raw_event_id,
+        )
+        .one_or_none()
+    )
+    if raw_existing is None:
+        db.add(
+            EvidenceItem(
+                id=str(uuid.uuid4()),
+                evidence_record_id=record.id,
+                kind="raw_event",
+                reference_id=raw_event_id,
+                summary=f"Raw OTEL envelope reference for {incident_id}",
+            )
+        )
+    return record
+
+
+def append_cluster_evidence(
+    db: Session,
+    *,
+    incident_id: str,
+    candidate,
+    assessment,
+) -> None:
+    record = db.query(EvidenceRecord).filter(EvidenceRecord.incident_id == incident_id).one_or_none()
+    if record is None:
+        return
+
+    role = candidate.evidence_role
+    span = candidate.source_span_name or "span"
+    summary = f"[{role}] {span} signal={candidate.signal_type} trace={candidate.trace_id}"
+
+    existing = (
+        db.query(EvidenceItem)
+        .filter(
+            EvidenceItem.evidence_record_id == record.id,
+            EvidenceItem.reference_id == candidate.event_id,
+        )
+        .one_or_none()
+    )
+    if existing is not None:
+        return
 
     db.add(
         EvidenceItem(
             id=str(uuid.uuid4()),
             evidence_record_id=record.id,
-            kind="normalized_event",
-            reference_id=normalized_event_id,
+            kind=f"correlation_{role}",
+            reference_id=candidate.event_id,
             summary=summary,
         )
     )
-    db.add(
-        EvidenceItem(
-            id=str(uuid.uuid4()),
-            evidence_record_id=record.id,
-            kind="raw_event",
-            reference_id=raw_event_id,
-            summary=f"Raw OTEL envelope reference for {incident_id}",
-        )
-    )
-    return record
 
 
 def append_recurrence_evidence(

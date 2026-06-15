@@ -17,24 +17,30 @@ from app.simulator.runner import is_running, start_continuous, stop_continuous
 from app.simulator.scenarios.catalog import IMPLEMENTED_SCENARIOS, PITCH_SEQUENCES, PLANNED_SCENARIOS
 from app.simulator.scenarios.healthy_baseline import healthy_baseline_batch
 from app.simulator.generators.healthy_traffic import healthy_trace_bundle
-from app.simulator.scenarios.platform import provider_latency_regression_sequence
+from app.simulator.scenarios.platform import (
+    provider_latency_regression_sequence,
+    tool_scope_violation_sequence,
+    unsupported_claim_spike_sequence,
+)
 from app.simulator.scenarios.remediation_applied import remediation_applied_sequence
-from app.simulator.scenarios.tool_scope_violation import tool_scope_violation_sequence
-from app.simulator.scenarios.unsupported_claim_spike import unsupported_claim_spike_sequence
 from app.slice_a.constants import INCIDENT_CANONICAL_ID, SYSTEM_ID
 
 router = APIRouter(prefix="/simulator", tags=["simulator"])
 
 SCENARIO_FN = {
-    "unsupported_claim_spike": unsupported_claim_spike_sequence,
-    "tool_scope_violation": tool_scope_violation_sequence,
-    "provider_latency_regression": provider_latency_regression_sequence,
+    "unsupported_claim_spike": lambda sid, impact_mode=None: unsupported_claim_spike_sequence(sid, impact_mode),
+    "tool_scope_violation": lambda sid, impact_mode=None: tool_scope_violation_sequence(sid, impact_mode),
+    "provider_latency_regression": lambda sid, impact_mode=None: provider_latency_regression_sequence(sid, impact_mode),
     "remediation_applied": remediation_applied_sequence,
 }
 
 
 class ScenarioRequest(BaseModel):
     system_id: str = Field(default=SYSTEM_ID)
+    impact_mode: str | None = Field(
+        default=None,
+        description="Evidence stage: contained | degraded | materialized",
+    )
 
 
 class StartRequest(BaseModel):
@@ -71,6 +77,7 @@ class SimulatorStatus(BaseModel):
     event_count: int
     incident_id: str | None
     last_error: str | None = None
+    trace_builder_revision: str | None = None
 
 
 async def _run_envelopes(
@@ -136,6 +143,8 @@ def simulator_reset(db: Session = Depends(get_db)) -> dict[str, str]:
 
 @router.get("/status", response_model=SimulatorStatus)
 def simulator_status(db: Session = Depends(get_db)) -> SimulatorStatus:
+    from app.simulator.trace_builder import TRACE_BUILDER_REVISION
+
     state = db.get(SimulatorState, 1)
     if state is None:
         return SimulatorStatus(
@@ -145,6 +154,7 @@ def simulator_status(db: Session = Depends(get_db)) -> SimulatorStatus:
             last_scenario=None,
             event_count=0,
             incident_id=None,
+            trace_builder_revision=TRACE_BUILDER_REVISION,
         )
     return SimulatorStatus(
         running=is_running() or state.running,
@@ -154,6 +164,7 @@ def simulator_status(db: Session = Depends(get_db)) -> SimulatorStatus:
         event_count=state.event_count,
         incident_id=state.incident_id,
         last_error=state.last_error,
+        trace_builder_revision=TRACE_BUILDER_REVISION,
     )
 
 
@@ -257,7 +268,10 @@ async def run_scenario(
     fn = SCENARIO_FN.get(scenario_id)
     if fn is None:
         raise HTTPException(status_code=404, detail=f"Unknown scenario: {scenario_id}")
-    envelopes = fn(body.system_id)
+    if scenario_id == "remediation_applied":
+        envelopes = fn(body.system_id)
+    else:
+        envelopes = fn(body.system_id, body.impact_mode)
     return await _run_envelopes(db, scenario_id, envelopes)
 
 

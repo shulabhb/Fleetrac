@@ -6,13 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { LiveSignalsRawLogPanel } from "@/components/live-signals/live-signals-raw-log-panel";
-import { SimulatorControls } from "@/components/live-signals/simulator-controls";
 import { TraceGroupPanel } from "@/components/live-signals/trace-group-panel";
-import { useGovernanceData } from "@/hooks/use-governance-data";
 import { useEventStream } from "@/hooks/use-event-stream";
-import { fetchIngestLog, type IngestLogRowDTO } from "@/lib/governance-api";
+import type {
+  GovernanceSystemsResponseDTO,
+  IngestLogRowDTO,
+  LiveSignalsResponseDTO,
+  SimulatorStatusDTO
+} from "@/lib/governance-api";
 import {
-  groupSignalsByTrace,
+  buildTraceGroupsForFeed,
+  filterGovernedLiveSignals,
   mapLiveSignalsFromApi,
   type GovernanceLiveSignal
 } from "@/lib/governance-merge";
@@ -26,75 +30,86 @@ import { cn } from "@/lib/cn";
 
 type FeedTab = "governed" | "raw";
 
+type LiveSignalsFeedProps = {
+  liveSignals: LiveSignalsResponseDTO | null;
+  ingestLog: { items: IngestLogRowDTO[] } | null;
+  simulatorStatus: SimulatorStatusDTO | null;
+  governanceSystems: GovernanceSystemsResponseDTO | null;
+  refreshObserve: (force?: boolean) => void;
+};
+
 function severityTone(sev: LiveSignalSeverity): "high" | "medium" | "low" {
   if (sev === "Critical" || sev === "High") return "high";
   if (sev === "Medium") return "medium";
   return "low";
 }
 
-export function LiveSignalsFeed() {
+export function LiveSignalsFeed({
+  liveSignals,
+  ingestLog,
+  simulatorStatus,
+  governanceSystems,
+  refreshObserve
+}: LiveSignalsFeedProps) {
   const [tab, setTab] = useState<FeedTab>("governed");
   const [severity, setSeverity] = useState<LiveSignalSeverity | "all" | "healthy">("all");
   const [category, setCategory] = useState<string>("all");
   const [systemFilter, setSystemFilter] = useState<string>("all");
   const [groupByTrace, setGroupByTrace] = useState(true);
-  const { enabled, liveSignals, simulatorStatus, governanceSystems, refresh } = useGovernanceData();
-  const [rawRows, setRawRows] = useState<IngestLogRowDTO[]>([]);
-  const [rawLoadError, setRawLoadError] = useState<string | null>(null);
-  useEventStream(refresh, enabled);
+
+  const rawRows = ingestLog?.items ?? [];
+
+  useEventStream(refreshObserve, true);
 
   useEffect(() => {
-    if (tab !== "raw" || !enabled) return;
+    void refreshObserve(true);
+  }, [refreshObserve]);
 
-    let cancelled = false;
-    const loadRaw = async () => {
-      const data = await fetchIngestLog(150);
-      if (cancelled) return;
-      if (!data) {
-        setRawLoadError(
-          "Ingest log API unavailable (500). Restart the API — it will auto-migrate the SQLite schema."
-        );
-        return;
-      }
-      setRawLoadError(null);
-      setRawRows(data.items);
-    };
-
-    void loadRaw();
-    const pollId = window.setInterval(() => void loadRaw(), 2000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(pollId);
-    };
-  }, [tab, enabled]);
+  useEffect(() => {
+    if (tab !== "raw") return;
+    void refreshObserve(true);
+    const pollId = window.setInterval(() => void refreshObserve(true), 2000);
+    return () => window.clearInterval(pollId);
+  }, [tab, refreshObserve]);
 
   const fleetSystems = governanceSystems?.items ?? [];
 
-  const signals = useMemo((): GovernanceLiveSignal[] => {
+  const allSignals = useMemo((): GovernanceLiveSignal[] => {
     return mapLiveSignalsFromApi(liveSignals);
   }, [liveSignals]);
 
-  const categories = useMemo(
-    () => Array.from(new Set(signals.map((s) => s.category))).sort(),
-    [signals]
+  const governedSignals = useMemo(
+    () => filterGovernedLiveSignals(allSignals),
+    [allSignals]
   );
 
-  const filtered = useMemo(() => {
-    return signals.filter((s) => {
+  const categories = useMemo(
+    () => Array.from(new Set(governedSignals.map((s) => s.category))).sort(),
+    [governedSignals]
+  );
+
+  const filteredGoverned = useMemo(() => {
+    return governedSignals.filter((s) => {
       if (severity === "healthy" && s.severity !== "Healthy") return false;
       if (severity !== "all" && severity !== "healthy" && s.severity !== severity) return false;
       if (category !== "all" && s.category !== category) return false;
       if (systemFilter !== "all" && s.canonicalSystemId !== systemFilter) return false;
       return true;
     });
-  }, [signals, severity, category, systemFilter]);
+  }, [governedSignals, severity, category, systemFilter]);
 
-  const traceGroups = useMemo(() => groupSignalsByTrace(filtered), [filtered]);
+  const traceGroups = useMemo(
+    () => buildTraceGroupsForFeed(allSignals, filteredGoverned),
+    [allSignals, filteredGoverned]
+  );
+
+  const rawLoadError =
+    ingestLog === null
+      ? "Ingest log unavailable. Confirm the API is running on port 8000 and refresh this page."
+      : null;
 
   return (
     <div className="space-y-5">
-      <SimulatorControls status={simulatorStatus} onRefresh={refresh} />
-
       <div className="inline-flex rounded-md border border-slate-200 p-0.5">
         <button
           type="button"
@@ -172,22 +187,20 @@ export function LiveSignalsFeed() {
               Group by trace
             </button>
             <p className="ml-auto text-[11px] tabular-nums text-slate-500">
-              {filtered.length} signals · live from API
+              {filteredGoverned.length} signals · live from API
             </p>
           </div>
 
-          {filtered.length === 0 ? (
+          {filteredGoverned.length === 0 ? (
             <div className="px-4 py-10 text-center text-[13px] text-slate-600">
-              No live signals yet. Use{" "}
-              <span className="font-medium text-slate-800">Run pitch</span> or{" "}
-              <span className="font-medium text-slate-800">Start continuous</span> above to ingest
-              telemetry.
+              No governed signals yet. Telemetry will appear here as ingest and normalization run
+              across the fleet.
             </div>
           ) : groupByTrace ? (
             <TraceGroupPanel groups={traceGroups} />
           ) : (
             <ul className="divide-y divide-slate-100">
-              {filtered.map((s) => (
+              {filteredGoverned.map((s) => (
                 <SignalRow key={s.id} signal={s} />
               ))}
             </ul>

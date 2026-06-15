@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import ASGITransport, AsyncClient
+
+pytest_plugins = ("pytest_asyncio",)
 
 
 @pytest.fixture()
@@ -23,10 +24,13 @@ def app(database_url: str):
     os.environ["DATABASE_URL"] = database_url
     from app.core.config import settings
     from app.db.session import reset_engine
+    from app.simulator.runner import stop_continuous
 
     settings.database_url = database_url
     settings.simulator_api_base_url = "http://test"
+    settings.app_env = "test"
     reset_engine(database_url)
+    stop_continuous()
 
     import importlib
 
@@ -36,7 +40,9 @@ def app(database_url: str):
     from app.simulator.http_ingest_client import set_test_asgi_app
 
     set_test_asgi_app(main_module.app)
-    return main_module.app
+    stop_continuous()
+    yield main_module.app
+    stop_continuous()
 
 
 @pytest.fixture()
@@ -46,7 +52,12 @@ def client(app) -> TestClient:
 
 
 @pytest.fixture()
-async def async_client(app):
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+def db_session(client):
+    from app.db.session import get_session_factory
+
+    factory = get_session_factory()
+    db = factory()
+    try:
+        yield db
+    finally:
+        db.close()

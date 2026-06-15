@@ -23,6 +23,14 @@ export type FleetracAnalysisDTO = {
   evidence_highlights: string[];
   policy_notes: string;
   confidence: number;
+  diagnosis?: string;
+  current_severity?: string;
+  assessment_confidence?: string;
+  why_this_severity?: string[];
+  why_not_higher?: string[];
+  occurrence_count?: number;
+  trace_count?: number;
+  recommended_bounded_action?: string;
 };
 
 export type LiveSignalRowDTO = {
@@ -344,10 +352,12 @@ export async function fetchLiveSignals(limit = 50): Promise<LiveSignalsResponseD
 
 export async function fetchIngestLog(
   limit = 50,
-  systemId?: string
+  systemId?: string,
+  since?: string
 ): Promise<IngestLogResponseDTO | null> {
   const qs = new URLSearchParams({ limit: String(limit) });
   if (systemId) qs.set("system_id", systemId);
+  if (since) qs.set("since", since);
   return governanceFetch<IngestLogResponseDTO>(`/governance/ingest-log?${qs}`);
 }
 

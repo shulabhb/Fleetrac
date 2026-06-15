@@ -15,7 +15,8 @@ const EMPTY_LIVE_SIGNALS_SUMMARY = {
 };
 
 export function LiveSignalsPageClient() {
-  const { liveSignals } = useGovernanceData();
+  const { liveSignals, ingestLog, simulatorStatus, governanceSystems, refreshObserve } =
+    useGovernanceData();
 
   const summary = useMemo(
     () => buildLiveSignalsSummaryFromApi(liveSignals) ?? EMPTY_LIVE_SIGNALS_SUMMARY,
@@ -38,7 +39,13 @@ export function LiveSignalsPageClient() {
         </div>
       }
     >
-      <LiveSignalsFeed />
+      <LiveSignalsFeed
+        liveSignals={liveSignals}
+        ingestLog={ingestLog}
+        simulatorStatus={simulatorStatus}
+        governanceSystems={governanceSystems}
+        refreshObserve={refreshObserve}
+      />
     </GovernancePageShell>
   );
 }

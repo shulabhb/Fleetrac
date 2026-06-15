@@ -86,7 +86,9 @@ export function mapLiveSignalRow(row: LiveSignalRowDTO): GovernanceLiveSignal {
   const severity = mapSeverity(row);
   const signalLabel = row.normalized_signal_type
     ? row.normalized_signal_type.replace(/_/g, " ")
-    : "signal";
+    : row.parent_span_id
+      ? "healthy span"
+      : "healthy trace";
   return {
     id: row.event_id,
     systemId: row.display_system_id,
@@ -111,19 +113,34 @@ export function mapLiveSignalRow(row: LiveSignalRowDTO): GovernanceLiveSignal {
   };
 }
 
-export function groupSignalsByTrace(
-  signals: GovernanceLiveSignal[]
+export function isGovernanceVisibleSignal(row: LiveSignalRowDTO): boolean {
+  if (row.normalized_signal_type) return true;
+  if (row.incident_id) return true;
+  if (row.severity) return true;
+  if (!row.parent_span_id) return true;
+  return false;
+}
+
+export function filterGovernedLiveSignals(signals: GovernanceLiveSignal[]): GovernanceLiveSignal[] {
+  return signals.filter((s) => {
+    if (s.incidentLinked) return true;
+    if (s.severity !== "Healthy") return true;
+    if (!s.parentSpanId) return true;
+    return false;
+  });
+}
+
+export function buildTraceGroupsForFeed(
+  allSignals: GovernanceLiveSignal[],
+  governedSignals: GovernanceLiveSignal[]
 ): { traceId: string; signals: GovernanceLiveSignal[] }[] {
-  const groups = new Map<string, GovernanceLiveSignal[]>();
-  for (const s of signals) {
-    const key = s.traceId ?? s.id;
-    const list = groups.get(key) ?? [];
-    list.push(s);
-    groups.set(key, list);
+  const traceIds = new Set<string>();
+  for (const s of governedSignals) {
+    if (s.traceId) traceIds.add(s.traceId);
   }
-  return Array.from(groups.entries()).map(([traceId, items]) => ({
+  return [...traceIds].map((traceId) => ({
     traceId,
-    signals: items
+    signals: allSignals.filter((s) => s.traceId === traceId)
   }));
 }
 

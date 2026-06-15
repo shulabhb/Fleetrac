@@ -8,6 +8,7 @@ const FALLBACK_POLL_MS = 5000;
 
 /**
  * Subscribes to governance SSE; invokes onRefresh on message events.
+ * Intended for observe-surface updates (live signals + ingest log), not full governance refresh.
  * When the stream errors, falls back to polling onRefresh every 5s.
  */
 export function useEventStream(onRefresh: () => void, enabled = true): void {

@@ -44,9 +44,15 @@ export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
   return (
     <ul className="divide-y divide-slate-100">
       {groups.map((group) => {
-        const head = group.signals[0];
+        const head =
+          group.signals.find((s) => s.severity !== "Healthy") ??
+          group.signals.find((s) => !s.parentSpanId) ??
+          group.signals[0];
         const isOpen = expanded[group.traceId] ?? false;
         const hasRisk = group.signals.some((s) => s.severity !== "Healthy");
+        const healthyChildren = group.signals.filter(
+          (s) => s.severity === "Healthy" && s.parentSpanId
+        ).length;
         return (
           <li key={group.traceId} className="px-4 py-3">
             <button
@@ -60,6 +66,11 @@ export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
                   <Badge tone={hasRisk ? "high" : "neutral"} size="xs">
                     {group.signals.length} spans
                   </Badge>
+                  {healthyChildren > 0 ? (
+                    <Badge tone="neutral" size="xs">
+                      {healthyChildren} healthy children
+                    </Badge>
+                  ) : null}
                   <span className="font-mono text-[10px] text-slate-500">
                     trace {group.traceId.slice(0, 12)}…
                   </span>

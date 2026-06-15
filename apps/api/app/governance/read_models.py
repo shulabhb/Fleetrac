@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections import defaultdict
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -132,24 +135,39 @@ def ingest_log(
     *,
     limit: int = 50,
     system_id: str | None = None,
+    since: datetime | None = None,
 ) -> IngestLogResponse:
     q = db.query(RawEvent).order_by(RawEvent.ingested_at.desc())
     if system_id:
         q = q.filter(RawEvent.system_id == system_id)
+    if since is not None:
+        q = q.filter(RawEvent.ingested_at > since)
     rows = q.limit(limit).all()
+    if not rows:
+        return IngestLogResponse(items=[], total=0)
+
+    raw_ids = [raw.id for raw in rows]
+    system_ids = {raw.system_id for raw in rows}
+    systems = {
+        system.id: system
+        for system in db.query(System).filter(System.id.in_(system_ids)).all()
+    }
+    norm_rows = (
+        db.query(NormalizedEvent)
+        .filter(NormalizedEvent.raw_payload_reference.in_(raw_ids))
+        .order_by(NormalizedEvent.created_at.asc())
+        .all()
+    )
+    norm_by_raw: dict[str, list[NormalizedEvent]] = defaultdict(list)
+    for norm in norm_rows:
+        norm_by_raw[norm.raw_payload_reference].append(norm)
+
     items: list[IngestLogRow] = []
     for raw in rows:
-        system = db.get(System, raw.system_id)
-        ident = _system_identity(system, raw.system_id)
+        ident = _system_identity(systems.get(raw.system_id), raw.system_id)
         payload = raw.payload or {}
         source_type = str(payload.get("source_type", "unknown"))
-        norm_rows = (
-            db.query(NormalizedEvent)
-            .filter(NormalizedEvent.raw_payload_reference == raw.id)
-            .order_by(NormalizedEvent.created_at.asc())
-            .all()
-        )
-        normalized_spans = [_norm_to_ingest_dto(n) for n in norm_rows]
+        normalized_spans = [_norm_to_ingest_dto(n) for n in norm_by_raw.get(raw.id, [])]
         normalized = normalized_spans[0] if normalized_spans else None
         items.append(
             IngestLogRow(
@@ -200,6 +218,12 @@ def owner_queue(db: Session, *, owner_team: str) -> OwnerQueueResponse:
                 reviewer=assignment.reviewer_name if assignment else None,
                 opened_at=inc.opened_at,
                 updated_at=inc.updated_at,
+                diagnosis_family=inc.diagnosis_family,
+                severity_reason=inc.severity_reason,
+                assessment_confidence=inc.assessment_confidence,
+                occurrence_count=inc.occurrence_count,
+                trace_count=inc.trace_count,
+                highest_severity=inc.highest_severity,
                 **ident,
             )
         )

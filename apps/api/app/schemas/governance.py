@@ -91,6 +91,12 @@ class OwnerQueueRow(GovernanceIdentityMixin):
     reviewer: str | None = None
     opened_at: datetime
     updated_at: datetime
+    diagnosis_family: str | None = None
+    severity_reason: str | None = None
+    assessment_confidence: float | None = None
+    occurrence_count: int | None = None
+    trace_count: int | None = None
+    highest_severity: str | None = None
 
 
 class OwnerQueueResponse(BaseModel):

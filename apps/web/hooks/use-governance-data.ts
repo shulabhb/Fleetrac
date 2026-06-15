@@ -42,6 +42,7 @@ export type GovernanceDataState = {
   notifications: NotificationDTO[];
   simulatorStatus: SimulatorStatusDTO | null;
   refresh: (force?: boolean) => void;
+  refreshObserve: (force?: boolean) => void;
 };
 
 export function useGovernanceData(): GovernanceDataState {
@@ -66,6 +67,25 @@ export function useGovernanceData(): GovernanceDataState {
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [simulatorStatus, setSimulatorStatus] = useState<SimulatorStatusDTO | null>(null);
   const inFlight = useRef(false);
+  const observeInFlight = useRef(false);
+
+  const refreshObserve = useCallback(async (force = false) => {
+    if (!enabled) return;
+    if (observeInFlight.current && !force) return;
+    observeInFlight.current = true;
+    try {
+      const [signals, ingest, simStatus] = await Promise.all([
+        fetchLiveSignals(100),
+        fetchIngestLog(50),
+        fetchSimulatorStatus()
+      ]);
+      setLiveSignals(signals);
+      setIngestLog(ingest);
+      setSimulatorStatus(simStatus);
+    } finally {
+      observeInFlight.current = false;
+    }
+  }, [enabled]);
 
   const refresh = useCallback(async (force = false) => {
     if (!enabled) return;
@@ -101,7 +121,7 @@ export function useGovernanceData(): GovernanceDataState {
       const [signals, ingest, dash, actionData, simStatus, library, notifData, systems] =
         await Promise.all([
         fetchLiveSignals(100),
-        fetchIngestLog(100),
+        fetchIngestLog(50),
         fetchDashboardSummary(),
         fetchGovernedActions(),
         fetchSimulatorStatus(),
@@ -154,7 +174,8 @@ export function useGovernanceData(): GovernanceDataState {
     evidenceLibrary,
     notifications,
     simulatorStatus,
-    refresh
+    refresh,
+    refreshObserve
   };
 }
 

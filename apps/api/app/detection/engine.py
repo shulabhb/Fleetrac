@@ -31,6 +31,19 @@ def _compare(operator: str, value: float, threshold: float) -> bool:
     return False
 
 
+def _metric_value(event: FleetracEvent, field: str) -> float | None:
+    if field == "latency_ms":
+        raw = event.evaluation_signals.get("operation_latency_ms")
+        if raw is None and event.operation_type in ("model_call", "tool_call"):
+            raw = event.evaluation_signals.get("latency_ms")
+        if raw is None:
+            return None
+        return float(raw)
+    if field not in event.evaluation_signals:
+        return None
+    return float(event.evaluation_signals.get(field, 0.0))
+
+
 def evaluate_event(event: FleetracEvent, rules: list[DetectionRule]) -> DetectionMatch | None:
     for rule in rules:
         if not rule.enabled:
@@ -45,9 +58,9 @@ def evaluate_event(event: FleetracEvent, rules: list[DetectionRule]) -> Detectio
             "rule_sensitive_output",
             "rule_unapproved_region",
         ):
-            if rule.threshold_field not in event.evaluation_signals:
+            value = _metric_value(event, rule.threshold_field)
+            if value is None:
                 continue
-            value = float(event.evaluation_signals.get(rule.threshold_field, 0.0))
             if _compare(rule.threshold_operator, value, rule.threshold_value):
                 return DetectionMatch(
                     rule_id=rule.id,

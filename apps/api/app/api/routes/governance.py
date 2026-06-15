@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -67,9 +69,10 @@ def get_live_signals(
 def get_ingest_log(
     limit: int = Query(50, ge=1, le=200),
     system_id: str | None = None,
+    since: datetime | None = None,
     db: Session = Depends(get_db),
 ) -> IngestLogResponse:
-    return ingest_log(db, limit=limit, system_id=system_id)
+    return ingest_log(db, limit=limit, system_id=system_id, since=since)
 
 
 @router.get("/systems")
@@ -250,3 +253,30 @@ def post_verify_action(
     )
     db.commit()
     return {"verification_id": row.id, "outcome": row.outcome}
+
+
+@router.get("/incidents/{incident_id}/assessment")
+def get_incident_assessment(incident_id: str, db: Session = Depends(get_db)) -> dict:
+    from app.governance.correlation_read_models import incident_assessment
+
+    result = incident_assessment(db, incident_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return result
+
+
+@router.get("/incidents/{incident_id}/severity-history")
+def get_incident_severity_history(incident_id: str, db: Session = Depends(get_db)) -> dict:
+    from app.governance.correlation_read_models import incident_severity_history
+
+    return incident_severity_history(db, incident_id)
+
+
+@router.get("/correlation/clusters/{cluster_id}")
+def get_correlation_cluster(cluster_id: str, db: Session = Depends(get_db)) -> dict:
+    from app.governance.correlation_read_models import correlation_cluster
+
+    result = correlation_cluster(db, cluster_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Cluster not found")
+    return result

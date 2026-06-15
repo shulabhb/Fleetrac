@@ -49,7 +49,30 @@ function evalSummary(evaluation: Record<string, unknown> | undefined): string {
   const parts = Object.entries(evaluation)
     .slice(0, 4)
     .map(([k, v]) => `${k}=${v}`);
-  return parts.length ? ` ${parts.join(" ")}` : "";
+  return parts.length ? parts.join(" ") : "";
+}
+
+function spanRelevantAttrs(span: Record<string, unknown>): string {
+  const evaluation = span.evaluation as Record<string, unknown> | undefined;
+  const attrs = span.attributes as Record<string, unknown> | undefined;
+  const lines: string[] = [];
+  if (evaluation && Object.keys(evaluation).length) {
+    lines.push(evalSummary(evaluation));
+  }
+  if (attrs) {
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key.startsWith("fleetrac.business_outcome.")) {
+        lines.push(`${key.replace("fleetrac.business_outcome.", "")}=${value}`);
+      } else if (key === "fleetrac.citation.verified") {
+        lines.push(`citation_verified=${value}`);
+      } else if (key === "fleetrac.tool.approved") {
+        lines.push(`tool_approved=${value}`);
+      } else if (key.startsWith("gen_ai.tool.name")) {
+        lines.push(`tool=${value}`);
+      }
+    }
+  }
+  return lines.filter(Boolean).join(" ");
 }
 
 function bundleToLines(row: IngestLogRowDTO): ConsoleLine[] {
@@ -62,11 +85,28 @@ function bundleToLines(row: IngestLogRowDTO): ConsoleLine[] {
   const spans = Array.isArray(payload.spans) ? payload.spans : [];
   const logs = Array.isArray(payload.logs) ? payload.logs : [];
   const metrics = Array.isArray(payload.metrics) ? payload.metrics : [];
+  const eventCount = spans.reduce((n, sp) => {
+    const events = (sp as Record<string, unknown>).events;
+    return n + (Array.isArray(events) ? events.length : 0);
+  }, 0);
+
+  const rootSpan = spans[0] as Record<string, unknown> | undefined;
+  const baseNs = rootSpan ? Number(rootSpan.start_time_unix_nano ?? 0) : 0;
+  const totalMs =
+    rootSpan && rootSpan.end_time_unix_nano != null && baseNs
+      ? Math.round((Number(rootSpan.end_time_unix_nano) - baseNs) / 1_000_000)
+      : null;
+
+  const spanById = new Map<string, Record<string, unknown>>();
+  for (const span of spans) {
+    const s = span as Record<string, unknown>;
+    if (s.span_id) spanById.set(String(s.span_id), s);
+  }
 
   lines.push({
     key: `${row.raw_event_id}-gen`,
     level: "sim",
-    text: `[${ts}] SIM generate  system=${row.display_system_id} schema=${schema} trace=${shortId(traceId)} spans=${spans.length} logs=${logs.length}`
+    text: `[${ts}] SIM generate  system=${row.display_system_id} schema=${schema} trace=${shortId(traceId)} spans=${spans.length} events=${eventCount} logs=${logs.length}${totalMs != null ? ` total=${totalMs}ms` : ""}`
   });
 
   if (payload.scenario && typeof payload.scenario === "object") {
@@ -92,23 +132,44 @@ function bundleToLines(row: IngestLogRowDTO): ConsoleLine[] {
   });
 
   if (schema.startsWith("2") && spans.length > 0) {
-    for (const span of spans) {
-      const s = span as Record<string, unknown>;
+    for (let i = 0; i < spans.length; i++) {
+      const s = spans[i] as Record<string, unknown>;
       const name = String(s.name ?? "span");
       const op = String(s.operation ?? "—");
-      const lat = s.latency_ms != null ? ` ${s.latency_ms}ms` : "";
-      const evalBlock = s.evaluation as Record<string, unknown> | undefined;
+      const parentId = s.parent_span_id ? String(s.parent_span_id) : null;
+      const parent = parentId ? spanById.get(parentId) : undefined;
+      const parentName = parent ? String(parent.name ?? "—") : "—";
+      const startNs = Number(s.start_time_unix_nano ?? baseNs);
+      const endNs = Number(s.end_time_unix_nano ?? startNs);
+      const startMs = baseNs ? Math.round((startNs - baseNs) / 1_000_000) : 0;
+      const endMs = baseNs ? Math.round((endNs - baseNs) / 1_000_000) : 0;
+      const durationMs = Math.max(0, endMs - startMs);
+      const prefix = i === spans.length - 1 ? "└─" : "├─";
+      const relevant = spanRelevantAttrs(s);
+
       lines.push({
         key: `${row.raw_event_id}-span-${String(s.span_id ?? name)}`,
         level: "span",
-        text: `           ├─ span ${name}  op=${op}${lat}${evalSummary(evalBlock)}`
+        text: `           ${prefix} ${name}`
       });
+      lines.push({
+        key: `${row.raw_event_id}-span-meta-${String(s.span_id ?? name)}`,
+        level: "dim",
+        text: `           │  parent=${parentName}  start=${startMs}ms end=${endMs}ms duration=${durationMs}ms status=OK op=${op}`
+      });
+      if (relevant) {
+        lines.push({
+          key: `${row.raw_event_id}-span-attr-${String(s.span_id ?? name)}`,
+          level: "metric",
+          text: `           │  ${relevant}`
+        });
+      }
       if (Array.isArray(s.events) && s.events.length > 0) {
         for (const ev of s.events as Record<string, unknown>[]) {
           lines.push({
-            key: `${row.raw_event_id}-ev-${String(ev.name ?? "event")}`,
+            key: `${row.raw_event_id}-ev-${String(ev.name ?? "event")}-${String(s.span_id ?? name)}`,
             level: "log",
-            text: `           │  event ${String(ev.name ?? "log")}  ${String(ev.message ?? JSON.stringify(ev)).slice(0, 80)}`
+            text: `           │  event ${String(ev.name ?? "log")}`
           });
         }
       }
@@ -157,9 +218,9 @@ function bundleToLines(row: IngestLogRowDTO): ConsoleLine[] {
     for (const spanNorm of normalizedSpans) {
       const signal = spanNorm.normalized_signal_type
         ? ` signal=${spanNorm.normalized_signal_type}`
-        : "";
+        : " signal=neutral";
       const inc = spanNorm.incident_id ? ` incident=${shortId(spanNorm.incident_id, 16)}` : "";
-      const sev = spanNorm.severity ?? "healthy";
+      const sev = spanNorm.severity ?? (spanNorm.normalized_signal_type ? "unknown" : "—");
       lines.push({
         key: `${row.raw_event_id}-norm-${spanNorm.event_id}`,
         level: sev === "critical" || sev === "high" ? "warn" : "norm",
@@ -275,10 +336,10 @@ export function LiveSignalsRawLogPanel({ rows, simulatorStatus }: Props) {
         {filtered.length === 0 ? (
           <div className="space-y-1 text-slate-500">
             <p className="text-violet-400">$ fleetrac-simulator --watch ingest</p>
-            <p>Waiting for simulator output…</p>
+            <p>Waiting for ingest payloads…</p>
             <p className="text-slate-600">
-              Start continuous simulation or trigger a scenario above. Each OTEL bundle will appear
-              here as it is POSTed to /api/v1/ingest/events.
+              Each OTEL bundle POSTed to /api/v1/ingest/events appears here after persistence.
+              Switch back to governed signals for normalized governance view.
             </p>
           </div>
         ) : (
