@@ -57,7 +57,7 @@ curl -s -X POST http://localhost:8000/api/v1/simulator/start -H 'Content-Type: a
 
 ```bash
 curl http://localhost:8000/api/v1/simulator/status
-# "trace_builder_revision": "2026.06.2-timing-scoped"  →  current simulator code
+# Check `trace_builder_revision` from `/api/v1/simulator/status` for the current simulator revision.
 
 curl -X POST http://localhost:8000/api/v1/simulator/reset
 curl -X POST http://localhost:8000/api/v1/simulator/runs \
@@ -91,4 +91,11 @@ cd apps/web && npm run build
 ## Further reading
 
 - [apps/api/README.md](apps/api/README.md) — Simulator API, pipeline, troubleshooting (stale workers, port conflicts)
-- [AGENTS.md](AGENTS.md) — Product guardrails, terminology, route builders, demo architecture
+- [AGENTS.md](AGENTS.md) — Agent operating rules and invariants
+- [docs/product/fleetrac-context.md](docs/product/fleetrac-context.md) — Product context
+- [docs/product/current-stage.md](docs/product/current-stage.md) — What is built / frozen / deferred
+- [docs/engineering/architecture.md](docs/engineering/architecture.md) — Architecture from the repo
+- [docs/engineering/implementation-rules.md](docs/engineering/implementation-rules.md) — Engineering rules
+- [docs/engineering/testing-checklist.md](docs/engineering/testing-checklist.md) — Test and smoke checklist
+- [docs/ai-handoff/current-task.md](docs/ai-handoff/current-task.md) — Task scoping template
+- [docs/ai-handoff/completion-report.md](docs/ai-handoff/completion-report.md) — Completion report template
