@@ -13,16 +13,9 @@ import {
   type StructuredEvidenceRow
 } from "@/lib/evidence-library-types";
 import {
-  INCIDENT_EVIDENCE_DETAILS
-} from "@/lib/evidence-library-mock";
-import {
   archiveIncidentInPackage,
   type LivePackageState
 } from "@/lib/evidence-library-package-state";
-import {
-  INCIDENT_EVIDENCE_PACK_BY_ID,
-  type IncidentEvidencePackMock
-} from "@/lib/incident-queue-owner-review-mock";
 import { handoffIncidentToActionCenter } from "@/lib/governance-api";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
@@ -34,18 +27,6 @@ import {
   routeToIncidentsOwnerQueue,
   routes
 } from "@/lib/routes";
-
-function fallbackStructuredFromPack(pack: IncidentEvidencePackMock): StructuredEvidenceRow[] {
-  return pack.evidenceItems.map((title) => ({
-    evidenceItem: title,
-    source: "Evidence package",
-    signal: "See incident record",
-    governanceRelevance: "Governance signal recorded",
-    status: "Recorded",
-    timestamp: "—",
-    rawLog: { packaged: true, incident_id: pack.incidentId }
-  }));
-}
 
 function currentStageLabel(
   lifecycle: IncidentEvidenceDetail["lifecycleTimestamps"] | undefined,
@@ -97,8 +78,6 @@ export function EvidenceLibraryIncidentRecord({
   setLivePackages: Dispatch<SetStateAction<LivePackageState>>;
 }) {
   const router = useRouter();
-  const pack = INCIDENT_EVIDENCE_PACK_BY_ID[incidentId];
-  const mockDetail = INCIDENT_EVIDENCE_DETAILS[incidentId];
   const { evidenceByAlias } = useGovernanceData();
   const detail = useMemo(() => {
     const apiEvidence = evidenceByAlias[incidentId];
@@ -107,7 +86,7 @@ export function EvidenceLibraryIncidentRecord({
     }
     return undefined;
   }, [incidentId, evidenceByAlias]);
-  const resolvedOwner = ownerTeam ?? pack?.ownerTeam ?? detail?.ownerTeam ?? "—";
+  const resolvedOwner = ownerTeam ?? detail?.ownerTeam ?? "—";
 
   const resolvedArchiveRow = useMemo(() => {
     const p = livePackages[resolvedOwner];
@@ -255,7 +234,7 @@ export function EvidenceLibraryIncidentRecord({
         <dl className="mt-3 grid gap-2 text-[12px] text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-slate-500">Assigned</dt>
-            <dd className="font-medium text-slate-900">{detail?.assigned ?? pack?.assignedReviewer}</dd>
+            <dd className="font-medium text-slate-900">{detail.assigned}</dd>
           </div>
           <div>
             <dt className="text-slate-500">Owner</dt>
@@ -303,7 +282,7 @@ export function EvidenceLibraryIncidentRecord({
         <button
           type="button"
           onClick={() => {
-            const blob = new Blob([JSON.stringify({ incidentId, pack, detail }, null, 2)]);
+            const blob = new Blob([JSON.stringify({ incidentId, detail }, null, 2)]);
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
@@ -344,7 +323,7 @@ export function EvidenceLibraryIncidentRecord({
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Lifecycle timeline
           </h2>
-          <p className="mt-2 text-[13px] text-slate-700">{pack?.timeline ?? "—"}</p>
+          <p className="mt-2 text-[13px] text-slate-700">{detail.summary}</p>
         </section>
       )}
 
@@ -409,7 +388,7 @@ export function EvidenceLibraryIncidentRecord({
           </p>
           <p className="mt-1 text-[13px] text-slate-700">
             <span className="text-slate-500">Recommended action · </span>
-            {detail?.recommendedAction ?? pack?.recommendedAction}
+            {detail.recommendedAction}
           </p>
           <p className="mt-2 text-[12px] text-slate-600">
             Reviewer decision:
@@ -512,7 +491,7 @@ export function EvidenceLibraryIncidentRecord({
             <p className="mt-1 text-slate-600">{detail.nextMeasurementWindow}</p>
           </div>
         ) : (
-          <p className="mt-2 text-[13px] text-slate-700">{pack?.outcomeStatus ?? "—"}</p>
+          <p className="mt-2 text-[13px] text-slate-700">{detail.decisionStatus}</p>
         )}
       </section>
 

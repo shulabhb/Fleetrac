@@ -106,6 +106,14 @@ class Incident(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     lifecycle_history: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    diagnosis_family: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    highest_severity: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    assessment_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    severity_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_assessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    occurrence_count: Mapped[int] = mapped_column(default=1)
+    trace_count: Mapped[int] = mapped_column(default=1)
+    cluster_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -161,6 +169,68 @@ class Assignment(Base):
     reviewer_name: Mapped[str] = mapped_column(String(128), nullable=False)
     role: Mapped[str] = mapped_column(String(64), default="reviewer")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SignalCluster(Base):
+    __tablename__ = "signal_clusters"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    environment: Mapped[str] = mapped_column(String(32), nullable=False)
+    system_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    diagnosis_family: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    correlation_key: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    occurrence_count: Mapped[int] = mapped_column(default=1)
+    trace_count: Mapped[int] = mapped_column(default=1)
+    signal_types: Mapped[list[str]] = mapped_column(JSON, default=list)
+    contributing_event_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    contributing_trace_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    contributing_span_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    control_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    current_business_outcome: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="open")
+    incident_id: Mapped[str | None] = mapped_column(String(256), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RiskAssessment(Base):
+    __tablename__ = "risk_assessments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    cluster_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    incident_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    diagnosis_family: Mapped[str] = mapped_column(String(128), nullable=False)
+    risk_category: Mapped[str] = mapped_column(String(128), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    contributing_factors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    mitigating_factors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    why_not_higher: Mapped[list[str]] = mapped_column(JSON, default=list)
+    recommended_action: Mapped[str] = mapped_column(Text, nullable=False)
+    assessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    primary_evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
+    supporting_evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
+    mitigating_evidence: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+
+class SeverityHistory(Base):
+    __tablename__ = "severity_history"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    previous_severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    new_severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    assessment_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SimulatorState(Base):

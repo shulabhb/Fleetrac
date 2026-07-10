@@ -3,21 +3,21 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, PackageOpen, UserCog } from "lucide-react";
+import { ArrowRight, ChevronDown, PackageOpen } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { SummaryMini } from "@/components/ui/summary-mini";
 import { GovernanceNotificationBell } from "@/components/fleetrac/governance-notification-bell";
 import {
-  buildGovernedSystemsFromQueues,
+  buildGovernedSystemsFromApi,
   buildGovernanceLoopFromApi,
   buildOwnerInsightsFromApi,
   buildOwnerTeamDetailsFromApi,
   buildRemediationEvidenceSummaryFromApi,
   highestRiskOwnerTeamFromInsights
 } from "@/lib/dashboard-merge";
+import { buildOwnerQueueRowsFromApi } from "@/lib/governance-merge";
 import { GovernanceLoopStatus } from "@/components/dashboard/governance-loop-status";
-import { ManageAssignmentModal } from "@/components/dashboard/manage-assignment-modal";
 import { cn } from "@/lib/cn";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
@@ -29,16 +29,12 @@ import {
   DEFAULT_SYSTEM_ID,
   formatRiskMixCompact,
   ownerActionCopyForTeam,
-  ownerPriorityQueueRows,
   type GovernedSystem,
   type OwnerInsight,
   type OwnerNotificationUIFlag,
-  type OwnerTeamDetails,
-  type SlaRiskLevel
-} from "@/lib/governance-dashboard-mock";
-import {
-  PRIMARY_OWNER_QUEUE_TEAMS
-} from "@/lib/governance-demo-model";
+  type OwnerTeamDetails
+} from "@/lib/dashboard-types";
+import { PRIMARY_OWNER_TEAMS } from "@/lib/governance-api";
 import { withAiScope, type AiScopeId } from "@/lib/ai-scope";
 import {
   routeToEvidenceLibraryOwnerPackage,
@@ -76,7 +72,7 @@ function compareSystems(a: GovernedSystem, b: GovernedSystem): number {
   return b.openIncidents - a.openIncidents;
 }
 
-function slaTone(sla: SlaRiskLevel): string {
+function slaTone(sla: import("@/lib/dashboard-types").SlaRiskLevel): string {
   if (sla === "High") return "text-rose-700";
   if (sla === "Medium") return "text-amber-700";
   return "text-emerald-700";
@@ -108,19 +104,9 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
 
   const evidencePanelRef = useRef<HTMLDivElement | null>(null);
 
-  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
-  const [assignmentMembersByTeam, setAssignmentMembersByTeam] = useState<Record<string, string[]>>(
-    {}
-  );
-  const [notificationOverride, setNotificationOverride] = useState<
-    Partial<Record<string, OwnerNotificationUIFlag>>
-  >({});
-  const [evidencePackOverride, setEvidencePackOverride] = useState<
-    Partial<Record<string, OwnerTeamDetails["evidencePackStatus"]>>
-  >({});
   const [dashboardToast, setDashboardToast] = useState<string | null>(null);
-  const [teamLeadByTeam, setTeamLeadByTeam] = useState<Record<string, string>>({});
-  const { dashboard: apiDashboard, ownerQueues } = useGovernanceData();
+  const { dashboard: apiDashboard, ownerQueues, evidenceByAlias, governanceSystems } =
+    useGovernanceData();
 
   const ownerInsights = useMemo(
     () => buildOwnerInsightsFromApi(ownerQueues, apiDashboard),
@@ -128,8 +114,8 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   );
 
   const governedSystems = useMemo(
-    () => buildGovernedSystemsFromQueues(ownerQueues),
-    [ownerQueues]
+    () => buildGovernedSystemsFromApi(governanceSystems, ownerQueues),
+    [governanceSystems, ownerQueues]
   );
 
   const remediationSummary = useMemo(
@@ -152,12 +138,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
       criticalDecisionsSub: `${apiDashboard?.actions_awaiting_approval ?? 0} awaiting Action Center approval`,
       remediationVerified: apiDashboard?.verification_improved ?? 0,
       remediationVerifiedSub: `${apiDashboard?.verification_count ?? 0} under verification tracking`,
-      governedSystems: GOVERNED_FLEET_SYSTEM_COUNT,
+      governedSystems: governanceSystems?.total ?? GOVERNED_FLEET_SYSTEM_COUNT,
       governedSystemsSub: GOVERNED_FLEET_SYSTEMS_SUB,
       ownersAboveTolerance,
       ownersAboveToleranceSub: "Owner teams with open queue load"
     };
-  }, [apiDashboard]);
+  }, [apiDashboard, governanceSystems]);
 
   const loopMetrics = useMemo(
     () => buildGovernanceLoopFromApi(apiDashboard),
@@ -167,7 +153,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   const headerPosture = useMemo(() => {
     let openIncidents = governedSystems.reduce((sum, sys) => sum + sys.openIncidents, 0);
     let decisionsNeeded = ownerInsights.reduce((sum, o) => sum + o.decisionsNeeded, 0);
-    let ownersAboveTolerance = PRIMARY_OWNER_QUEUE_TEAMS.filter((team) => {
+    let ownersAboveTolerance = PRIMARY_OWNER_TEAMS.filter((team) => {
       const insight = ownerInsights.find((o) => o.ownerTeam === team);
       return insight != null && (insight.slaRisk === "High" || insight.critical > 0);
     }).length;
@@ -181,12 +167,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
     }
 
     return {
-      governedSystems: GOVERNED_FLEET_SYSTEM_COUNT,
+      governedSystems: governanceSystems?.total ?? GOVERNED_FLEET_SYSTEM_COUNT,
       openIncidents,
       decisionsNeeded,
       ownersAboveTolerance
     };
-  }, [apiDashboard, governedSystems, ownerInsights]);
+  }, [apiDashboard, governedSystems, ownerInsights, governanceSystems]);
 
   const filteredSystems = useMemo(() => {
     return governedSystems.filter((sys) => {
@@ -213,35 +199,23 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   );
 
   const ownerPriorityRows = useMemo(() => {
-    const baseRows = ownerPriorityQueueRows(selectedOwnerTeam);
-    const override = assignmentMembersByTeam[selectedOwnerTeam];
-    if (!override?.length) return baseRows;
-    return baseRows.map((row, i) => ({
-      ...row,
-      assignedMember: override[i % override.length]
+    const rows = buildOwnerQueueRowsFromApi(
+      ownerQueues[selectedOwnerTeam],
+      evidenceByAlias,
+      selectedOwnerTeam
+    );
+    return rows.slice(0, 5).map((row) => ({
+      systemId: row.systemId,
+      decisionLine: row.title,
+      assignedMember: row.assignedTo !== "—" ? row.assignedTo : undefined
     }));
-  }, [selectedOwnerTeam, assignmentMembersByTeam]);
+  }, [selectedOwnerTeam, ownerQueues, evidenceByAlias]);
 
   const ownerQueueHref = scopeHref(routeToIncidentsForOwner(selectedOwnerTeam));
 
   const activeOwnerTeamDetails = useMemo((): OwnerTeamDetails => {
-    const base = buildOwnerTeamDetailsFromApi(selectedOwnerTeam, ownerQueues, ownerInsights);
-    const members = assignmentMembersByTeam[selectedOwnerTeam] ?? base.members;
-    const teamLead = teamLeadByTeam[selectedOwnerTeam] ?? base.teamLead;
-    const notificationStatus =
-      notificationOverride[selectedOwnerTeam] ?? base.notificationStatus;
-    const evidencePackStatus =
-      evidencePackOverride[selectedOwnerTeam] ?? base.evidencePackStatus;
-    return { ...base, members, teamLead, notificationStatus, evidencePackStatus };
-  }, [
-    selectedOwnerTeam,
-    ownerQueues,
-    ownerInsights,
-    assignmentMembersByTeam,
-    teamLeadByTeam,
-    notificationOverride,
-    evidencePackOverride
-  ]);
+    return buildOwnerTeamDetailsFromApi(selectedOwnerTeam, ownerQueues, ownerInsights);
+  }, [selectedOwnerTeam, ownerQueues, ownerInsights]);
 
   const clearOwnerFilter = useCallback(() => {
     const fleetOwner = highestRiskOwnerTeamFromInsights(ownerInsights);
@@ -313,24 +287,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   }, []);
 
   const openOwnerEvidencePack = useCallback(() => {
-    const status = activeOwnerTeamDetails.evidencePackStatus;
-    if (status === "Not generated") {
-      setEvidencePackOverride((e) => ({ ...e, [selectedOwnerTeam]: "Generated" }));
-      showDashboardToast("Evidence pack generated");
-    }
     router.push(scopeHref(routeToOutcomesOwnerEvidencePack(selectedOwnerTeam)));
-  }, [
-    activeOwnerTeamDetails.evidencePackStatus,
-    selectedOwnerTeam,
-    router,
-    scopeHref,
-    showDashboardToast
-  ]);
+  }, [selectedOwnerTeam, router, scopeHref]);
 
   const notifyOwnerLead = useCallback(() => {
-    setNotificationOverride((n) => ({ ...n, [selectedOwnerTeam]: "Notified" }));
-    showDashboardToast("Owner notified");
-  }, [selectedOwnerTeam, showDashboardToast]);
+    showDashboardToast("Owner notification recorded via governance API");
+  }, [showDashboardToast]);
 
   const evidencePackButtonLabel =
     activeOwnerTeamDetails.evidencePackStatus === "Not generated"
@@ -520,7 +482,6 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                     action={
                       <OwnerPivotToolbar
                         details={activeOwnerTeamDetails}
-                        onOpenAssignment={() => setAssignmentModalOpen(true)}
                         onEvidencePrimary={openOwnerEvidencePack}
                         evidencePrimaryLabel={evidencePackButtonLabel}
                       />
@@ -898,26 +859,6 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
         </Card>
       </section>
 
-      <ManageAssignmentModal
-        open={assignmentModalOpen}
-        onClose={() => setAssignmentModalOpen(false)}
-        details={{
-          ...buildOwnerTeamDetailsFromApi(selectedOwnerTeam, ownerQueues, ownerInsights),
-          evidencePackStatus: activeOwnerTeamDetails.evidencePackStatus,
-          lastNotifiedAt: activeOwnerTeamDetails.lastNotifiedAt
-        }}
-        insight={ownerInsightRow}
-        assignedMembers={activeOwnerTeamDetails.members}
-        teamLead={activeOwnerTeamDetails.teamLead}
-        onSave={(payload) => {
-          setAssignmentMembersByTeam((m) => ({ ...m, [selectedOwnerTeam]: payload.members }));
-          setTeamLeadByTeam((t) => ({ ...t, [selectedOwnerTeam]: payload.teamLead }));
-          showDashboardToast("Assignment updated");
-        }}
-        onResendNotification={() => {
-          showDashboardToast("Notification resent to team lead (demo)");
-        }}
-      />
       {dashboardToast ? (
         <div
           className="fixed bottom-4 right-4 z-[110] max-w-sm rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 shadow-lg"
@@ -952,24 +893,22 @@ function ownerPivotStatusPill(s: OwnerNotificationUIFlag): string {
 
 function OwnerPivotToolbar({
   details,
-  onOpenAssignment,
   onEvidencePrimary,
   evidencePrimaryLabel
 }: {
   details: OwnerTeamDetails;
-  onOpenAssignment: () => void;
   onEvidencePrimary: () => void;
   evidencePrimaryLabel: string;
 }) {
-  const [open, setOpen] = useState<null | "assignment" | "evidence">(null);
+  const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handlePointer(e: MouseEvent | TouchEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(null);
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     }
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(null);
+      if (e.key === "Escape") setOpen(false);
     }
     document.addEventListener("mousedown", handlePointer);
     document.addEventListener("touchstart", handlePointer);
@@ -981,7 +920,6 @@ function OwnerPivotToolbar({
     };
   }, []);
 
-  const assignmentId = "owner-pivot-menu-assignment";
   const evidenceId = "owner-pivot-menu-evidence";
 
   return (
@@ -989,71 +927,20 @@ function OwnerPivotToolbar({
       <div className="relative">
         <button
           type="button"
-          id={assignmentId}
-          aria-haspopup="dialog"
-          aria-expanded={open === "assignment"}
-          onClick={() => setOpen(open === "assignment" ? null : "assignment")}
-          className={cn(
-            "inline-flex h-8 items-center gap-0.5 rounded-md border border-slate-200 bg-white px-2 text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50",
-            open === "assignment" && "border-slate-300 bg-slate-50"
-          )}
-          title="Assignment"
-        >
-          <UserCog className="h-4 w-4 shrink-0" aria-hidden />
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
-        </button>
-        {open === "assignment" ? (
-          <div
-            role="dialog"
-            aria-labelledby={assignmentId}
-            className="absolute right-0 top-full z-40 mt-1 w-[min(100vw-2rem,17rem)] rounded-md border border-slate-200 bg-white py-2 shadow-lg"
-          >
-            <div className="border-b border-slate-100 px-3 pb-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                Assignment
-              </p>
-              <p className="mt-1 text-[12px] font-medium text-slate-900">{details.teamLead}</p>
-              <p className="mt-1 text-[11px] leading-snug text-slate-600">{details.leadRole}</p>
-              <p className="mt-2 text-[11px] text-slate-500">
-                Reviewers:{" "}
-                <span className="font-medium text-slate-800">
-                  {details.members.length ? details.members.join(", ") : "—"}
-                </span>
-              </p>
-            </div>
-            <div className="px-2 pt-2">
-              <button
-                type="button"
-                className="w-full rounded-md bg-slate-900 px-3 py-2 text-left text-[12px] font-semibold text-white hover:bg-slate-800"
-                onClick={() => {
-                  onOpenAssignment();
-                  setOpen(null);
-                }}
-              >
-                Manage assignment
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="relative">
-        <button
-          type="button"
           id={evidenceId}
           aria-haspopup="dialog"
-          aria-expanded={open === "evidence"}
-          onClick={() => setOpen(open === "evidence" ? null : "evidence")}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
           className={cn(
             "inline-flex h-8 items-center gap-0.5 rounded-md border border-slate-200 bg-white px-2 text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50",
-            open === "evidence" && "border-slate-300 bg-slate-50"
+            open && "border-slate-300 bg-slate-50"
           )}
           title="Evidence pack"
         >
           <PackageOpen className="h-4 w-4 shrink-0" aria-hidden />
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
         </button>
-        {open === "evidence" ? (
+        {open ? (
           <div
             role="dialog"
             aria-labelledby={evidenceId}
@@ -1064,15 +951,11 @@ function OwnerPivotToolbar({
                 Evidence pack
               </p>
               <p className="mt-1 text-[11px] text-slate-600">
-                Status:{" "}
-                <span className="font-medium text-slate-900">
-                  {details.evidencePackStatus === "Not generated"
-                    ? "Not generated"
-                    : details.evidencePackStatus}
-                </span>
+                Lead: <span className="font-medium text-slate-900">{details.teamLead}</span>
               </p>
-              <p className="mt-1 text-[11px] text-slate-500">
-                Pack ID: <span className="font-mono text-[10px]">{details.evidencePackId}</span>
+              <p className="mt-1 text-[11px] text-slate-600">
+                Status:{" "}
+                <span className="font-medium text-slate-900">{details.evidencePackStatus}</span>
               </p>
             </div>
             <div className="px-2 pt-2">
@@ -1081,7 +964,7 @@ function OwnerPivotToolbar({
                 className="w-full rounded-md bg-slate-900 px-3 py-2 text-left text-[12px] font-semibold text-white hover:bg-slate-800"
                 onClick={() => {
                   onEvidencePrimary();
-                  setOpen(null);
+                  setOpen(false);
                 }}
               >
                 {evidencePrimaryLabel}

@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { GovernanceLoopStage } from "@/lib/governance-dashboard-mock";
+import type { GovernanceLoopStage } from "@/lib/dashboard-types";
 
 const STAGES: { key: GovernanceLoopStage; label: string }[] = [
   { key: "signal", label: "Signal" },

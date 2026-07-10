@@ -18,6 +18,22 @@ function severityTone(sev: GovernanceLiveSignal["severity"]): "high" | "medium" 
   return "low";
 }
 
+function spanDepth(signal: GovernanceLiveSignal, peers: GovernanceLiveSignal[]): number {
+  if (!signal.parentSpanId) return 0;
+  const parent = peers.find((p) => p.spanId === signal.parentSpanId);
+  if (!parent || parent.id === signal.id) return 1;
+  return 1 + spanDepth(parent, peers);
+}
+
+function sortSignalsForTrace(signals: GovernanceLiveSignal[]): GovernanceLiveSignal[] {
+  return [...signals].sort((a, b) => {
+    const da = spanDepth(a, signals);
+    const db = spanDepth(b, signals);
+    if (da !== db) return da - db;
+    return a.summary.localeCompare(b.summary);
+  });
+}
+
 export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -28,9 +44,15 @@ export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
   return (
     <ul className="divide-y divide-slate-100">
       {groups.map((group) => {
-        const head = group.signals[0];
+        const head =
+          group.signals.find((s) => s.severity !== "Healthy") ??
+          group.signals.find((s) => !s.parentSpanId) ??
+          group.signals[0];
         const isOpen = expanded[group.traceId] ?? false;
         const hasRisk = group.signals.some((s) => s.severity !== "Healthy");
+        const healthyChildren = group.signals.filter(
+          (s) => s.severity === "Healthy" && s.parentSpanId
+        ).length;
         return (
           <li key={group.traceId} className="px-4 py-3">
             <button
@@ -44,6 +66,11 @@ export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
                   <Badge tone={hasRisk ? "high" : "neutral"} size="xs">
                     {group.signals.length} spans
                   </Badge>
+                  {healthyChildren > 0 ? (
+                    <Badge tone="neutral" size="xs">
+                      {healthyChildren} healthy children
+                    </Badge>
+                  ) : null}
                   <span className="font-mono text-[10px] text-slate-500">
                     trace {group.traceId.slice(0, 12)}…
                   </span>
@@ -60,13 +87,25 @@ export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
             </button>
             {isOpen ? (
               <ul className={cn("mt-2 space-y-2 border-l border-slate-100 pl-6")}>
-                {group.signals.map((s) => (
-                  <li key={s.id} className="text-[12px] text-slate-700">
+                {sortSignalsForTrace(group.signals).map((s) => {
+                  const depth = spanDepth(s, group.signals);
+                  return (
+                  <li
+                    key={s.id}
+                    className="text-[12px] text-slate-700"
+                    style={{ marginLeft: depth > 0 ? `${depth * 12}px` : undefined }}
+                  >
                     <div className="flex flex-wrap items-center gap-1.5">
+                      {depth > 0 ? (
+                        <span className="font-mono text-[10px] text-slate-400">↳ child</span>
+                      ) : null}
                       <Badge tone={severityTone(s.severity)} size="xs">
                         {s.severity}
                       </Badge>
                       <span>{s.summary}</span>
+                      {s.latencyMs != null ? (
+                        <span className="text-[10px] text-slate-400">{s.latencyMs}ms</span>
+                      ) : null}
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500">
                       <Link
@@ -90,7 +129,8 @@ export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
                       ) : null}
                     </p>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : null}
           </li>

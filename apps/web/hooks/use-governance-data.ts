@@ -6,6 +6,7 @@ import {
   fetchEvidence,
   fetchEvidenceLibrary,
   fetchGovernedActions,
+  fetchGovernanceSystems,
   fetchIngestLog,
   fetchLiveSignals,
   fetchNotifications,
@@ -17,19 +18,20 @@ import {
   type EvidenceLibraryResponseDTO,
   type EvidenceRecordDTO,
   type GovernedActionDTO,
+  type GovernanceSystemsResponseDTO,
   type IngestLogResponseDTO,
   type LiveSignalsResponseDTO,
   type NotificationDTO,
   type OwnerQueueResponseDTO,
   type SimulatorStatusDTO
 } from "@/lib/governance-api";
-import { governanceApiEnabled } from "@/lib/governance-merge";
 
 const POLL_MS = 5000;
 
 export type GovernanceDataState = {
   enabled: boolean;
   loading: boolean;
+  governanceSystems: GovernanceSystemsResponseDTO | null;
   liveSignals: LiveSignalsResponseDTO | null;
   ingestLog: IngestLogResponseDTO | null;
   ownerQueues: Record<string, OwnerQueueResponseDTO | null>;
@@ -40,11 +42,15 @@ export type GovernanceDataState = {
   notifications: NotificationDTO[];
   simulatorStatus: SimulatorStatusDTO | null;
   refresh: (force?: boolean) => void;
+  refreshObserve: (force?: boolean) => void;
 };
 
 export function useGovernanceData(): GovernanceDataState {
-  const enabled = governanceApiEnabled();
-  const [loading, setLoading] = useState(enabled);
+  const enabled = true;
+  const [loading, setLoading] = useState(true);
+  const [governanceSystems, setGovernanceSystems] = useState<GovernanceSystemsResponseDTO | null>(
+    null
+  );
   const [liveSignals, setLiveSignals] = useState<LiveSignalsResponseDTO | null>(null);
   const [ingestLog, setIngestLog] = useState<IngestLogResponseDTO | null>(null);
   const [ownerQueues, setOwnerQueues] = useState<
@@ -61,6 +67,25 @@ export function useGovernanceData(): GovernanceDataState {
   const [notifications, setNotifications] = useState<NotificationDTO[]>([]);
   const [simulatorStatus, setSimulatorStatus] = useState<SimulatorStatusDTO | null>(null);
   const inFlight = useRef(false);
+  const observeInFlight = useRef(false);
+
+  const refreshObserve = useCallback(async (force = false) => {
+    if (!enabled) return;
+    if (observeInFlight.current && !force) return;
+    observeInFlight.current = true;
+    try {
+      const [signals, ingest, simStatus] = await Promise.all([
+        fetchLiveSignals(100),
+        fetchIngestLog(50),
+        fetchSimulatorStatus()
+      ]);
+      setLiveSignals(signals);
+      setIngestLog(ingest);
+      setSimulatorStatus(simStatus);
+    } finally {
+      observeInFlight.current = false;
+    }
+  }, [enabled]);
 
   const refresh = useCallback(async (force = false) => {
     if (!enabled) return;
@@ -93,14 +118,16 @@ export function useGovernanceData(): GovernanceDataState {
         evidenceMap[alias] = data;
       }
 
-      const [signals, ingest, dash, actionData, simStatus, library, notifData] = await Promise.all([
+      const [signals, ingest, dash, actionData, simStatus, library, notifData, systems] =
+        await Promise.all([
         fetchLiveSignals(100),
-        fetchIngestLog(100),
+        fetchIngestLog(50),
         fetchDashboardSummary(),
         fetchGovernedActions(),
         fetchSimulatorStatus(),
         fetchEvidenceLibrary(),
-        fetchNotifications(50)
+        fetchNotifications(50),
+        fetchGovernanceSystems()
       ]);
 
       setLiveSignals(signals);
@@ -112,6 +139,7 @@ export function useGovernanceData(): GovernanceDataState {
       setEvidenceLibrary(library);
       setNotifications(notifData?.items ?? []);
       setSimulatorStatus(simStatus);
+      setGovernanceSystems(systems);
     } finally {
       inFlight.current = false;
       setLoading(false);
@@ -136,6 +164,7 @@ export function useGovernanceData(): GovernanceDataState {
   return {
     enabled,
     loading,
+    governanceSystems,
     liveSignals,
     ingestLog,
     ownerQueues,
@@ -145,7 +174,8 @@ export function useGovernanceData(): GovernanceDataState {
     evidenceLibrary,
     notifications,
     simulatorStatus,
-    refresh
+    refresh,
+    refreshObserve
   };
 }
 

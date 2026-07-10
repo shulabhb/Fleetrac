@@ -14,6 +14,7 @@ import type {
   StructuredEvidenceRow,
   TeamLibraryRow
 } from "@/lib/evidence-library-types";
+import { INCIDENT_LIFECYCLE_ORDER } from "@/lib/evidence-library-types";
 import type {
   OwnerReviewTableRow,
   QueueTableRow
@@ -26,7 +27,7 @@ import type {
 import type { LiveSignalsSummary } from "@/lib/live-signals-types";
 
 export function governanceApiEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_GOVERNANCE_API !== "0";
+  return true;
 }
 
 export type GovernanceLiveSignal = LiveRuntimeSignal & {
@@ -85,7 +86,9 @@ export function mapLiveSignalRow(row: LiveSignalRowDTO): GovernanceLiveSignal {
   const severity = mapSeverity(row);
   const signalLabel = row.normalized_signal_type
     ? row.normalized_signal_type.replace(/_/g, " ")
-    : "signal";
+    : row.parent_span_id
+      ? "healthy span"
+      : "healthy trace";
   return {
     id: row.event_id,
     systemId: row.display_system_id,
@@ -102,24 +105,42 @@ export function mapLiveSignalRow(row: LiveSignalRowDTO): GovernanceLiveSignal {
     incidentLinked: Boolean(row.incident_id),
     incidentId: uiIncidentId,
     traceId: row.trace_id ?? undefined,
+    spanId: row.span_id ?? undefined,
+    parentSpanId: row.parent_span_id ?? undefined,
+    latencyMs: row.latency_ms ?? undefined,
     signalState: row.signal_state,
     governanceSource: "api"
   };
 }
 
-export function groupSignalsByTrace(
-  signals: GovernanceLiveSignal[]
+export function isGovernanceVisibleSignal(row: LiveSignalRowDTO): boolean {
+  if (row.normalized_signal_type) return true;
+  if (row.incident_id) return true;
+  if (row.severity) return true;
+  if (!row.parent_span_id) return true;
+  return false;
+}
+
+export function filterGovernedLiveSignals(signals: GovernanceLiveSignal[]): GovernanceLiveSignal[] {
+  return signals.filter((s) => {
+    if (s.incidentLinked) return true;
+    if (s.severity !== "Healthy") return true;
+    if (!s.parentSpanId) return true;
+    return false;
+  });
+}
+
+export function buildTraceGroupsForFeed(
+  allSignals: GovernanceLiveSignal[],
+  governedSignals: GovernanceLiveSignal[]
 ): { traceId: string; signals: GovernanceLiveSignal[] }[] {
-  const groups = new Map<string, GovernanceLiveSignal[]>();
-  for (const s of signals) {
-    const key = s.traceId ?? s.id;
-    const list = groups.get(key) ?? [];
-    list.push(s);
-    groups.set(key, list);
+  const traceIds = new Set<string>();
+  for (const s of governedSignals) {
+    if (s.traceId) traceIds.add(s.traceId);
   }
-  return Array.from(groups.entries()).map(([traceId, items]) => ({
+  return [...traceIds].map((traceId) => ({
     traceId,
-    signals: items
+    signals: allSignals.filter((s) => s.traceId === traceId)
   }));
 }
 
@@ -146,16 +167,6 @@ export function buildLiveSignalsSummaryFromApi(
     linkedIncidents,
     systemsAffected
   };
-}
-
-export function mergeLiveSignals(
-  api: LiveSignalsResponseDTO | null | undefined,
-  mock: LiveRuntimeSignal[]
-): GovernanceLiveSignal[] {
-  if (governanceApiEnabled()) {
-    return mapLiveSignalsFromApi(api);
-  }
-  return mock;
 }
 
 export function mapApiOwnerQueueRow(
@@ -235,6 +246,42 @@ function lifecycleKeyFromStage(stage: string | null | undefined): string {
   return "owner_review";
 }
 
+function buildLifecycleFromHistory(
+  history: Record<string, unknown>[],
+  currentStage: string | null | undefined
+): IncidentEvidenceDetail["lifecycleTimestamps"] {
+  const reached = new Map<string, string>();
+  for (const entry of history) {
+    const key = lifecycleKeyFromStage(String(entry.to ?? ""));
+    const at = typeof entry.at === "string" ? entry.at : undefined;
+    if (!reached.has(key)) reached.set(key, at ?? "");
+  }
+  const current = lifecycleKeyFromStage(currentStage);
+  const currentIdx = INCIDENT_LIFECYCLE_ORDER.indexOf(
+    current as (typeof INCIDENT_LIFECYCLE_ORDER)[number]
+  );
+  const out: IncidentEvidenceDetail["lifecycleTimestamps"] = {};
+  INCIDENT_LIFECYCLE_ORDER.forEach((key, i) => {
+    const at = reached.get(key);
+    if (at) {
+      out[key] = {
+        label: key.replace(/_/g, " "),
+        at: formatSignalTimestamp(at),
+        state: i < currentIdx ? "done" : i === currentIdx ? "current" : "done"
+      };
+      return;
+    }
+    if (i < currentIdx) {
+      out[key] = { label: key.replace(/_/g, " "), state: "done" };
+    } else if (i === currentIdx) {
+      out[key] = { label: key.replace(/_/g, " "), at: "In progress", state: "current" };
+    } else {
+      out[key] = { label: key.replace(/_/g, " "), state: "pending" };
+    }
+  });
+  return out;
+}
+
 function buildLifecycleFromStage(stage: string | null | undefined) {
   const current = lifecycleKeyFromStage(stage);
   const order = [
@@ -269,21 +316,31 @@ export function mapApiEvidenceToDetail(dto: EvidenceRecordDTO): IncidentEvidence
   const ownerTeam = dto.owner_team ?? "—";
   const title = dto.title ?? analysis.summary.slice(0, 80);
   const lifecycle = dto.lifecycle ?? dto.status;
-  const structuredEvidence: StructuredEvidenceRow[] = dto.items.map((item) => ({
-    evidenceItem: item.summary,
-    source: item.kind,
-    signal: item.reference_id,
-    governanceRelevance: item.kind,
-    status: dto.status,
-    timestamp: formatSignalTimestamp(item.created_at),
-    rawLog: {
-      id: item.id,
-      kind: item.kind,
-      reference_id: item.reference_id,
-      summary: item.summary,
-      created_at: item.created_at
-    }
-  }));
+  const structuredEvidence: StructuredEvidenceRow[] = dto.items.map((item) => {
+    const traceRef =
+      item.trace_id && item.span_id
+        ? `trace=${item.trace_id} span=${item.span_id}`
+        : item.reference_id;
+    return {
+      evidenceItem: item.summary,
+      source: item.kind,
+      signal: traceRef,
+      governanceRelevance: item.operation_type ?? item.kind,
+      status: dto.status,
+      timestamp: formatSignalTimestamp(item.created_at),
+      rawLog: {
+        id: item.id,
+        kind: item.kind,
+        reference_id: item.reference_id,
+        summary: item.summary,
+        created_at: item.created_at,
+        trace_id: item.trace_id,
+        span_id: item.span_id,
+        operation_type: item.operation_type,
+        evaluation_signals: item.evaluation_signals
+      }
+    };
+  });
 
   return {
     id: incidentId,
@@ -316,7 +373,10 @@ export function mapApiEvidenceToDetail(dto: EvidenceRecordDTO): IncidentEvidence
     },
     structuredEvidence,
     actionHandoffPreview: analysis.recommended_actions,
-    lifecycleTimestamps: buildLifecycleFromStage(lifecycle),
+    lifecycleTimestamps:
+      dto.lifecycle_history?.length > 0
+        ? buildLifecycleFromHistory(dto.lifecycle_history, lifecycle)
+        : buildLifecycleFromStage(lifecycle),
     evidenceItems: dto.items.map((item) => ({
       title: item.summary,
       source: item.kind,
@@ -435,29 +495,4 @@ export function buildLivePackagesFromApi(
 /** @deprecated use isBackendEvidenceIncident */
 export function isSliceAEvidenceIncident(incidentId: string): boolean {
   return incidentId === "inc-mrm-001" || incidentId.startsWith("inc_sys-agt-");
-}
-
-/** @deprecated mock overlay — use buildOwnerQueueRowsFromApi */
-export function mergeOwnerQueueRows(
-  mockRows: OwnerReviewTableRow[],
-  api: OwnerQueueResponseDTO | null | undefined,
-  evidenceByAlias: Record<string, EvidenceRecordDTO | null>,
-  ownerTeam = ""
-): OwnerReviewTableRow[] {
-  if (governanceApiEnabled()) {
-    return buildOwnerQueueRowsFromApi(api, evidenceByAlias, ownerTeam);
-  }
-  return mockRows;
-}
-
-/** @deprecated mock overlay — use buildGlobalOwnerQueueRowsFromApi */
-export function mergeGlobalOwnerQueueRows(
-  mockRows: Array<OwnerReviewTableRow & { ownerTeam: string }>,
-  queues: Record<string, OwnerQueueResponseDTO | null>,
-  evidenceByAlias: Record<string, EvidenceRecordDTO | null>
-): Array<OwnerReviewTableRow & { ownerTeam: string }> {
-  if (governanceApiEnabled()) {
-    return buildGlobalOwnerQueueRowsFromApi(queues, evidenceByAlias);
-  }
-  return mockRows;
 }

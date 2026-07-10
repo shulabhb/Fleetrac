@@ -25,16 +25,20 @@ async def _continuous_loop(
     stop: threading.Event,
 ) -> None:
     global _seq
+    import httpx
+
     delay = 1.0 / max(rate_eps, 0.1)
     run_id = f"sim_run_{seed}"
-    while not stop.is_set():
-        sid = system_ids[_seq % len(system_ids)]
-        bundle = healthy_trace_bundle(sid, seed=seed, seq=_seq, simulator_run_id=run_id)
-        _seq += 1
-        await post_ingest_sequence([bundle], base_url=settings.simulator_api_base_url)
-        end = time.monotonic() + delay
-        while time.monotonic() < end and not stop.is_set():
-            await asyncio.sleep(0.05)
+    base_url = settings.simulator_api_base_url
+    async with httpx.AsyncClient(timeout=settings.simulator_http_timeout_seconds) as client:
+        while not stop.is_set():
+            sid = system_ids[_seq % len(system_ids)]
+            bundle = healthy_trace_bundle(sid, seed=seed, seq=_seq, simulator_run_id=run_id)
+            _seq += 1
+            await post_ingest_sequence([bundle], client=client, base_url=base_url)
+            end = time.monotonic() + delay
+            while time.monotonic() < end and not stop.is_set():
+                await asyncio.sleep(0.05)
 
 
 def _thread_main(system_ids: list[str], rate_eps: float, seed: int, stop: threading.Event) -> None:

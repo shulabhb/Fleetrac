@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from app.db.models import NormalizedEvent, RawEvent
 from app.slice_a.constants import SYSTEM_ID
 
@@ -53,3 +55,21 @@ def test_ingest_log_returns_raw_payloads(client):
     assert row["raw_payload"]["idempotency_key"] == "ingest-log-test"
     assert row["normalized"] is not None
     assert row["normalized"]["event_id"]
+
+
+def test_ingest_log_since_cursor_returns_only_newer(client):
+    client.post("/api/v1/simulator/reset")
+    client.post("/api/v1/ingest/events", json=_sample_payload("ingest-log-first"))
+    first = client.get("/api/v1/governance/ingest-log", params={"limit": 5}).json()
+    assert first["total"] >= 1
+    cursor = first["items"][0]["ingested_at"]
+
+    time.sleep(1.1)
+    client.post("/api/v1/ingest/events", json=_sample_payload("ingest-log-second"))
+    delta = client.get(
+        "/api/v1/governance/ingest-log",
+        params={"limit": 10, "since": cursor},
+    ).json()
+    keys = {row["idempotency_key"] for row in delta["items"]}
+    assert "ingest-log-second" in keys
+    assert "ingest-log-first" not in keys

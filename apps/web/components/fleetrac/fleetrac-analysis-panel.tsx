@@ -1,5 +1,4 @@
 import { Badge } from "@/components/ui/badge";
-import { fleetracAnalysisForIncident } from "@/lib/governance-demo-model-analysis";
 
 type Props = {
   incidentId?: string;
@@ -10,17 +9,25 @@ type Props = {
 };
 
 export function FleetracAnalysisPanel({
-  incidentId,
   summary,
   confidence = "High",
   recommendedAction,
   compact = false
 }: Props) {
-  const text =
-    summary ??
-    (incidentId
-      ? fleetracAnalysisForIncident(incidentId)
-      : "Fleetrac analysis is bounded, policy-checked, and audit-linked.");
+  if (!summary) {
+    return (
+      <div
+        className={
+          compact
+            ? "rounded-md border border-dashed border-slate-200 bg-slate-50/60 px-3 py-2.5 text-[12px] text-slate-600"
+            : "rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-[13px] text-slate-600"
+        }
+      >
+        No Fleetrac Analysis yet — run a simulator scenario to package evidence from ingested
+        telemetry.
+      </div>
+    );
+  }
 
   return (
     <div
@@ -38,7 +45,7 @@ export function FleetracAnalysisPanel({
           Confidence {confidence}
         </Badge>
       </div>
-      <p className="mt-2 text-[13px] leading-relaxed text-slate-800">{text}</p>
+      <p className="mt-2 text-[13px] leading-relaxed text-slate-800">{summary}</p>
       {recommendedAction ? (
         <p className="mt-2 text-[12px] text-slate-600">
           <span className="font-medium text-slate-700">Recommended: </span>

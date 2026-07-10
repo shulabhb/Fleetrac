@@ -9,9 +9,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models import DetectionRule, NormalizedEvent, RawEvent, System
-from app.detection.correlator import find_active_incident
+from app.correlation.engine import is_correlation_eligible, process_correlation_event, reassess_cluster_for_incident
 from app.detection.engine import evaluate_event
-from app.governance.incidents import create_incident_from_detection, update_incident_recurrence
 from app.pipeline.adapters.otel_agent import adapt_v2_span
 from app.pipeline.adapters.router import AdapterError, adapt_raw_envelope
 from app.pipeline.normalizer import correlation_key_for, normalize_adapted
@@ -104,41 +103,38 @@ def _persist_normalized(db: Session, event: FleetracEvent) -> NormalizedEvent:
     return row
 
 
+def _bundle_business_outcome(payload: dict[str, Any]) -> str | None:
+    outcome = payload.get("business_outcome")
+    if isinstance(outcome, dict):
+        status = outcome.get("status")
+        return str(status) if status else None
+    for span in payload.get("spans") or []:
+        if not isinstance(span, dict):
+            continue
+        if span.get("operation") == "business.outcome" or span.get("name") == "business.outcome":
+            attrs = span.get("attributes") or {}
+            status = attrs.get("fleetrac.business_outcome.status")
+            if status:
+                return str(status)
+    return None
+
+
 def _apply_detection(
     db: Session,
     event: FleetracEvent,
     rules: list[DetectionRule],
+    *,
+    business_outcome: str | None = None,
 ) -> str | None:
     match = evaluate_event(event, rules)
-    incident_id: str | None = None
-    if not match:
+    if not match and not is_correlation_eligible(event):
         return None
-
-    event.signal_state = "governance"
-    event.normalized_signal_type = match.signal_type
-    event.severity = match.severity  # type: ignore[assignment]
-    event.confidence = min(0.99, 0.5 + (match.metric_value or 0))
-    event.correlation_key = correlation_key_for(
-        event.system_id,
-        match.signal_type,
-        event.environment,
-        match.rule_id,
+    return process_correlation_event(
+        db,
+        event,
+        match=match,
+        business_outcome=business_outcome,
     )
-    active = find_active_incident(db, correlation_key=event.correlation_key, as_of=event.timestamp)
-    if active:
-        update_incident_recurrence(
-            db,
-            incident=active,
-            event=event,
-            note="Correlated recurrence within active window",
-        )
-        incident_id = active.id
-        event.incident_id = incident_id
-    else:
-        incident = create_incident_from_detection(db, event=event, match=match)
-        incident_id = incident.id
-        event.incident_id = incident_id
-    return incident_id
 
 
 async def _process_v2_bundle(db: Session, payload: dict[str, Any]) -> IngestEventResponse:
@@ -187,6 +183,7 @@ async def _process_v2_bundle(db: Session, payload: dict[str, Any]) -> IngestEven
     scenario_meta = payload.get("scenario") if isinstance(payload.get("scenario"), dict) else {}
     scenario_run_id = scenario_meta.get("run_id") if isinstance(scenario_meta, dict) else None
     simulator_run_id = payload.get("simulator_run_id")
+    business_outcome = _bundle_business_outcome(payload)
 
     rules = db.query(DetectionRule).filter(DetectionRule.enabled.is_(True)).all()
     spans = payload.get("spans") or []
@@ -212,26 +209,25 @@ async def _process_v2_bundle(db: Session, payload: dict[str, Any]) -> IngestEven
             simulator_run_id=str(simulator_run_id) if simulator_run_id else None,
         )
 
-        span_incident = _apply_detection(db, event, rules)
+        span_incident = _apply_detection(db, event, rules, business_outcome=business_outcome)
         if span_incident:
             incident_id = span_incident
 
-        if event.evaluation_signals.get("recurrence") and event.correlation_key and not span_incident:
-            active = find_active_incident(db, correlation_key=event.correlation_key, as_of=event.timestamp)
-            if active:
-                update_incident_recurrence(
-                    db,
-                    incident=active,
-                    event=event,
-                    note="Recurrence/correlation update",
-                )
-                incident_id = active.id
-                event.incident_id = incident_id
+        if not span_incident and event.evaluation_signals.get("recurrence"):
+            span_incident = process_correlation_event(
+                db, event, business_outcome=business_outcome
+            )
+            if span_incident:
+                incident_id = span_incident
 
         _persist_normalized(db, event)
         last_event_id = event.event_id
         last_signal = event.normalized_signal_type
         accepted += 1
+
+    db.flush()
+    if incident_id:
+        reassess_cluster_for_incident(db, incident_id, raw_envelope_id=raw_id)
 
     _prune_retention(db)
     db.commit()
@@ -321,16 +317,9 @@ async def process_ingest_event(db: Session, payload: dict[str, Any]) -> IngestEv
     rules = db.query(DetectionRule).filter(DetectionRule.enabled.is_(True)).all()
     incident_id = _apply_detection(db, event, rules)
 
-    if not incident_id and event.evaluation_signals.get("recurrence") and event.correlation_key:
-        active = find_active_incident(db, correlation_key=event.correlation_key, as_of=event.timestamp)
-        if active:
-            update_incident_recurrence(
-                db,
-                incident=active,
-                event=event,
-                note="Recurrence/correlation update",
-            )
-            incident_id = active.id
+    if not incident_id and event.evaluation_signals.get("recurrence"):
+        incident_id = process_correlation_event(db, event)
+        if incident_id:
             event.incident_id = incident_id
 
     _persist_normalized(db, event)

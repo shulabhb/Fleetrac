@@ -25,7 +25,7 @@ def test_healthy_event_has_null_severity_and_confidence():
     adapted = adapt_otel_agent(parse_raw_envelope(raw))
     event = normalize_adapted(adapted, raw_event_id="raw-healthy")
     assert event.signal_state == "healthy"
-    assert event.normalized_signal_type == "healthy_runtime_activity"
+    assert event.normalized_signal_type is None
     assert event.severity is None
     assert event.confidence is None
 

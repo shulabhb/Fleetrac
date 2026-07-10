@@ -36,12 +36,15 @@ def run_agent(
     system_id: str,
     scenario_id: str | None,
     ctx: RunContext,
+    *,
+    impact_mode: str | None = None,
 ) -> SimulatedTrace:
     system = SYSTEM_BY_ID[system_id]
     gen = _generator_for(system_id)
     trace = gen.build_healthy(system, ctx)
     if scenario_id:
-        apply_scenario_mutation(trace, scenario_id, ctx)
+        mode = impact_mode or ctx.impact_mode
+        apply_scenario_mutation(trace, scenario_id, ctx, impact_mode=mode)
     return trace
 
 
@@ -51,6 +54,7 @@ def make_run_context(
     scenario_id: str | None = None,
     system_id: str | None = None,
     simulator_run_id: str | None = None,
+    impact_mode: str | None = None,
 ) -> RunContext:
     run_id = f"run_{seed}_{system_id or 'fleet'}_{scenario_id or 'healthy'}"
     return RunContext(
@@ -59,4 +63,5 @@ def make_run_context(
         start_time=datetime.now(timezone.utc),
         scenario_run_id=f"{scenario_id}:{run_id}" if scenario_id else None,
         simulator_run_id=simulator_run_id,
+        impact_mode=impact_mode,
     )

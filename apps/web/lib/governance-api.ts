@@ -23,6 +23,14 @@ export type FleetracAnalysisDTO = {
   evidence_highlights: string[];
   policy_notes: string;
   confidence: number;
+  diagnosis?: string;
+  current_severity?: string;
+  assessment_confidence?: string;
+  why_this_severity?: string[];
+  why_not_higher?: string[];
+  occurrence_count?: number;
+  trace_count?: number;
+  recommended_bounded_action?: string;
 };
 
 export type LiveSignalRowDTO = {
@@ -41,6 +49,10 @@ export type LiveSignalRowDTO = {
   confidence: number | null;
   incident_id: string | null;
   trace_id: string | null;
+  span_id?: string | null;
+  parent_span_id?: string | null;
+  latency_ms?: number | null;
+  evaluation_signals?: Record<string, unknown>;
   owner_team?: string | null;
   source_type?: string | null;
   source_provider?: string | null;
@@ -62,6 +74,9 @@ export type IngestLogNormalizedDTO = {
   severity: string;
   normalized_signal_type?: string | null;
   incident_id?: string | null;
+  trace_id?: string | null;
+  span_id?: string | null;
+  latency_ms?: number | null;
   evaluation_signals?: Record<string, unknown>;
 };
 
@@ -76,6 +91,7 @@ export type IngestLogRowDTO = {
   source_type: string;
   raw_payload: Record<string, unknown>;
   normalized?: IngestLogNormalizedDTO | null;
+  normalized_spans?: IngestLogNormalizedDTO[];
 };
 
 export type IngestLogResponseDTO = {
@@ -145,6 +161,10 @@ export type EvidenceItemDTO = {
   reference_id: string;
   summary: string;
   created_at: string;
+  trace_id?: string | null;
+  span_id?: string | null;
+  operation_type?: string | null;
+  evaluation_signals?: Record<string, unknown>;
 };
 
 export type EvidenceRecordDTO = {
@@ -195,6 +215,57 @@ export type DashboardSummaryDTO = {
   verification_follow_up: number;
   verification_rollback: number;
   owner_open_counts: Record<string, number>;
+};
+
+export type GovernanceSystemDetailDTO = GovernanceSystemDTO & {
+  team_lead: string;
+  default_reviewer: string;
+  description: string;
+  business_function: string;
+  data_sensitivity: string;
+  cloud_provider: string;
+  cloud_region: string;
+  approved_model_name: string;
+  approved_tools: string[];
+  blocked_tools: string[];
+  baseline_metrics: Record<string, number>;
+  applicable_control_ids: string[];
+};
+
+export type SystemIncidentDTO = {
+  id: string;
+  alias_id: string | null;
+  system_id: string;
+  display_system_id: string;
+  system_name: string;
+  system_name_alias: string | null;
+  lifecycle: string;
+  severity: string;
+  priority: string;
+  title: string;
+  summary: string;
+  signal_type: string;
+  opened_at: string;
+  updated_at: string;
+};
+
+export type SystemTelemetryPointDTO = {
+  timestamp: string;
+  latency_ms: number | null;
+  grounding_score: number | null;
+  unsupported_claim_rate: number | null;
+  signal_type: string | null;
+  severity: string | null;
+};
+
+export type SystemControlDTO = {
+  rule_id: string;
+  signal_type: string;
+  threshold_field: string;
+  threshold_value: number;
+  severity: string;
+  last_fired_at: string | null;
+  open_incident_id: string | null;
 };
 
 export type GovernedActionDTO = {
@@ -281,10 +352,12 @@ export async function fetchLiveSignals(limit = 50): Promise<LiveSignalsResponseD
 
 export async function fetchIngestLog(
   limit = 50,
-  systemId?: string
+  systemId?: string,
+  since?: string
 ): Promise<IngestLogResponseDTO | null> {
   const qs = new URLSearchParams({ limit: String(limit) });
   if (systemId) qs.set("system_id", systemId);
+  if (since) qs.set("since", since);
   return governanceFetch<IngestLogResponseDTO>(`/governance/ingest-log?${qs}`);
 }
 
@@ -337,6 +410,48 @@ export async function fetchSimulatorStatus(): Promise<SimulatorStatusDTO | null>
 
 export async function postSimulatorReset(): Promise<void> {
   await governancePost("/simulator/reset");
+}
+
+export async function fetchGovernanceSystemDetail(
+  systemId: string
+): Promise<GovernanceSystemDetailDTO | null> {
+  return governanceFetch<GovernanceSystemDetailDTO>(
+    `/governance/systems/${encodeURIComponent(systemId)}`
+  );
+}
+
+export async function fetchSystemIncidents(
+  systemId: string
+): Promise<{ items: SystemIncidentDTO[]; total: number } | null> {
+  return governanceFetch<{ items: SystemIncidentDTO[]; total: number }>(
+    `/governance/systems/${encodeURIComponent(systemId)}/incidents`
+  );
+}
+
+export async function fetchSystemSignals(
+  systemId: string,
+  limit = 50
+): Promise<LiveSignalsResponseDTO | null> {
+  return governanceFetch<LiveSignalsResponseDTO>(
+    `/governance/systems/${encodeURIComponent(systemId)}/signals?limit=${limit}`
+  );
+}
+
+export async function fetchSystemTelemetry(
+  systemId: string,
+  limit = 120
+): Promise<{ items: SystemTelemetryPointDTO[]; total: number } | null> {
+  return governanceFetch<{ items: SystemTelemetryPointDTO[]; total: number }>(
+    `/governance/systems/${encodeURIComponent(systemId)}/telemetry?limit=${limit}`
+  );
+}
+
+export async function fetchSystemControls(
+  systemId: string
+): Promise<{ items: SystemControlDTO[]; total: number } | null> {
+  return governanceFetch<{ items: SystemControlDTO[]; total: number }>(
+    `/governance/systems/${encodeURIComponent(systemId)}/controls`
+  );
 }
 
 export async function fetchGovernanceSystems(): Promise<GovernanceSystemsResponseDTO | null> {

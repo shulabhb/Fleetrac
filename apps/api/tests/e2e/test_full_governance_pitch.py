@@ -1,29 +1,16 @@
 from __future__ import annotations
 
-import pytest
-from httpx import ASGITransport
-
-from app.api.routes.simulator import run_scenario_with_transport
 from app.db.models import GovernedActionRow, Incident, VerificationOutcomeRow
 from app.db.session import get_session_factory
-from app.slice_a.constants import INCIDENT_ALIAS_ID, INCIDENT_CANONICAL_ID, OWNER_TEAM
+from app.slice_a.constants import INCIDENT_ALIAS_ID, INCIDENT_CANONICAL_ID, OWNER_TEAM, SYSTEM_ID
+from tests.e2e.helpers import reset_simulator, run_scenario_via_api
 
 
-@pytest.mark.asyncio
-async def test_full_governance_pitch(client, app):
+def test_full_governance_pitch(client):
     """Reset → scenario → action handoff → approve → verify (Phase 8/9 E2E)."""
-    assert client.post("/api/v1/simulator/reset").status_code == 200
-
-    transport = ASGITransport(app=app)
-    factory = get_session_factory()
-    db = factory()
-    try:
-        result = await run_scenario_with_transport(transport, db=db)
-    finally:
-        db.close()
-
-    assert result.failed is None
-    assert result.posted >= 1
+    reset_simulator(client)
+    result = run_scenario_via_api(client, "unsupported_claim_spike", SYSTEM_ID)
+    assert result.get("posted", 0) >= 1
 
     create = client.post(
         f"/api/v1/governance/incidents/{INCIDENT_ALIAS_ID}/actions",

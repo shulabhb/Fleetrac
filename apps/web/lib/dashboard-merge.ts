@@ -1,5 +1,6 @@
 import type {
   DashboardSummaryDTO,
+  GovernanceSystemsResponseDTO,
   NotificationDTO,
   OwnerQueueResponseDTO,
   OwnerQueueRowDTO
@@ -11,15 +12,7 @@ import type {
   OwnerInsight,
   OwnerTeamDetails,
   SlaRiskLevel
-} from "@/lib/governance-dashboard-mock";
-import {
-  GOVERNANCE_LOOP,
-  REMEDIATION_EVIDENCE_SUMMARY
-} from "@/lib/governance-dashboard-mock";
-import {
-  GOVERNED_FLEET_SYSTEMS,
-  type GovernedFleetSystem
-} from "@/lib/governed-fleet-registry";
+} from "@/lib/dashboard-types";
 
 function capitalizeWord(value: string): string {
   if (!value) return value;
@@ -115,42 +108,55 @@ export function buildOwnerInsightsFromApi(
   });
 }
 
-export function buildGovernedSystemsFromQueues(
+export function buildGovernedSystemsFromApi(
+  systemsApi: GovernanceSystemsResponseDTO | null,
   queues: Record<string, OwnerQueueResponseDTO | null>
 ): GovernedSystem[] {
   const fromQueues = _governedSystemsWithIncidents(queues);
   const byDisplayId = new Map(fromQueues.map((row) => [row.id, row]));
 
-  return GOVERNED_FLEET_SYSTEMS.map((fleet) => {
-    const existing = byDisplayId.get(fleet.displayId);
+  return (systemsApi?.items ?? []).map((sys) => {
+    const existing = byDisplayId.get(sys.display_system_id);
     if (existing) return existing;
-    return _idleFleetSystem(fleet);
+    return _idleSystemFromApi(sys);
   });
 }
 
-function _platformLabel(platform: GovernedFleetSystem["platform"]): string {
-  if (platform === "aws") return "AWS";
-  if (platform === "azure") return "Azure";
-  return "GCP";
+/** @deprecated use buildGovernedSystemsFromApi */
+export function buildGovernedSystemsFromQueues(
+  queues: Record<string, OwnerQueueResponseDTO | null>
+): GovernedSystem[] {
+  return buildGovernedSystemsFromApi(null, queues);
 }
 
-function _idleFleetSystem(fleet: GovernedFleetSystem): GovernedSystem {
+function _platformLabel(platform: string): string {
+  const p = platform.toLowerCase();
+  if (p === "aws") return "AWS";
+  if (p === "azure") return "Azure";
+  if (p === "gcp") return "GCP";
+  return platform || "Multi-cloud";
+}
+
+function _idleSystemFromApi(sys: GovernanceSystemsResponseDTO["items"][number]): GovernedSystem {
   return {
-    id: fleet.displayId,
-    name: fleet.name,
+    id: sys.display_system_id,
+    systemId: sys.system_id,
+    name: sys.system_name_alias ?? sys.system_name,
     type: "Agentic workflow",
-    platform: _platformLabel(fleet.platform),
-    ownerTeam: fleet.ownerTeam,
-    businessFunction: fleet.modelCode,
+    platform: _platformLabel(sys.platform),
+    ownerTeam: sys.owner_team,
+    businessFunction: sys.archetype,
     primaryRisk: "Technology Risk",
-    status: "Low",
-    openIncidents: 0,
+    status: sys.open_incidents > 0 ? "Medium" : "Low",
+    openIncidents: sys.open_incidents,
     criticalIncidents: 0,
-    evidenceAge: "—",
+    evidenceAge: sys.last_signal_at ? formatAgeLabel(sys.last_signal_at) : "—",
     dataSensitivity: "Internal",
-    nextAction: "Monitoring",
-    governanceStage: "signal",
-    stageSummary: "No open incidents · monitoring"
+    nextAction: sys.open_incidents > 0 ? "Owner review" : "Monitoring",
+    governanceStage: sys.open_incidents > 0 ? "review" : "signal",
+    stageSummary: sys.open_incidents > 0 ? `${sys.open_incidents} open` : "No open incidents",
+    archetype: sys.archetype,
+    lastSignalAt: sys.last_signal_at
   };
 }
 
@@ -181,6 +187,7 @@ function _governedSystemsWithIncidents(
 
     return {
       id: systemId,
+      systemId: first.system_id,
       name: first.system_name_alias ?? first.system_name,
       type: "Agentic workflow" as const,
       platform: "Multi-cloud",
@@ -202,34 +209,32 @@ function _governedSystemsWithIncidents(
 export function buildRemediationEvidenceSummaryFromApi(
   dashboard: DashboardSummaryDTO | null
 ) {
-  if (!dashboard) return REMEDIATION_EVIDENCE_SUMMARY;
   return {
-    underMonitoring: dashboard.verification_count,
-    improvementObserved: dashboard.verification_improved,
-    followUpRequired: dashboard.verification_follow_up,
-    rollbackCandidates: dashboard.verification_rollback,
+    underMonitoring: dashboard?.verification_count ?? 0,
+    improvementObserved: dashboard?.verification_improved ?? 0,
+    followUpRequired: dashboard?.verification_follow_up ?? 0,
+    rollbackCandidates: dashboard?.verification_rollback ?? 0,
     closedNoMaterial: Math.max(
       0,
-      dashboard.verification_count - dashboard.verification_improved
+      (dashboard?.verification_count ?? 0) - (dashboard?.verification_improved ?? 0)
     ),
     footer: "Live verification outcomes from governed actions and simulator pipeline."
   };
 }
 
 export function buildGovernanceLoopFromApi(dashboard: DashboardSummaryDTO | null) {
-  if (!dashboard) return GOVERNANCE_LOOP;
   return {
     investigations: {
-      open: dashboard.active_incidents,
-      awaitingApproval: dashboard.actions_awaiting_approval,
-      pendingRecommendations: dashboard.decisions_needed,
-      recurring: GOVERNANCE_LOOP.investigations.recurring
+      open: dashboard?.active_incidents ?? 0,
+      awaitingApproval: dashboard?.actions_awaiting_approval ?? 0,
+      pendingRecommendations: dashboard?.decisions_needed ?? 0,
+      recurring: 0
     },
     verification: {
-      recurrenceReduced: dashboard.verification_improved,
-      improvement: dashboard.verification_improved,
-      followUp: dashboard.verification_follow_up,
-      rollback: dashboard.verification_rollback
+      recurrenceReduced: dashboard?.verification_improved ?? 0,
+      improvement: dashboard?.verification_improved ?? 0,
+      followUp: dashboard?.verification_follow_up ?? 0,
+      rollback: dashboard?.verification_rollback ?? 0
     }
   };
 }

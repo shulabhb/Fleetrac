@@ -13,7 +13,9 @@ export type {
   EvidenceLibraryResponseDTO,
   DashboardSummaryDTO,
   NotificationDTO,
-  GovernedActionDTO
+  GovernedActionDTO,
+  GovernanceSystemDTO,
+  GovernanceSystemsResponseDTO
 } from "@/lib/governance-api";
 
 export type {
@@ -38,14 +40,11 @@ export type {
   GovernedSystem,
   OwnerInsight,
   GovernanceLoopStage
-} from "@/lib/governance-dashboard-mock";
+} from "@/lib/dashboard-types";
 
 export type { NotificationEvent } from "@/lib/governance-notification-types";
 
-export {
-  governanceApiEnabled,
-  findOwnerTeamInQueues
-} from "@/lib/governance-merge";
+export { findOwnerTeamInQueues } from "@/lib/governance-merge";
 
 export {
   findOwnerTeamForQueueIncident,
