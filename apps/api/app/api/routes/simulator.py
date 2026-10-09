@@ -12,8 +12,15 @@ from app.core.config import settings
 from app.db.models import Incident, RawEvent, SimulatorState
 from app.db.seed import reset_to_seed
 from app.db.session import get_db
+from app.simulator.config.scenario_stories import SCENARIO_STORIES
+from app.simulator.config.traffic_profiles import (
+    DEFAULT_CONTINUOUS_SYSTEMS,
+    DEFAULT_RATE_EPS,
+    RATE_PROFILES,
+)
 from app.simulator.http_ingest_client import post_ingest_sequence
-from app.simulator.runner import is_running, start_continuous, stop_continuous
+from app.simulator.runner import is_running, runner_status, start_continuous, stop_continuous
+from app.simulator import scenario_windows as windows
 from app.simulator.scenarios.catalog import IMPLEMENTED_SCENARIOS, PITCH_SEQUENCES, PLANNED_SCENARIOS
 from app.simulator.scenarios.healthy_baseline import healthy_baseline_batch
 from app.simulator.generators.healthy_traffic import healthy_trace_bundle
@@ -45,9 +52,37 @@ class ScenarioRequest(BaseModel):
 
 class StartRequest(BaseModel):
     mode: str = "continuous"
-    rate_eps: float = Field(default=5.0, ge=0.1, le=20.0)
+    rate_eps: float | None = Field(
+        default=None,
+        ge=0.05,
+        le=20.0,
+        description="Events/sec. Default 0.3 (~1/3s). Prefer rate_profile for named paces.",
+    )
+    rate_profile: str | None = Field(
+        default=None,
+        description="baseline | active_demo | quiet | stress — used when rate_eps omitted",
+    )
+    profile: str = Field(default="demo", description="demo (5 agents) | full_fleet")
     systems: list[str] | None = None
     seed: int = Field(default=42, ge=0)
+    max_events: int | None = Field(default=None, ge=1, le=5000)
+
+
+class ScenarioWindowRequest(BaseModel):
+    story_id: str = Field(
+        description=(
+            "treasury_grounding_or_model_risk_issue | phishing_security_anomaly | "
+            "platform_or_tool_degradation | or existing pitch ids"
+        )
+    )
+    phases: list[str] | None = Field(
+        default=None,
+        description="Default: degradation → incident_window → post_action_verification → recovery",
+    )
+    events_per_phase: int = Field(default=3, ge=1, le=20)
+    # When true, also start continuous if stopped
+    ensure_running: bool = True
+    rate_profile: str = "active_demo"
 
 
 class RunBatchRequest(BaseModel):
@@ -73,6 +108,10 @@ class SimulatorStatus(BaseModel):
     running: bool
     mode: str
     rate_eps: float | None = None
+    rate_profile: str | None = None
+    systems: list[str] | None = None
+    events_emitted: int | None = None
+    scenario_window: dict | None = None
     last_scenario: str | None
     event_count: int
     incident_id: str | None
@@ -134,23 +173,57 @@ async def _run_envelopes(
     )
 
 
+def _demo_reset_payload() -> dict:
+    return {
+        "status": "reset",
+        "scope": "local-dev",
+        "cleared": [
+            "telemetry",
+            "incidents",
+            "evidence",
+            "governed_actions",
+            "verification_outcomes",
+            "correlation_clusters",
+        ],
+        "preserved": [
+            "system_registry",
+            "detection_rules",
+            "scenario_stories",
+            "flagship_aliases",
+        ],
+        "note": "Local demo reset. Registry and scenario definitions are unchanged. Flagship risks return after a pitch or scenario window.",
+    }
+
+
 @router.post("/reset")
-def simulator_reset(db: Session = Depends(get_db)) -> dict[str, str]:
+def simulator_reset(db: Session = Depends(get_db)) -> dict:
     stop_continuous()
+    windows.clear_window()
     reset_to_seed(db)
-    return {"status": "reset"}
+    return _demo_reset_payload()
+
+
+@router.post("/reset-demo")
+def simulator_reset_demo(db: Session = Depends(get_db)) -> dict:
+    """Dev-only alias for a known-empty demo. Same behavior as /reset."""
+    return simulator_reset(db)
 
 
 @router.get("/status", response_model=SimulatorStatus)
 def simulator_status(db: Session = Depends(get_db)) -> SimulatorStatus:
     from app.simulator.trace_builder import TRACE_BUILDER_REVISION
 
+    live = runner_status()
     state = db.get(SimulatorState, 1)
     if state is None:
         return SimulatorStatus(
-            running=False,
+            running=live["running"],
             mode="idle",
-            rate_eps=None,
+            rate_eps=live.get("rate_eps"),
+            rate_profile=live.get("rate_profile"),
+            systems=live.get("systems"),
+            events_emitted=live.get("events_emitted"),
+            scenario_window=live.get("scenario_window"),
             last_scenario=None,
             event_count=0,
             incident_id=None,
@@ -159,7 +232,11 @@ def simulator_status(db: Session = Depends(get_db)) -> SimulatorStatus:
     return SimulatorStatus(
         running=is_running() or state.running,
         mode=state.mode or "idle",
-        rate_eps=state.rate_eps,
+        rate_eps=live.get("rate_eps") if is_running() else state.rate_eps,
+        rate_profile=live.get("rate_profile"),
+        systems=live.get("systems") or (state.active_systems or None),
+        events_emitted=live.get("events_emitted"),
+        scenario_window=live.get("scenario_window"),
         last_scenario=state.last_scenario,
         event_count=state.event_count,
         incident_id=state.incident_id,
@@ -175,13 +252,28 @@ def simulator_start(body: StartRequest, db: Session = Depends(get_db)) -> dict:
         db.add(state)
     state.running = True
     state.mode = body.mode
-    state.rate_eps = body.rate_eps
-    state.active_systems = body.systems or []
+    rate_profile = body.rate_profile or ("baseline" if body.rate_eps is None else None)
+    resolved_eps = body.rate_eps
+    if resolved_eps is None and rate_profile and rate_profile in RATE_PROFILES:
+        resolved_eps = RATE_PROFILES[rate_profile].rate_eps
+    if resolved_eps is None:
+        resolved_eps = DEFAULT_RATE_EPS
+    state.rate_eps = resolved_eps
+    state.active_systems = body.systems or list(DEFAULT_CONTINUOUS_SYSTEMS)
     state.seed = body.seed
     db.commit()
+    started: dict = {"status": "started", "mode": body.mode, "seed": body.seed}
     if body.mode == "continuous":
-        start_continuous(system_ids=body.systems, rate_eps=body.rate_eps, seed=body.seed)
-    return {"status": "started", "mode": body.mode, "seed": body.seed}
+        started = start_continuous(
+            system_ids=body.systems,
+            rate_eps=body.rate_eps,
+            rate_profile=rate_profile,
+            profile=body.profile,
+            seed=body.seed,
+            max_events=body.max_events,
+        )
+        started["mode"] = body.mode
+    return started
 
 
 @router.post("/pause")
@@ -250,13 +342,80 @@ def simulator_resume(db: Session = Depends(get_db)) -> dict:
     if state and state.mode == "paused":
         start_continuous(
             system_ids=state.active_systems or None,
-            rate_eps=state.rate_eps or 5.0,
+            rate_eps=state.rate_eps or DEFAULT_RATE_EPS,
+            profile="demo",
             seed=getattr(state, "seed", 42) or 42,
         )
         state.running = True
         state.mode = "continuous"
         db.commit()
     return {"status": "resumed"}
+
+
+@router.get("/stories")
+def list_scenario_stories() -> dict:
+    return {
+        "stories": [
+            {
+                "id": s.id,
+                "system_id": s.system_id,
+                "mutation_id": s.mutation_id,
+                "pitch_alias": s.pitch_alias,
+                "expected_verification": s.expected_verification,
+                "description": s.description,
+            }
+            for s in SCENARIO_STORIES.values()
+        ],
+        "rate_profiles": {
+            k: {"rate_eps": v.rate_eps, "description": v.description, "max_events": v.max_events}
+            for k, v in RATE_PROFILES.items()
+        },
+        "default_systems": list(DEFAULT_CONTINUOUS_SYSTEMS),
+    }
+
+
+@router.post("/scenario-window")
+def start_scenario_window(body: ScenarioWindowRequest, db: Session = Depends(get_db)) -> dict:
+    """Inject a story-shaped phase sequence into the continuous runner."""
+    try:
+        window = windows.start_window(
+            body.story_id,
+            phases=body.phases,
+            events_per_phase=body.events_per_phase,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    state = db.get(SimulatorState, 1) or SimulatorState(id=1)
+    if state.id != 1:
+        db.add(state)
+    state.last_scenario = body.story_id
+    state.last_error = None
+    if body.ensure_running and not is_running():
+        start_continuous(
+            rate_profile=body.rate_profile,
+            profile="demo",
+            seed=getattr(state, "seed", 42) or 42,
+        )
+        state.running = True
+        state.mode = "continuous"
+    db.commit()
+    return {
+        "status": "window_started",
+        "window": windows.window_status(),
+        "story": {
+            "id": window.story.id,
+            "system_id": window.story.system_id,
+            "pitch_alias": window.story.pitch_alias,
+            "expected_verification": window.story.expected_verification,
+        },
+    }
+
+
+@router.delete("/scenario-window")
+def clear_scenario_window() -> dict:
+    windows.clear_window()
+    return {"status": "window_cleared", "window": windows.window_status()}
 
 
 @router.post("/scenarios/{scenario_id}", response_model=ScenarioResponse)

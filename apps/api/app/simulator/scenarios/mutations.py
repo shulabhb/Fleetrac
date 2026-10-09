@@ -26,12 +26,41 @@ def apply_scenario_mutation(
         _provider_latency_regression(trace, mode)
     elif scenario_id == "excessive_tool_retries":
         _excessive_tool_retries(trace, mode)
+    elif scenario_id == "soft_degradation":
+        _soft_degradation(trace)
+        # Soft degradation stays under control thresholds — no incident spam.
+        if trace.spans:
+            from app.simulator.trace_builder import finalize_root_span_duration
+
+            finalize_root_span_duration(trace.spans)
+            _append_scenario_logs(trace, scenario_id)
+        return
 
     if trace.spans:
         from app.simulator.trace_builder import finalize_root_span_duration
 
         finalize_root_span_duration(trace.spans)
         _append_scenario_logs(trace, scenario_id)
+
+
+def _soft_degradation(trace: SimulatedTrace) -> None:
+    """Nudge metrics toward thresholds without crossing them (degradation phase)."""
+    claim_span = _find_span(trace, "evaluate.unsupported_claims")
+    ground_span = _find_span(trace, "evaluate.grounding")
+    model_span = _find_span(trace, "model.reasoning", "model_call", "model.generate", "model.summarize")
+    if claim_span:
+        # Threshold for unsupported_claim is > 0.03 — stay under.
+        claim_span.evaluation["unsupported_claim_rate"] = 0.022
+    if ground_span:
+        # Threshold for grounding is < 0.75 — stay above.
+        ground_span.evaluation["grounding_score"] = 0.81
+    if model_span and model_span.latency_ms is not None:
+        # Threshold for latency is > 800 — stay under.
+        lat = min(720.0, max(float(model_span.latency_ms), 480.0))
+        model_span.latency_ms = lat
+        model_span.evaluation["latency_ms"] = lat
+        model_span.evaluation["operation_latency_ms"] = lat
+    _set_business_outcome(trace, "draft_completed")
 
 
 def _find_span(trace: SimulatedTrace, *names: str):

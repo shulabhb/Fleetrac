@@ -2,6 +2,15 @@
 
 export type NotificationTarget = "incident-queue" | "action-center" | "evidence";
 
+export type NotificationKind =
+  | "decision"
+  | "verify"
+  | "rollback"
+  | "follow_up"
+  | "improvement"
+  | "severity"
+  | "regression";
+
 export type NotificationEvent = {
   id: string;
   at: string;
@@ -10,4 +19,6 @@ export type NotificationEvent = {
   ownerTeam: string;
   incidentId?: string;
   target?: NotificationTarget;
+  kind?: NotificationKind;
+  actionId?: string;
 };

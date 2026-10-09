@@ -14,6 +14,7 @@ from app.fleet.registry import (
 )
 from app.governance.evidence import append_recurrence_evidence, ensure_evidence_for_incident
 from app.governance.notifications import record_notification_and_assignment
+from app.governance.risk_snapshot import apply_breach_snapshot, evidence_explanation
 from app.schemas.fleetrac_event import FleetracEvent
 
 
@@ -69,6 +70,13 @@ def create_incident_from_detection(
         summary=summary,
         lifecycle_history=history,
     )
+    apply_breach_snapshot(
+        incident,
+        match=match,
+        recommended_action=None,
+        trigger_event_id=event.event_id,
+        observed_at=event.timestamp,
+    )
     db.add(incident)
     db.flush()
 
@@ -78,9 +86,14 @@ def create_incident_from_detection(
         normalized_event_id=event.event_id,
         raw_event_id=event.raw_payload_reference,
         metric_value=match.metric_value,
-        summary=(
-            f"Source span {(event.evaluation_signals or {}).get('span_name') or event.operation_type} "
-            f"trace={event.trace_id} span={event.span_id} ({match.signal_type})"
+        summary=evidence_explanation(
+            system_id=event.system_id,
+            match=match,
+            occurrence_count=1,
+            signal_type=match.signal_type,
+            trace_id=event.trace_id,
+            span_name=str((event.evaluation_signals or {}).get("span_name") or "") or None,
+            operation_type=event.operation_type,
         ),
         signal_type=match.signal_type,
         system_id=event.system_id,

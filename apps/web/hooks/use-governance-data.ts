@@ -75,7 +75,7 @@ export function useGovernanceData(): GovernanceDataState {
     observeInFlight.current = true;
     try {
       const [signals, ingest, simStatus] = await Promise.all([
-        fetchLiveSignals(100),
+        fetchLiveSignals(200),
         fetchIngestLog(50),
         fetchSimulatorStatus()
       ]);
@@ -120,7 +120,7 @@ export function useGovernanceData(): GovernanceDataState {
 
       const [signals, ingest, dash, actionData, simStatus, library, notifData, systems] =
         await Promise.all([
-        fetchLiveSignals(100),
+        fetchLiveSignals(200),
         fetchIngestLog(50),
         fetchDashboardSummary(),
         fetchGovernedActions(),

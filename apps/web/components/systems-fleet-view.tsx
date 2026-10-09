@@ -73,7 +73,7 @@ export function SystemsFleetView({ systems }: Props) {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search systems…"
+            placeholder="Search agents…"
             className="w-full rounded-md border border-slate-200 py-1.5 pl-8 pr-2 text-[12px]"
           />
         </div>
@@ -138,7 +138,7 @@ export function SystemsFleetView({ systems }: Props) {
                   </div>
                   {sys.open_incidents > 0 ? (
                     <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800">
-                      {sys.open_incidents} open
+                      {sys.open_incidents} open risk{sys.open_incidents === 1 ? "" : "s"}
                     </span>
                   ) : (
                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
@@ -154,6 +154,9 @@ export function SystemsFleetView({ systems }: Props) {
                   {sys.last_signal_at
                     ? new Date(sys.last_signal_at).toLocaleString()
                     : "No telemetry yet"}
+                </p>
+                <p className="mt-2 text-[11px] font-semibold text-slate-800">
+                  {sys.open_incidents > 0 ? "Open model · review active risks" : "Open model · inspect runtime signals"}
                 </p>
               </Link>
             </li>

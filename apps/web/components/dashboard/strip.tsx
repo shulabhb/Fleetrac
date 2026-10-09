@@ -35,7 +35,7 @@ const borderClass: Record<Accent, string> = {
 };
 
 /**
- * Uniform dashboard control-plane strip used by Bob, Action Center, and Outcomes.
+ * Uniform dashboard control-plane strip used by Overview, Action Center, and Outcomes.
  * Gives the three strips a coherent Investigate → Act → Measure rhythm.
  */
 export function DashboardStrip({

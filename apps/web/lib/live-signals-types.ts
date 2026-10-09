@@ -28,6 +28,9 @@ export type LiveRuntimeSignal = {
   parentSpanId?: string;
   latencyMs?: number;
   signalState?: string;
+  eventType?: string;
+  keyMetric?: string | null;
+  normalizedSignalType?: string | null;
 };
 
 export type LiveSignalsSummary = {

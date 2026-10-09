@@ -26,16 +26,16 @@ export function LiveSignalsPageClient() {
   return (
     <GovernancePageShell
       loop="observe"
-      eyebrow="Observe · Signal hygiene"
-      title="Live Signals"
+      eyebrow="Observe · Governed runtime"
+      title="Runtime Monitor"
       subtitle={`${summary.active} active · ${summary.critical} critical / high`}
-      workflowLine="Streaming governance signals — drift, grounding, policy, and security — before they become incidents"
+      workflowLine="Governed runtime activity — drift, grounding, policy, and security — before they become risks"
       summary={
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <SummaryMini label="Active signals" value={String(summary.active)} />
           <SummaryMini label="Critical / high" value={String(summary.critical)} />
-          <SummaryMini label="Linked incidents" value={String(summary.linkedIncidents)} />
-          <SummaryMini label="Systems affected" value={String(summary.systemsAffected)} />
+          <SummaryMini label="Linked risks" value={String(summary.linkedIncidents)} />
+          <SummaryMini label="Agents affected" value={String(summary.systemsAffected)} />
         </div>
       }
     >

@@ -94,7 +94,7 @@ export function SystemHero({
               href={routeToIncidentsForSystem(system.id)}
               className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-100"
             >
-              {primaryIncidentId ? "Review incident queue" : "Open incidents"}
+              {primaryIncidentId ? "Open risk queue" : "Review active risks"}
               <ArrowRight className="h-3 w-3" />
             </Link>
           ) : null}

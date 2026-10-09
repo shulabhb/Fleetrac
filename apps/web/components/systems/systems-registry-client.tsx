@@ -1,27 +1,36 @@
 "use client";
 
+import { useMemo } from "react";
 import { SystemsFleetView } from "@/components/systems-fleet-view";
 import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { normalizeAiScope } from "@/lib/ai-scope";
+import {
+  DEMO_AGENT_IDS,
+  filterDemoAgents,
+  sortDemoAgentsFirst
+} from "@/lib/governed-fleet-registry";
 
 export function SystemsRegistryClient({ scope }: { scope: string }) {
   const normalizedScope = normalizeAiScope(scope);
   const { governanceSystems, loading } = useGovernanceData();
-  const systems = governanceSystems?.items ?? [];
+  const systems = useMemo(
+    () => sortDemoAgentsFirst(filterDemoAgents(governanceSystems?.items ?? [])),
+    [governanceSystems]
+  );
   const openCount = systems.reduce((sum, s) => sum + s.open_incidents, 0);
 
   return (
     <GovernancePageShell
       loop="context"
-      eyebrow="Context · Fleet inventory"
-      title="System Registry"
+      eyebrow="Context · Governed agents"
+      title="Agent Fleet"
       subtitle={
         loading
           ? "Loading fleet from governance API…"
-          : `${systems.length} systems · ${openCount} open incidents`
+          : `${systems.length} of ${DEMO_AGENT_IDS.length} focus agents · ${openCount} open risks`
       }
-      workflowLine="Production truth from ingested telemetry — return to Live Signals or Incident Queue"
+      workflowLine="Focused runtime governance fleet — open Runtime Monitor or Risk Queue next"
     >
       <SystemsFleetView systems={systems} />
     </GovernancePageShell>

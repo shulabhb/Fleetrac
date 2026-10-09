@@ -45,7 +45,7 @@ export default async function GovernanceActivityPage({
   const tabs: Array<{ id: ActivityFilter; label: string }> = [
     { id: "all", label: "All" },
     { id: "incident", label: "Incidents" },
-    { id: "bob", label: "Bob" },
+    { id: "bob", label: "Analysis" },
     { id: "control", label: "Controls" },
     { id: "audit", label: "Audit" },
     { id: "outreach", label: "Outreach" }
@@ -56,7 +56,7 @@ export default async function GovernanceActivityPage({
       <SectionTitle
         eyebrow="Observe · govern"
         title="Recent governance activity"
-        caption="Audit-linked operational events across incidents, Bob, controls, and outreach."
+        caption="Audit-linked operational events across risks, analysis, controls, and outreach."
         actions={
           <Link
             href={routes.dashboard()}

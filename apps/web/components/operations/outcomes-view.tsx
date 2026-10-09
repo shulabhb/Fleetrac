@@ -45,7 +45,7 @@ const SEGMENTS: SegmentDef[] = [
     label: "Rollback candidate",
     group: "attention",
     caption:
-      "Immediate evidence lane: monitored metrics regressed, or Bob has flagged this for rollback. Prepare rollback through Action Center."
+      "Immediate evidence lane: monitored metrics regressed, or verification flagged this for rollback. Prepare rollback through Action Center."
   },
   {
     id: "follow_up",
@@ -484,7 +484,7 @@ export function OutcomeRow({
         ) : null}
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Bob expected
+            Expected impact
           </p>
           <p className="mt-0.5 text-[12px] text-slate-700">
             {change.expected_impact_summary}

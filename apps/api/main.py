@@ -56,7 +56,8 @@ async def lifespan(_app: FastAPI):
         db.close()
 
     if settings.app_env == "development" and not is_running():
-        start_continuous(rate_eps=5.0, seed=42)
+        # Safe local default: demo fleet @ ~0.3 eps (~1 event / 3s), not stress traffic
+        start_continuous(rate_profile="baseline", profile="demo", seed=42)
 
     yield
     stop_continuous()

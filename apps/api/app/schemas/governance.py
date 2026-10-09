@@ -97,6 +97,18 @@ class OwnerQueueRow(GovernanceIdentityMixin):
     occurrence_count: int | None = None
     trace_count: int | None = None
     highest_severity: str | None = None
+    # Phase G — runtime breach snapshot for Risk Queue / Detail
+    rule_id: str | None = None
+    control_name: str | None = None
+    metric_name: str | None = None
+    threshold_value: float | None = None
+    threshold_operator: str | None = None
+    latest_observed_value: float | None = None
+    worst_observed_value: float | None = None
+    recommended_next_step: str | None = None
+    trigger_event_id: str | None = None
+    last_seen_at: datetime | None = None
+    signal_type: str | None = None
 
 
 class OwnerQueueResponse(BaseModel):

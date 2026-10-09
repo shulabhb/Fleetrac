@@ -15,15 +15,13 @@ import {
   withAiScope,
   type AiScopeId
 } from "@/lib/ai-scope";
-import {
-  routeToEvidenceLibraryOwnerPackage,
-  routeToEvidenceLibraryTeam
-} from "@/lib/routes";
+import { routeToEvidenceLibraryOwnerPackage, routes } from "@/lib/routes";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { SummaryMini } from "@/components/ui/summary-mini";
 import { EvidenceLibraryIncidentRecord } from "@/components/evidence-library/evidence-library-incident-record";
 import { EvidenceLibraryOwnerPackage } from "@/components/evidence-library/evidence-library-owner-package";
+import Link from "next/link";
 
 function resolveEvidenceMode(sp: URLSearchParams): EvidenceLibraryMode {
   const em = sp.get("evidenceMode");
@@ -117,15 +115,15 @@ function TeamLibraryView({
   return (
     <GovernancePageShell
       loop="measure"
-      eyebrow="Measure · Evidence and verification"
-      title="Evidence Library"
+      eyebrow="Audit · Historical evidence"
+      title="Outcomes Audit"
       subtitle={`${summary.activeOwnerPackages} owner packages · ${summary.awaitingReview} awaiting review`}
-      workflowLine="Living governance evidence by owner team, incident status, and lifecycle stage"
+      workflowLine="Cross-risk evidence lookup and audit export — decisions happen in Risk Detail and Action Center"
       summary={
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <SummaryMini label="Active owner packages" value={String(summary.activeOwnerPackages)} />
           <SummaryMini
-            label="Active incident records"
+            label="Active risk records"
             value={String(summary.activeIncidentRecords)}
           />
           <SummaryMini label="Awaiting review" value={String(summary.awaitingReview)} />
@@ -138,6 +136,27 @@ function TeamLibraryView({
       }
     >
       <div className="space-y-5">
+      <div className="rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-[12px] text-slate-700">
+        <p className="font-medium text-slate-800">Secondary audit surface</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">
+          Evidence for active decisions lives on Risk Detail and Action Center verification
+          checkpoints. Use Outcomes to search historical packages across risks.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Link
+            href={scopeHref(routes.incidents())}
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:border-slate-300"
+          >
+            Review risk queue
+          </Link>
+          <Link
+            href={scopeHref(routes.actions())}
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:border-slate-300"
+          >
+            Review governed actions
+          </Link>
+        </div>
+      </div>
 
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-[13px]">
@@ -157,7 +176,7 @@ function TeamLibraryView({
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                   {apiOn
-                    ? "No evidence packages yet. Run a simulator scenario to generate incidents."
+                    ? "Outcomes appear after an action is verified."
                     : "No owner packages in catalog."}
                 </td>
               </tr>

@@ -162,6 +162,7 @@ For UI route/state work: `apps/web/lib/routes.ts`, `nav.ts`, `governance-api.ts`
 - Do not reintroduce Bob as nav or primary investigation UX; use Fleetrac Analysis panels.
 - `/activity` currently **redirects to Dashboard** in `next.config.ts` even though `app/activity/page.tsx` exists — do not treat Activity as primary nav without an approved IA change.
 - Quality gate: `cd apps/web && npm run build` (and `npm run lint` when touching UI).
+- **After UI changes: restart the frontend** (`cd apps/web && npm run dev`) so the demo reloads cleanly. Do not rely on Fast Refresh alone after multi-file edits or after `npm run build` (stale `.next` can 500). If needed: free ports 3000/3001, `rm -rf apps/web/.next`, then restart. Confirm `http://localhost:3000` returns 200.
 
 ---
 

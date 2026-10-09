@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { GovernanceLiveSignal } from "@/lib/governance-merge";
-import { routeToIncidentsOwnerQueue, routeToSystem } from "@/lib/routes";
+import { linkageCopy, monitorSignalState } from "@/lib/live-signal-display";
+import { routeToIncidentsQueue, routeToSystem } from "@/lib/routes";
 import { cn } from "@/lib/cn";
 
 type TraceGroup = {
@@ -116,17 +117,26 @@ export function TraceGroupPanel({ groups }: { groups: TraceGroup[] }) {
                       </Link>
                       <span className="text-slate-300"> · </span>
                       {s.detectedAt}
-                      {s.incidentLinked && s.incidentId ? (
-                        <>
-                          <span className="text-slate-300"> · </span>
+                      <span className="text-slate-300"> · </span>
+                      {(() => {
+                        const state = monitorSignalState({
+                          operationType: s.eventType,
+                          normalizedSignalType: s.normalizedSignalType,
+                          signalState: s.signalState,
+                          severity: s.severity,
+                          incidentId: s.incidentId
+                        });
+                        return s.incidentId ? (
                           <Link
-                            href={routeToIncidentsOwnerQueue(s.ownerTeam)}
+                            href={routeToIncidentsQueue({ incidentId: s.incidentId })}
                             className="font-medium text-slate-700 hover:text-slate-900"
                           >
-                            {s.incidentId}
+                            {linkageCopy(state, s.incidentId)}
                           </Link>
-                        </>
-                      ) : null}
+                        ) : (
+                          <span>{linkageCopy(state, null)}</span>
+                        );
+                      })()}
                     </p>
                   </li>
                   );

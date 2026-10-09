@@ -51,7 +51,7 @@ class CreateActionRequest(BaseModel):
 
 
 class VerifyRequest(BaseModel):
-    outcome: str
+    outcome: str = ""
     summary: str = ""
 
 
@@ -150,7 +150,9 @@ def get_notifications(
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ) -> dict:
-    return {"items": list_notifications(db, limit=limit)}
+    items = list_notifications(db, limit=limit)
+    db.commit()
+    return {"items": items}
 
 
 @router.post("/incidents/{incident_id}/lifecycle")
@@ -189,9 +191,17 @@ def post_create_action(
 @router.get("/actions")
 def get_governed_actions(
     status: str | None = None,
+    include_history: bool = False,
     db: Session = Depends(get_db),
 ) -> dict:
-    rows = list_actions(db, status=status)
+    from app.governance.actions import ensure_action_for_incident
+
+    open_risks = db.query(Incident).filter(Incident.lifecycle != "Closed").all()
+    for inc in open_risks:
+        ensure_action_for_incident(db, inc)
+    db.commit()
+    rows = list_actions(db, status=status, include_history=include_history)
+    db.commit()
     return {
         "items": [
             {
@@ -210,6 +220,12 @@ def get_governed_actions(
                 "system_id": r.system_id,
                 "assigned_to": r.assigned_to,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "action_type": r.action_type,
+                "expected_metric": r.expected_metric,
+                "expected_direction": r.expected_direction,
+                "rollback_eligible": bool(r.rollback_eligible),
+                "expected_result": r.expected_result,
             }
             for r in rows
         ]
@@ -248,11 +264,33 @@ def post_verify_action(
     row = verify_action(
         db,
         action=action,
-        outcome=body.outcome,
-        summary=body.summary or f"Verification outcome: {body.outcome}",
+        outcome=body.outcome or None,
+        summary=body.summary,
     )
     db.commit()
-    return {"verification_id": row.id, "outcome": row.outcome}
+    return {
+        "verification_id": row.id,
+        "outcome": row.outcome,
+        "action_id": row.action_id,
+        "risk_id": row.incident_id,
+        "system_id": row.system_id,
+        "verification_status": action.verification_status,
+        "verification_summary": row.summary,
+        "baseline_value": row.baseline_value,
+        "post_action_value": row.post_action_value,
+        "threshold": row.threshold_value,
+        "metric_name": row.metric_name,
+        "verification_window_start": row.verification_window_start.isoformat()
+        if row.verification_window_start
+        else None,
+        "verification_window_end": row.verification_window_end.isoformat()
+        if row.verification_window_end
+        else None,
+        "evidence_refs": row.evidence_refs or [],
+        "recommended_follow_up": row.recommended_follow_up,
+        "status": action.status,
+        "used_story_fallback": "Story fallback" in (row.summary or ""),
+    }
 
 
 @router.get("/incidents/{incident_id}/assessment")

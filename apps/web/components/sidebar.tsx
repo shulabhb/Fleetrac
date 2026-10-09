@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { navItems } from "@/lib/nav";
-import { routes } from "@/lib/routes";
+import { navItems, secondaryNavItems } from "@/lib/nav";
 import { ResetDemoStateButton } from "@/components/reset-demo-state-button";
 import { cn } from "@/lib/cn";
 import {
@@ -60,7 +59,7 @@ export function Sidebar() {
         <div>
           <p className="text-sm font-semibold tracking-tight text-slate-900">Fleetrac</p>
           <p className="text-[10px] uppercase tracking-wide text-slate-400">
-            Governance Control Plane
+            Runtime Agent Governance
           </p>
         </div>
         </div>
@@ -166,10 +165,35 @@ export function Sidebar() {
         })}
       </nav>
       <div className="shrink-0 border-t border-slate-200 p-3">
+        <div className="mb-2 space-y-0.5">
+          <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Audit · admin
+          </p>
+          {secondaryNavItems.map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== "/" && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={withAiScope(item.href, scope)}
+                className={cn(
+                  "block rounded-md px-2.5 py-1.5 transition",
+                  active
+                    ? "bg-slate-100 text-slate-900"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                )}
+              >
+                <span className="block text-[12px] font-medium">{item.label}</span>
+                <span className="block text-[10px] text-slate-400">{item.caption}</span>
+              </Link>
+            );
+          })}
+        </div>
         <div className="mb-2 flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           <span className="text-[11px] font-medium text-slate-700">Demo environment</span>
-          <span className="ml-auto text-[10px] text-slate-400">mock data</span>
+          <span className="ml-auto text-[10px] text-slate-400">demo</span>
         </div>
         <ResetDemoStateButton />
       </div>

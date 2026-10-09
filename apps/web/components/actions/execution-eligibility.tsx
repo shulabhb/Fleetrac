@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { CheckCircle2, Lock, ShieldAlert } from "lucide-react";
 import type { Action } from "@/lib/action-types";
-import { BobOperatingModeBadge, ExecutionModeChip } from "./index";
+import { InvestigationModeBadge, ExecutionModeChip } from "./index";
 import type { BobOperatingMode } from "@/lib/action-types";
 import { routeToAction } from "@/lib/routes";
 
 type Props = {
   action: Action;
+  /** Legacy prop name — investigation operating mode */
   bobOperatingMode?: BobOperatingMode | null;
   className?: string;
 };
@@ -37,7 +38,7 @@ export function ExecutionEligibilityCard({
           </h4>
         </div>
         {bobOperatingMode ? (
-          <BobOperatingModeBadge mode={bobOperatingMode} />
+          <InvestigationModeBadge mode={bobOperatingMode} />
         ) : null}
       </div>
 

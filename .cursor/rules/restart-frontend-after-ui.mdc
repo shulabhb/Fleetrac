@@ -1,0 +1,18 @@
+---
+description: Restart Next.js frontend after UI changes so the demo app reloads cleanly
+alwaysApply: true
+---
+
+# Restart frontend after UI changes
+
+After any substantive frontend UI change (`apps/web` components, pages, `lib/` used by UI, nav, styles):
+
+1. **Restart the Next.js dev server** before telling the user the work is done / ready to click through.
+2. Preferred sequence:
+   - Stop whatever is on ports `3000` / `3001`
+   - If `npm run build` just ran (or HMR/`MODULE_NOT_FOUND` / 500s appear), also `rm -rf apps/web/.next`
+   - Start: `cd apps/web && npm run dev`
+3. Confirm `http://127.0.0.1:3000` returns HTTP 200 (or report the actual port if Next picked another).
+4. Do **not** rely on Fast Refresh alone after builds or multi-file IA/workflow edits — stale `.next` caches have caused 500s in this repo.
+
+Backend (`uvicorn`) only restart if API code changed; UI-only work = frontend restart only.

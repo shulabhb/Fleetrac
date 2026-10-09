@@ -4,15 +4,15 @@ import type { Action } from "@/lib/action-types";
 import { ActionMiniRow } from "./action-card";
 
 /**
- * Compact sidecar listing the governed actions tied to a system / incident /
- * control / Bob investigation. Uses the same state taxonomy as Action Center:
- * Awaiting approval · Approved · Under monitoring · Rollback candidates.
+ * Compact sidecar listing governed actions tied to a system / risk.
+ * Uses Phase D Action Center lanes:
+ * Awaiting decision · Ready to verify · Verification results.
  */
 export function LinkedActionsPanel({
   actions,
   title = "Governed actions",
   caption,
-  emptyLabel = "No governed actions yet. Fleetrac-recommended remediations appear here with approval and execution state.",
+  emptyLabel = "No governed actions yet. Bounded remediations appear here with approval and verification state.",
   viewAllHref = "/actions",
   rollbackActionIds
 }: {
@@ -29,19 +29,20 @@ export function LinkedActionsPanel({
       a.execution_status === "drafted" ||
       a.execution_status === "prepared"
   ).length;
-  const approvedCount = actions.filter(
+  const readyCount = actions.filter(
     (a) =>
       a.execution_status === "ready_to_execute" ||
-      a.execution_status === "approved"
-  ).length;
-  const monitoringCount = actions.filter(
-    (a) =>
-      a.execution_status === "monitoring_outcome" ||
-      a.execution_status === "follow_up_required"
+      a.execution_status === "approved" ||
+      a.execution_status === "executed" ||
+      a.execution_status === "monitoring_outcome"
   ).length;
   const rollbackCount = rollbackActionIds
     ? actions.filter((a) => rollbackActionIds.has(a.id)).length
-    : 0;
+    : actions.filter(
+        (a) =>
+          a.monitoring_status === "rollback_recommended" ||
+          a.execution_status === "follow_up_required"
+      ).length;
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-none">
@@ -53,7 +54,7 @@ export function LinkedActionsPanel({
           </p>
           <p className="mt-0.5 text-[11px] text-slate-500">
             {caption ??
-              "Fleetrac recommends, humans approve, execution is bounded. Post-execution impact is measured in Evidence Library."}
+              "Approve bounded actions, then verify impact. Approval-gated, policy-checked, audit-linked."}
           </p>
         </div>
         <Link
@@ -72,15 +73,10 @@ export function LinkedActionsPanel({
       ) : (
         <>
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
-            <Count label="awaiting approval" value={awaitingCount} warn={awaitingCount > 0} />
-            <Count label="approved" value={approvedCount} />
-            <Count label="under monitoring" value={monitoringCount} />
+            <Count label="awaiting decision" value={awaitingCount} warn={awaitingCount > 0} />
+            <Count label="ready to verify" value={readyCount} />
             {rollbackCount > 0 ? (
-              <Pill
-                label="Rollback candidates"
-                value={rollbackCount}
-                tone="urgent"
-              />
+              <Pill label="Rollback candidates" value={rollbackCount} tone="urgent" />
             ) : null}
           </div>
           <div className="mt-3 space-y-1.5">

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.models import GovernedActionRow, Incident, VerificationOutcomeRow
 from app.governance.evidence import append_verification_evidence
 from app.governance.incidents import advance_lifecycle
+from app.governance.verification_eval import evaluate_verification
 from app.simulator.http_ingest_client import post_ingest_sequence
 from app.simulator.scenarios.healthy_baseline import healthy_baseline_batch
 
@@ -16,40 +17,89 @@ def verify_action(
     db: Session,
     *,
     action: GovernedActionRow,
-    outcome: str,
-    summary: str,
+    outcome: str | None = None,
+    summary: str = "",
 ) -> VerificationOutcomeRow:
-    row = VerificationOutcomeRow(
-        id=str(uuid.uuid4()),
-        action_id=action.id,
-        incident_id=action.incident_id,
-        outcome=outcome,
-        summary=summary,
-    )
-    db.add(row)
+    incident = db.get(Incident, action.incident_id)
+    if incident is None:
+        raise ValueError(f"Incident {action.incident_id} not found for action {action.id}")
 
-    action.verification_status = outcome.replace("_", " ").title()
-    if outcome == "improvement_observed":
+    decision = evaluate_verification(
+        db,
+        action=action,
+        incident=incident,
+        requested_outcome=outcome or None,
+    )
+    recorded_summary = summary.strip() or decision.summary
+    if summary.strip() and decision.summary not in recorded_summary:
+        recorded_summary = f"{summary.strip()} {decision.summary}"
+
+    latest = (
+        db.query(VerificationOutcomeRow)
+        .filter(VerificationOutcomeRow.action_id == action.id)
+        .order_by(VerificationOutcomeRow.created_at.desc())
+        .first()
+    )
+    same_outcome = latest is not None and latest.outcome == decision.outcome
+    if same_outcome and latest is not None:
+        latest.summary = recorded_summary
+        latest.post_action_value = decision.post_action_value
+        latest.baseline_value = decision.baseline_value
+        latest.threshold_value = decision.threshold_value
+        latest.metric_name = decision.metric_name
+        latest.verification_window_end = decision.window_end
+        latest.evidence_refs = decision.evidence_refs
+        latest.recommended_follow_up = decision.recommended_follow_up
+        row = latest
+        db.flush()
+    else:
+        row = VerificationOutcomeRow(
+            id=str(uuid.uuid4()),
+            action_id=action.id,
+            incident_id=action.incident_id,
+            outcome=decision.outcome,
+            summary=recorded_summary,
+            system_id=action.system_id,
+            baseline_value=decision.baseline_value,
+            post_action_value=decision.post_action_value,
+            threshold_value=decision.threshold_value,
+            metric_name=decision.metric_name,
+            verification_window_start=decision.window_start,
+            verification_window_end=decision.window_end,
+            evidence_refs=decision.evidence_refs,
+            recommended_follow_up=decision.recommended_follow_up,
+        )
+        db.add(row)
+        append_verification_evidence(
+            db,
+            incident_id=action.incident_id,
+            outcome=decision.outcome,
+            summary=recorded_summary,
+        )
+        db.flush()
+
+    action.verification_status = decision.outcome.replace("_", " ").title()
+    if decision.outcome == "improvement_observed":
         action.status = "Closed"
-        inc = db.get(Incident, action.incident_id)
-        if inc:
-            advance_lifecycle(db, inc, "Closed", note=f"Verification: {outcome}")
-    elif outcome in ("regression_detected", "rollback_candidate"):
+        if incident.lifecycle != "Closed":
+            advance_lifecycle(db, incident, "Closed", note=f"Verification: {decision.outcome}")
+    elif decision.outcome in ("regression_detected", "rollback_candidate"):
         action.status = "Rollback candidate"
-        inc = db.get(Incident, action.incident_id)
-        if inc:
-            advance_lifecycle(db, inc, "Verification", note=f"Verification: {outcome}")
+        if incident.lifecycle != "Verification":
+            advance_lifecycle(db, incident, "Verification", note=f"Verification: {decision.outcome}")
     else:
         action.status = "Monitoring"
+        if incident.lifecycle != "Verification":
+            advance_lifecycle(db, incident, "Verification", note=f"Verification: {decision.outcome}")
 
-    append_verification_evidence(
-        db,
-        incident_id=action.incident_id,
-        outcome=outcome,
-        summary=summary,
-    )
+    from app.governance.notifications import notify_regression, sync_current_notification
 
-    if outcome == "improvement_observed":
+    if decision.outcome == "regression_detected":
+        notify_regression(db, incident)
+    else:
+        sync_current_notification(db, incident, trigger="derive")
+
+    if decision.outcome == "improvement_observed":
         _emit_post_remediation_traffic(action.system_id)
 
     return row
@@ -59,9 +109,5 @@ def _emit_post_remediation_traffic(system_id: str) -> None:
     events = healthy_baseline_batch([system_id], count=3)
     try:
         asyncio.run(post_ingest_sequence(events))
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(post_ingest_sequence(events))
-        finally:
-            loop.close()
+    except Exception:
+        return

@@ -15,7 +15,11 @@ import { findOwnerTeamForQueueIncident } from "@/lib/governance-incident-routing
 // Object types
 // ---------------------------------------------------------------------------
 
-/** Targets Bob can review (used by the `/bob/for/<type>/<id>` resolver). */
+/**
+ * Legacy investigation target type for `/bob/for/<type>/<id>` resolver.
+ * `/bob` redirects to Overview (next.config) — prefer Risk Detail / Action Center.
+ * @deprecated Do not add new Bob-branded UI.
+ */
 export type BobTargetType = "incident" | "system" | "control";
 
 /** Canonical settings tabs, kept in sync with `SettingsView`. */
@@ -44,7 +48,7 @@ export type ActionSegment =
   | "rollback"
   | "closed_rejected";
 
-/** Bob investigation status filter tokens. */
+/** @deprecated Legacy investigation status filter tokens (`/bob` redirects home). */
 export type BobStatusFilter =
   | "open"
   | "awaiting_approval"
@@ -117,17 +121,17 @@ export function routeToOutcome(id: string): string {
   return `/outcomes/${encodeURIComponent(id)}`;
 }
 
+/**
+ * @deprecated `/bob/*` redirects to Overview. Prefer `routeToIncident` or Action Center.
+ * Kept so existing deep links resolve without 404.
+ */
 export function routeToBobInvestigation(id: string): string {
   return `/bob/${encodeURIComponent(id)}`;
 }
 
 /**
- * Resolver-aware Bob link. Callers without a resolved investigation id route
- * through `/bob/for/<type>/<id>`, which redirects server-side to the exact
- * investigation or to the Bob list with a `missing=` banner.
- *
- * If the caller *does* have an investigation id already, prefer
- * `routeToBobInvestigation(investigationId)` to avoid an unnecessary hop.
+ * @deprecated Prefer Risk Detail (`routeToIncident`) — Fleetrac Analysis is nested there.
+ * `/bob/for/...` still redirects via next.config.
  */
 export function routeToBobForTarget(
   targetType: BobTargetType,
@@ -168,18 +172,18 @@ export function routeToOutcomesForSystem(
   return `/outcomes?${qs.toString()}`;
 }
 
-/** Evidence Library URL modes (query `evidenceMode`). */
+/** Outcomes audit URL modes (query `evidenceMode`) — secondary to Risk Detail evidence. */
 export type EvidenceLibraryMode =
   | "team-library"
   | "owner-package"
   | "incident-record";
 
-/** Default Evidence Library — team index (`/outcomes`). */
+/** Default Outcomes audit index (`/outcomes`). */
 export function routeToEvidenceLibraryTeam(): string {
   return routes.outcomes();
 }
 
-/** Owner evidence package for one accountable team. */
+/** Owner evidence package for one accountable team (Outcomes audit). */
 export function routeToEvidenceLibraryOwnerPackage(ownerTeam: string): string {
   const qs = new URLSearchParams({
     evidenceMode: "owner-package",
@@ -227,6 +231,7 @@ export function routeToActionsTab(tab: ActionSegment): string {
   return `/actions?tab=${encodeURIComponent(tab)}`;
 }
 
+/** @deprecated `/bob` redirects to Overview. */
 export function routeToBobByStatus(status: BobStatusFilter): string {
   return `/bob?status=${encodeURIComponent(status)}`;
 }

@@ -46,40 +46,46 @@ export default async function OutcomesPage({
             className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 transition hover:text-slate-800"
           >
             <ChevronLeft className="h-3.5 w-3.5" />
-            Evidence Library
+            Outcomes
           </Link>
           <Link
             href={routeToSystem(scopedSystem.id)}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition hover:border-slate-300"
           >
-            View production context · {scopedSystem.use_case}
+            View agent context · {scopedSystem.use_case}
           </Link>
         </div>
 
         <GovernancePageShell
           loop="measure"
-          eyebrow={`Measure · ${scopedSystem.use_case}`}
-          title="Evidence Library"
-          subtitle={`Scoped context · profile scope: ${scopeLabel}`}
-          workflowLine="Owner-team evidence packages are indexed from the main library"
+          eyebrow={`Audit · ${scopedSystem.use_case}`}
+          title="Outcomes"
+          subtitle={`Scoped evidence lookup · profile scope: ${scopeLabel}`}
+          workflowLine="Historical evidence for this agent — approve and verify in Action Center"
         >
         <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 text-[13px] text-slate-700">
           <p>
-            For governed execution and remediation follow-up for this system, use production
-            context and Action Center. Team-level evidence packages are unchanged below.
+            Decisions and verification live in Risk Detail and Action Center. This view is for
+            historical evidence lookup and audit across packages for this agent.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link
               href={routeToSystem(scopedSystem.id)}
               className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
             >
-              Open system record
+              View agent record
             </Link>
             <Link
               href={routes.actions()}
               className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
             >
               Action Center
+            </Link>
+            <Link
+              href={routes.incidents()}
+              className="inline-flex rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
+            >
+              Risk Queue
             </Link>
           </div>
         </div>

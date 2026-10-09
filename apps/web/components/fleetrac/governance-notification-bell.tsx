@@ -12,31 +12,40 @@ function mapApiNotification(
   row: NotificationDTO,
   ownerByIncident: Record<string, string>
 ): NotificationEvent {
-  const ownerTeam = row.incident_id
-    ? ownerByIncident[row.incident_id] ?? "Model Risk Management"
-    : "Model Risk Management";
-  const target = row.message.toLowerCase().includes("action")
-    ? ("action-center" as const)
-    : row.message.toLowerCase().includes("evidence")
-      ? ("evidence" as const)
-      : ("incident-queue" as const);
+  const ownerTeam =
+    row.owner_team ||
+    (row.alias_id ? ownerByIncident[row.alias_id] : undefined) ||
+    (row.incident_id ? ownerByIncident[row.incident_id] : undefined) ||
+    "";
+  const target = isTarget(row.target) ? row.target : "incident-queue";
 
   return {
     id: row.id,
     at: formatRelativeTime(new Date(row.created_at)),
-    channel: capitalizeChannel(row.channel),
+    channel: "In-app",
     summary: row.message,
     ownerTeam,
-    incidentId: row.incident_id ?? undefined,
-    target
+    incidentId: row.alias_id || row.incident_id || undefined,
+    target,
+    kind: isKind(row.kind) ? row.kind : undefined,
+    actionId: row.action_id || undefined
   };
 }
 
-function capitalizeChannel(channel: string): NotificationEvent["channel"] {
-  if (channel === "slack") return "Slack";
-  if (channel === "email") return "Email";
-  if (channel === "in_app" || channel === "in-app") return "In-app";
-  return "In-app";
+function isTarget(value: string | null | undefined): value is NotificationEvent["target"] & string {
+  return value === "incident-queue" || value === "action-center" || value === "evidence";
+}
+
+function isKind(value: string | null | undefined): value is NonNullable<NotificationEvent["kind"]> {
+  return (
+    value === "decision" ||
+    value === "verify" ||
+    value === "rollback" ||
+    value === "follow_up" ||
+    value === "improvement" ||
+    value === "severity" ||
+    value === "regression"
+  );
 }
 
 export function GovernanceNotificationBell({

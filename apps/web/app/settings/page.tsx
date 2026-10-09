@@ -30,8 +30,8 @@ export default async function SettingsPage() {
       loop="configure"
       eyebrow="Configure · Control plane capability"
       title="Settings"
-      subtitle={`${connected} connectors connected · ${policies.length} operations policies`}
-      workflowLine="Telemetry ingest, Slack notifications, policy scope, and connector readiness"
+      subtitle={`${connected} connector records · ${policies.length} operations policies`}
+      workflowLine="Prototype configuration only — connector status is not a live production integration."
     >
       <SettingsView
         integrations={integrations}

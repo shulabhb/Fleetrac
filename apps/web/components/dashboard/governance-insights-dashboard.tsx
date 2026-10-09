@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, PackageOpen } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { SummaryMini } from "@/components/ui/summary-mini";
 import { GovernanceNotificationBell } from "@/components/fleetrac/governance-notification-bell";
@@ -16,29 +15,41 @@ import {
   buildRemediationEvidenceSummaryFromApi,
   highestRiskOwnerTeamFromInsights
 } from "@/lib/dashboard-merge";
-import { buildOwnerQueueRowsFromApi } from "@/lib/governance-merge";
+import {
+  buildGlobalOwnerQueueRowsFromApi,
+  buildOwnerQueueRowsFromApi
+} from "@/lib/governance-merge";
 import { GovernanceLoopStatus } from "@/components/dashboard/governance-loop-status";
 import { cn } from "@/lib/cn";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
+  filterDemoAgents,
+  flagshipRiskForSystem,
   GOVERNED_FLEET_SYSTEM_COUNT,
-  GOVERNED_FLEET_SYSTEMS_SUB
+  isDemoAgent,
+  sortDemoAgentsFirst
 } from "@/lib/governed-fleet-registry";
+import { primaryApiActions } from "@/lib/governance-actions-merge";
+import {
+  countDemoRisks,
+  overviewNextStep,
+  pickHighestPriorityModel,
+  verificationResultCount,
+  type OverviewNextStep
+} from "@/lib/overview-summary";
 import {
   DEFAULT_OWNER_TEAM,
   DEFAULT_SYSTEM_ID,
   formatRiskMixCompact,
-  ownerActionCopyForTeam,
   type GovernedSystem,
   type OwnerInsight,
-  type OwnerNotificationUIFlag,
   type OwnerTeamDetails
 } from "@/lib/dashboard-types";
-import { PRIMARY_OWNER_TEAMS } from "@/lib/governance-api";
 import { withAiScope, type AiScopeId } from "@/lib/ai-scope";
 import {
+  routeToEvidenceLibraryIncidentRecord,
   routeToEvidenceLibraryOwnerPackage,
-  routeToIncidentsForOwner,
+  routeToIncident,
   routeToIncidentsOwnerQueue,
   routeToOutcomesOwnerEvidencePack,
   routes
@@ -72,23 +83,80 @@ function compareSystems(a: GovernedSystem, b: GovernedSystem): number {
   return b.openIncidents - a.openIncidents;
 }
 
-function slaTone(sla: import("@/lib/dashboard-types").SlaRiskLevel): string {
-  if (sla === "High") return "text-rose-700";
-  if (sla === "Medium") return "text-amber-700";
-  return "text-emerald-700";
+type TriageTone = "critical" | "high" | "medium" | "low" | "neutral" | "info";
+
+const TRIAGE_BADGE: Record<TriageTone, string> = {
+  critical: "bg-red-50 text-red-700 ring-1 ring-red-200",
+  high: "bg-orange-50 text-orange-800 ring-1 ring-orange-200",
+  medium: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+  low: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  neutral: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
+  info: "bg-sky-50 text-sky-800 ring-1 ring-sky-200"
+};
+
+const TRIAGE_BORDER: Record<TriageTone, string> = {
+  critical: "border-l-red-500",
+  high: "border-l-orange-400",
+  medium: "border-l-amber-400",
+  low: "border-l-emerald-500",
+  neutral: "border-l-slate-300",
+  info: "border-l-sky-500"
+};
+
+const SELECTED_ROW = "bg-indigo-50/70";
+const SELECTED_ACCENT = "absolute left-0 top-0 h-full w-0.5 bg-indigo-500";
+
+function triageTone(value: string | null | undefined): TriageTone {
+  const s = (value ?? "").toLowerCase();
+  if (s === "critical") return "critical";
+  if (s === "high") return "high";
+  if (s === "medium") return "medium";
+  if (s === "low" || s === "healthy") return "low";
+  return "neutral";
 }
 
-function statusBadgeTone(st: GovernedSystem["status"]): "high" | "medium" | "low" {
-  if (st === "Critical") return "high";
-  if (st === "High") return "medium";
+function slaBadgeTone(sla: import("@/lib/dashboard-types").SlaRiskLevel): TriageTone {
+  if (sla === "High") return "high";
+  if (sla === "Medium") return "medium";
   return "low";
 }
 
-/** Status word coloring for compact priority rows (metadata only). */
-function governanceStatusTone(st: GovernedSystem["status"]): string {
-  if (st === "Critical" || st === "High") return "text-rose-700";
-  if (st === "Medium") return "text-amber-700";
-  return "text-emerald-700";
+function handoffTone(status: string): TriageTone {
+  if (status === "Notified") return "info";
+  if (status === "Pending") return "medium";
+  return "neutral";
+}
+
+function bottleneckTone(label: string): TriageTone {
+  const s = label.toLowerCase();
+  if (!s || s.includes("monitor") || s.includes("closed")) return "neutral";
+  if (s.includes("verif") || s.includes("remediat")) return "info";
+  return "medium";
+}
+
+function stepBadgeTone(kind: OverviewNextStep["kind"]): TriageTone {
+  if (kind === "monitoring") return "neutral";
+  if (kind === "verify" || kind === "outcome") return "info";
+  return "medium";
+}
+
+function TriageBadge({
+  children,
+  tone
+}: {
+  children: string | number;
+  tone: TriageTone;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+        TRIAGE_BADGE[tone]
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
 export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
@@ -105,18 +173,31 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   const evidencePanelRef = useRef<HTMLDivElement | null>(null);
 
   const [dashboardToast, setDashboardToast] = useState<string | null>(null);
-  const { dashboard: apiDashboard, ownerQueues, evidenceByAlias, governanceSystems } =
-    useGovernanceData();
+  const {
+    dashboard: apiDashboard,
+    ownerQueues,
+    evidenceByAlias,
+    governanceSystems,
+    actions: apiActions
+  } = useGovernanceData();
 
   const ownerInsights = useMemo(
     () => buildOwnerInsightsFromApi(ownerQueues, apiDashboard),
     [ownerQueues, apiDashboard]
   );
 
-  const governedSystems = useMemo(
-    () => buildGovernedSystemsFromApi(governanceSystems, ownerQueues),
-    [governanceSystems, ownerQueues]
-  );
+  const governedSystems = useMemo(() => {
+    const scopedApi = governanceSystems
+      ? {
+          ...governanceSystems,
+          items: sortDemoAgentsFirst(filterDemoAgents(governanceSystems.items)),
+          total: GOVERNED_FLEET_SYSTEM_COUNT
+        }
+      : null;
+    return buildGovernedSystemsFromApi(scopedApi, ownerQueues).filter((sys) =>
+      isDemoAgent(sys.systemId)
+    );
+  }, [governanceSystems, ownerQueues]);
 
   const remediationSummary = useMemo(
     () => buildRemediationEvidenceSummaryFromApi(apiDashboard),
@@ -124,55 +205,47 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   );
 
   const kpi = useMemo(() => {
-    const ownersAboveTolerance = apiDashboard
-      ? Object.keys(apiDashboard.owner_open_counts).filter(
-          (team) => (apiDashboard.owner_open_counts[team] ?? 0) > 0
-        ).length
-      : 0;
+    const queueRisks = Object.values(ownerQueues).flatMap((queue) =>
+      (queue?.items ?? []).map((row) => ({
+        systemId: row.system_id,
+        severity: row.severity,
+        lifecycle: row.lifecycle
+      }))
+    );
+    const demoCounts = countDemoRisks(queueRisks, isDemoAgent);
+    const usingQueues = Object.values(ownerQueues).some((queue) => queue != null);
+    const active = usingQueues ? demoCounts.active : (apiDashboard?.active_incidents ?? 0);
+    const criticalHigh = usingQueues
+      ? demoCounts.criticalHigh
+      : (apiDashboard?.critical_incidents ?? 0);
+    const verification = verificationResultCount({
+      improved: apiDashboard?.verification_improved,
+      followUp: apiDashboard?.verification_follow_up,
+      rollback: apiDashboard?.verification_rollback
+    });
     return {
-      activeIncidents: apiDashboard?.active_incidents ?? 0,
-      activeIncidentsSub: apiDashboard
-        ? `${apiDashboard.critical_incidents} critical · live from simulator`
-        : "Awaiting simulator ingest",
-      criticalDecisions: apiDashboard?.decisions_needed ?? 0,
-      criticalDecisionsSub: `${apiDashboard?.actions_awaiting_approval ?? 0} awaiting Action Center approval`,
-      remediationVerified: apiDashboard?.verification_improved ?? 0,
-      remediationVerifiedSub: `${apiDashboard?.verification_count ?? 0} under verification tracking`,
-      governedSystems: governanceSystems?.total ?? GOVERNED_FLEET_SYSTEM_COUNT,
-      governedSystemsSub: GOVERNED_FLEET_SYSTEMS_SUB,
-      ownersAboveTolerance,
-      ownersAboveToleranceSub: "Owner teams with open queue load"
+      governedAgents: governedSystems.length || GOVERNED_FLEET_SYSTEM_COUNT,
+      active,
+      criticalHigh,
+      awaitingDecision: apiDashboard?.actions_awaiting_approval ?? 0,
+      verification
     };
-  }, [apiDashboard, governanceSystems]);
+  }, [apiDashboard, ownerQueues, governedSystems.length]);
 
   const loopMetrics = useMemo(
     () => buildGovernanceLoopFromApi(apiDashboard),
     [apiDashboard]
   );
 
-  const headerPosture = useMemo(() => {
-    let openIncidents = governedSystems.reduce((sum, sys) => sum + sys.openIncidents, 0);
-    let decisionsNeeded = ownerInsights.reduce((sum, o) => sum + o.decisionsNeeded, 0);
-    let ownersAboveTolerance = PRIMARY_OWNER_TEAMS.filter((team) => {
-      const insight = ownerInsights.find((o) => o.ownerTeam === team);
-      return insight != null && (insight.slaRisk === "High" || insight.critical > 0);
-    }).length;
-
-    if (apiDashboard) {
-      openIncidents = apiDashboard.active_incidents;
-      decisionsNeeded = apiDashboard.decisions_needed;
-      ownersAboveTolerance = Object.keys(apiDashboard.owner_open_counts).filter(
-        (team) => (apiDashboard.owner_open_counts[team] ?? 0) > 0
-      ).length;
-    }
-
-    return {
-      governedSystems: governanceSystems?.total ?? GOVERNED_FLEET_SYSTEM_COUNT,
-      openIncidents,
-      decisionsNeeded,
-      ownersAboveTolerance
-    };
-  }, [apiDashboard, governedSystems, ownerInsights, governanceSystems]);
+  const headerPosture = useMemo(
+    () => ({
+      governedAgents: kpi.governedAgents,
+      active: kpi.active,
+      awaitingDecision: kpi.awaitingDecision,
+      verification: kpi.verification
+    }),
+    [kpi]
+  );
 
   const filteredSystems = useMemo(() => {
     return governedSystems.filter((sys) => {
@@ -182,6 +255,27 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
       return true;
     }).sort(compareSystems);
   }, [filters, governedSystems]);
+
+  const userPickedModel = useRef(false);
+  useEffect(() => {
+    if (governedSystems.length === 0) return;
+    const visible = filteredSystems.length > 0 ? filteredSystems : governedSystems;
+    const selectionVisible = visible.some((sys) => sys.id === selectedSystemId);
+    if (userPickedModel.current && selectionVisible) return;
+
+    const top = userPickedModel.current
+      ? pickHighestPriorityModel(visible)
+      : pickHighestPriorityModel(governedSystems);
+    if (!top || top.id === selectedSystemId) return;
+
+    setSelectedSystemId(top.id);
+    setSelectedOwnerTeam(top.ownerTeam);
+    if (!userPickedModel.current) {
+      setFilters((current) =>
+        current.ownerTeam === top.ownerTeam ? current : { ...current, ownerTeam: top.ownerTeam }
+      );
+    }
+  }, [governedSystems, filteredSystems, selectedSystemId]);
 
   const selectedSystem = useMemo(
     () => governedSystems.find((s) => s.id === selectedSystemId) ?? governedSystems[0],
@@ -193,25 +287,29 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
     [selectedOwnerTeam, ownerInsights]
   );
 
-  const ownerActionCopy = useMemo(
-    () => ownerActionCopyForTeam(selectedOwnerTeam, ownerInsightRow),
-    [selectedOwnerTeam, ownerInsightRow]
+  const primaryActions = useMemo(() => primaryApiActions(apiActions), [apiActions]);
+
+  const ownerQueueRows = useMemo(
+    () =>
+      buildOwnerQueueRowsFromApi(
+        ownerQueues[selectedOwnerTeam],
+        evidenceByAlias,
+        selectedOwnerTeam
+      ),
+    [selectedOwnerTeam, ownerQueues, evidenceByAlias]
   );
 
-  const ownerPriorityRows = useMemo(() => {
-    const rows = buildOwnerQueueRowsFromApi(
-      ownerQueues[selectedOwnerTeam],
-      evidenceByAlias,
-      selectedOwnerTeam
-    );
-    return rows.slice(0, 5).map((row) => ({
-      systemId: row.systemId,
-      decisionLine: row.title,
-      assignedMember: row.assignedTo !== "—" ? row.assignedTo : undefined
-    }));
-  }, [selectedOwnerTeam, ownerQueues, evidenceByAlias]);
-
-  const ownerQueueHref = scopeHref(routeToIncidentsForOwner(selectedOwnerTeam));
+  const priorityRisk = useMemo(() => {
+    if (ownerQueueRows.length === 0) return null;
+    const forSelected = selectedSystem
+      ? ownerQueueRows.find(
+          (row) =>
+            row.systemId === selectedSystem.id ||
+            row.systemCanonicalId === selectedSystem.systemId
+        )
+      : undefined;
+    return forSelected ?? ownerQueueRows[0];
+  }, [ownerQueueRows, selectedSystem]);
 
   const activeOwnerTeamDetails = useMemo((): OwnerTeamDetails => {
     return buildOwnerTeamDetailsFromApi(selectedOwnerTeam, ownerQueues, ownerInsights);
@@ -251,6 +349,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   };
 
   const focusOwnerFromSystem = useCallback((sys: GovernedSystem) => {
+    userPickedModel.current = true;
     setSelectedSystemId(sys.id);
     setSelectedOwnerTeam(sys.ownerTeam);
     setFilters((f) => ({
@@ -266,15 +365,137 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
     focusOwnerFromSystem(sys);
   };
 
-  const onPrioritySystemClick = (systemId: string) => {
-    const sys = governedSystems.find((s) => s.id === systemId);
-    if (sys) focusOwnerFromSystem(sys);
+  const openRelatedRisk = useCallback(
+    (systemId: string, incidentId?: string | null) => {
+      const alias =
+        incidentId ||
+        flagshipRiskForSystem(systemId) ||
+        null;
+      if (alias) {
+        router.push(scopeHref(routeToIncident(alias)));
+        return;
+      }
+      const sys = governedSystems.find((s) => s.id === systemId);
+      if (sys) {
+        router.push(scopeHref(routeToIncidentsOwnerQueue(sys.ownerTeam)));
+      }
+    },
+    [governedSystems, router, scopeHref]
+  );
+
+  const onPrioritySystemClick = (systemId: string, incidentId?: string) => {
+    openRelatedRisk(systemId, incidentId);
   };
 
   const reviewOwnerQueue = useCallback(() => {
     const team = highestRiskOwnerTeamFromInsights(ownerInsights);
     router.push(scopeHref(routeToIncidentsOwnerQueue(team)));
-  }, [router, scopeHref]);
+  }, [ownerInsights, router, scopeHref]);
+
+  const selectedFlagshipRisk = flagshipRiskForSystem(
+    selectedSystem?.systemId ?? selectedSystemId
+  );
+
+  const stepForRisk = useCallback(
+    (
+      risk: {
+        incidentId: string;
+        systemCanonicalId?: string;
+        stage: string;
+      } | null,
+      openIncidents: number
+    ): OverviewNextStep => {
+      const action = risk
+        ? primaryActions.find(
+            (row) =>
+              row.alias_id === risk.incidentId || row.incident_id === risk.incidentId
+          ) ??
+          primaryActions.find((row) => row.system_id === risk.systemCanonicalId)
+        : undefined;
+      return overviewNextStep({
+        openIncidents,
+        lifecycle: risk?.stage,
+        actionStatus: action?.status,
+        verificationStatus: action?.verification_status,
+        incidentId: risk?.incidentId,
+        bottleneck: ownerInsightRow?.bottleneck
+      });
+    },
+    [primaryActions, ownerInsightRow?.bottleneck]
+  );
+
+  const priorityStep = stepForRisk(
+    priorityRisk,
+    priorityRisk ? 1 : ownerInsightRow?.open ?? 0
+  );
+
+  const hrefForStep = useCallback(
+    (step: OverviewNextStep, incidentId?: string | null, actionId?: string | null) => {
+      if (step.kind === "governed_action") {
+        return scopeHref(
+          actionId ? `${routes.actions()}?action=${encodeURIComponent(actionId)}` : routes.actions()
+        );
+      }
+      if (step.kind === "verify" && actionId) {
+        return scopeHref(
+          `${routes.actions()}?tab=ready&action=${encodeURIComponent(actionId)}`
+        );
+      }
+      if ((step.kind === "rollback" || step.kind === "follow_up") && actionId) {
+        return scopeHref(
+          `${routes.actions()}?tab=closed&action=${encodeURIComponent(actionId)}`
+        );
+      }
+      if (step.kind === "outcome" && incidentId) {
+        return scopeHref(routeToEvidenceLibraryIncidentRecord(incidentId, selectedOwnerTeam));
+      }
+      if (step.kind === "monitoring") return scopeHref(routes.liveSignals());
+      if (incidentId) return scopeHref(routeToIncident(incidentId));
+      return scopeHref(routeToIncidentsOwnerQueue(selectedOwnerTeam));
+    },
+    [scopeHref, selectedOwnerTeam]
+  );
+
+  const allQueueRows = useMemo(
+    () => buildGlobalOwnerQueueRowsFromApi(ownerQueues, evidenceByAlias),
+    [ownerQueues, evidenceByAlias]
+  );
+
+  const filteredActiveRisks = filteredSystems.reduce(
+    (sum, sys) => sum + sys.openIncidents,
+    0
+  );
+  const filteredCritical = filteredSystems.reduce(
+    (sum, sys) => sum + sys.criticalIncidents,
+    0
+  );
+
+  const selectedSystemRisk = selectedSystem
+    ? allQueueRows.find(
+        (row) =>
+          row.systemId === selectedSystem.id ||
+          row.systemCanonicalId === selectedSystem.systemId
+      )
+    : undefined;
+
+  const selectedSystemStep = stepForRisk(
+    selectedSystemRisk
+      ? {
+          incidentId: selectedSystemRisk.incidentId,
+          systemCanonicalId: selectedSystemRisk.systemCanonicalId,
+          stage: selectedSystemRisk.stage
+        }
+      : null,
+    selectedSystem?.openIncidents ?? 0
+  );
+
+  const priorityActionId = priorityRisk
+    ? primaryActions.find(
+        (row) =>
+          row.alias_id === priorityRisk.incidentId ||
+          row.incident_id === priorityRisk.incidentId
+      )?.id
+    : undefined;
 
   const ownerTeams = useMemo(
     () => Array.from(new Set(governedSystems.map((s) => s.ownerTeam))).sort(),
@@ -296,8 +517,8 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
 
   const evidencePackButtonLabel =
     activeOwnerTeamDetails.evidencePackStatus === "Not generated"
-      ? "Prepare evidence library"
-      : "Open evidence library";
+      ? "Prepare outcome evidence"
+      : "View outcome evidence";
 
   return (
     <section className="space-y-10 pb-8">
@@ -305,31 +526,31 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
       <header className="flex flex-col gap-4 border-b border-slate-100 pb-8 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-2">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Observe · Orient · Govern
+            Orient · Runtime agent governance
           </p>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 md:text-[26px]">
-            Governance Insights
+            Overview
           </h1>
           <div className="flex max-w-3xl flex-wrap gap-1.5 pt-1">
             <SummaryMini
               compact
-              label="AI systems governed"
-              value={String(headerPosture.governedSystems)}
+              label="Governed agents"
+              value={String(headerPosture.governedAgents)}
             />
             <SummaryMini
               compact
-              label="Open incidents"
-              value={String(headerPosture.openIncidents)}
+              label="Active risks"
+              value={String(headerPosture.active)}
             />
             <SummaryMini
               compact
-              label="Decisions needed"
-              value={String(headerPosture.decisionsNeeded)}
+              label="Awaiting decision"
+              value={String(headerPosture.awaitingDecision)}
             />
             <SummaryMini
               compact
-              label="Owners above risk tolerance"
-              value={String(headerPosture.ownersAboveTolerance)}
+              label="Verification results"
+              value={String(headerPosture.verification)}
             />
           </div>
         </div>
@@ -340,42 +561,51 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
             onClick={reviewOwnerQueue}
             className="inline-flex items-center gap-2 rounded-md border border-slate-900 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
           >
-            Review owner queue
+            Open risk queue
             <ArrowRight className="h-4 w-4" aria-hidden />
           </button>
+          {selectedFlagshipRisk ? (
+            <Link
+              href={scopeHref(routeToIncident(selectedFlagshipRisk))}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:border-slate-300"
+            >
+              Review model risk
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </Link>
+          ) : null}
         </div>
       </header>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiGovernance
-          label="Governed AI Systems"
-          value={kpi.governedSystems}
-          caption={kpi.governedSystemsSub}
+          label="Governed agents"
+          value={kpi.governedAgents}
+          caption="Demo fleet in the primary workflow"
           accent="slate"
         />
         <KpiGovernance
-          label="Active Governance Incidents"
-          value={kpi.activeIncidents}
-          caption={kpi.activeIncidentsSub}
+          label="Active risks"
+          value={kpi.active}
+          caption={`${kpi.criticalHigh} critical or high`}
           accent="rose"
         />
         <KpiGovernance
-          label="Critical Decisions Needed"
-          value={kpi.criticalDecisions}
-          caption={kpi.criticalDecisionsSub}
+          label="Awaiting decision"
+          value={kpi.awaitingDecision}
+          caption="Governed actions not yet approved"
           accent="amber"
         />
         <KpiGovernance
-          label="Owners Above Risk Tolerance"
-          value={kpi.ownersAboveTolerance}
-          caption={kpi.ownersAboveToleranceSub}
+          label="Critical / high risks"
+          value={kpi.criticalHigh}
+          caption="Same demo agents as the Risk Queue"
           accent="rose"
         />
         <KpiGovernance
-          label="Remediation Verification"
-          value={`${kpi.remediationVerified} improved`}
-          caption={kpi.remediationVerifiedSub}
+          label="Verification results"
+          value={kpi.verification}
+          caption="Improved, follow-up, and rollback"
           accent="emerald"
         />
       </div>
@@ -426,36 +656,37 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                         if (e.key === "Enter" || e.key === " ") onOwnerRowClick(row);
                       }}
                       className={cn(
-                        "cursor-pointer border-b border-slate-100 transition-colors last:border-b-0",
-                        selected
-                          ? "bg-slate-50 ring-1 ring-inset ring-slate-200"
-                          : "hover:bg-slate-100/70"
+                        "cursor-pointer border-b border-slate-100 bg-white transition-colors last:border-b-0",
+                        selected ? SELECTED_ROW : "hover:bg-slate-50"
                       )}
                     >
                       <td className="relative px-3 py-2.5 font-medium text-slate-900">
-                        {selected ? (
-                          <span
-                            className="absolute left-0 top-0 h-full w-0.5 bg-slate-900"
-                            aria-hidden
-                          />
-                        ) : null}
+                        {selected ? <span className={SELECTED_ACCENT} aria-hidden /> : null}
                         <span className="pl-0">{row.ownerTeam}</span>
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-[10px] font-medium text-slate-400">
-                        {ownerStatus}
+                      <td className="whitespace-nowrap px-3 py-2.5">
+                        <TriageBadge tone={handoffTone(ownerStatus)}>{ownerStatus}</TriageBadge>
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
                         {row.open}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">
-                        {row.critical}
+                      <td className="px-3 py-2.5 text-right">
+                        {row.critical > 0 ? (
+                          <TriageBadge tone="critical">{row.critical}</TriageBadge>
+                        ) : (
+                          <span className="tabular-nums text-slate-400">0</span>
+                        )}
                       </td>
                       <td className="max-w-[200px] px-3 py-2.5 text-[11px] leading-snug text-slate-500">
                         {formatRiskMixCompact(row)}
                       </td>
-                      <td className="px-3 py-2.5 text-[12px] text-slate-800">{row.bottleneck}</td>
-                      <td className={cn("px-3 py-2.5 text-[12px] font-semibold", slaTone(row.slaRisk))}>
-                        {row.slaRisk}
+                      <td className="px-3 py-2.5">
+                        <TriageBadge tone={bottleneckTone(row.bottleneck)}>
+                          {row.bottleneck}
+                        </TriageBadge>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <TriageBadge tone={slaBadgeTone(row.slaRisk)}>{row.slaRisk}</TriageBadge>
                       </td>
                       <td className="min-w-[128px] px-3 py-2.5 text-[11px] leading-tight text-slate-700">
                         {row.nextAction}
@@ -474,9 +705,9 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
           id="dashboard-evidence-panel"
           className="flex min-h-0 max-h-[min(520px,56vh)] flex-col"
         >
-          <Card className="flex h-full min-h-0 flex-1 flex-col overflow-hidden shadow-none ring-1 ring-slate-100">
+          <Card className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border-slate-200 bg-white shadow-none ring-1 ring-slate-100">
             <>
-                <div className="shrink-0 border-b border-slate-100 bg-white px-4 pb-3 pt-4">
+                <div className="shrink-0 border-b border-slate-100 px-4 pb-3 pt-4">
                   <CardHeader
                     title="Owner Action Panel"
                     action={
@@ -487,120 +718,156 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                       />
                     }
                   />
-                  <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-snug text-slate-500">
-                    <span className="font-semibold text-slate-900">{selectedOwnerTeam}</span>
-                    <span className="text-slate-300" aria-hidden>
-                      ·
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                        ownerPivotStatusPill(activeOwnerTeamDetails.notificationStatus)
-                      )}
-                    >
-                      {activeOwnerTeamDetails.notificationStatus}
-                    </span>
-                    <span className="text-slate-300" aria-hidden>
-                      ·
-                    </span>
-                    <span className="text-slate-600">{evidenceStatusPhrase(activeOwnerTeamDetails)}</span>
-                    {activeOwnerTeamDetails.lastNotifiedAt !== "—" ? (
-                      <>
-                        <span className="text-slate-300" aria-hidden>
-                          ·
-                        </span>
-                        <span className="tabular-nums text-slate-500">
-                          Last notified {activeOwnerTeamDetails.lastNotifiedAt}
-                        </span>
-                      </>
-                    ) : null}
-                  </p>
-                  <p className="mt-2 text-[11px] leading-snug text-slate-600">
-                    <span className="font-medium text-slate-800">
-                      Blocked at {ownerInsightRow.bottleneck}
-                    </span>
-                    <span className="text-slate-300"> · </span>
-                    <span className="tabular-nums text-slate-500">
-                      {ownerInsightRow.open} open · {ownerInsightRow.critical} critical ·{" "}
-                      {ownerInsightRow.decisionsNeeded} decisions · oldest {ownerInsightRow.oldestEvidenceAge}
+                  <p className="mt-1 text-[12px] font-medium text-slate-700">
+                    {selectedOwnerTeam}
+                    <span className="font-normal text-slate-500">
+                      {" "}
+                      · {ownerInsightRow.open} open · {ownerInsightRow.critical} critical
                     </span>
                   </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <Link
-                      href={ownerQueueHref}
-                      className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
-                    >
-                      Review owner queue →
-                    </Link>
-                    {activeOwnerTeamDetails.notificationStatus === "Pending" ? (
-                      <button
-                        type="button"
-                        onClick={notifyOwnerLead}
-                        className="text-[12px] font-semibold text-amber-800 underline decoration-amber-200 underline-offset-2 hover:text-amber-950"
-                      >
-                        Notify owner
-                      </button>
-                    ) : null}
-                  </div>
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
-                  <div className="space-y-2.5">
-                    <GovernanceLoopStatus
-                      compact
-                      variant="owner"
-                      currentStage={ownerInsightRow.governanceStage}
-                      stageSummary={ownerInsightRow.stageSummary}
-                    />
+                  <div className="space-y-3">
+                    <section
+                      className={cn(
+                        "rounded-md border border-slate-200 bg-white px-3 py-2.5",
+                        priorityRisk && "border-l-2",
+                        priorityRisk && TRIAGE_BORDER[triageTone(priorityRisk.severityLabel)]
+                      )}
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        What broke
+                      </p>
+                      {priorityRisk ? (
+                        <>
+                          <p className="mt-1 text-[13px] font-semibold leading-snug text-slate-900">
+                            {priorityRisk.title}
+                          </p>
+                          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] leading-snug text-slate-600">
+                            <span>{priorityRisk.systemName}</span>
+                            <span className="text-slate-300">·</span>
+                            <span>{priorityRisk.riskCategory}</span>
+                            <TriageBadge tone={triageTone(priorityRisk.severityLabel)}>
+                              {priorityRisk.severityLabel}
+                            </TriageBadge>
+                          </p>
+                        </>
+                      ) : (
+                        <p className="mt-1 text-[13px] leading-snug text-slate-700">
+                          No open risk for this owner.
+                        </p>
+                      )}
+                    </section>
 
-                    <div className="rounded-md border border-slate-100 bg-white px-2.5 py-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        Decision
+                    <section className="rounded-md border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Current step
                       </p>
-                      <p className="mt-0.5 text-[13px] font-semibold leading-snug text-slate-900">
-                        {ownerActionCopy.headline}
+                      <p className="mt-1">
+                        <TriageBadge tone={stepBadgeTone(priorityStep.kind)}>
+                          {priorityStep.step}
+                        </TriageBadge>
                       </p>
-                      <p className="mt-1 text-[11px] leading-snug text-slate-600">
-                        {ownerActionCopy.recommendedAction}
-                      </p>
-                    </div>
+                      <div className="mt-2">
+                        <GovernanceLoopStatus
+                          compact
+                          variant="owner"
+                          currentStage={ownerInsightRow.governanceStage}
+                          stageSummary={`${ownerInsightRow.open} open · ${ownerInsightRow.critical} critical`}
+                        />
+                      </div>
+                    </section>
 
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                        Priority
+                    <section className="rounded-md border border-slate-200 bg-white px-3 py-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Next action
                       </p>
-                      <ul className="mt-2 divide-y divide-slate-200">
-                        {ownerPriorityRows.map((row) => {
-                          const sys = governedSystems.find((s) => s.id === row.systemId);
-                          if (!sys) return null;
-                          const metaBits = [
-                            sys.primaryRisk,
-                            sys.status,
-                            sys.evidenceAge,
-                            ...(row.assignedMember ? [row.assignedMember] : [])
-                          ];
-                          return (
-                            <li key={row.systemId}>
-                              <button
-                                type="button"
-                                onClick={() => onPrioritySystemClick(row.systemId)}
-                                className="w-full cursor-pointer py-2.5 text-left transition hover:bg-slate-50/90"
-                              >
-                                <p className="text-[12px] font-semibold leading-snug text-slate-900">
-                                  {sys.name}
-                                </p>
-                                <p className="mt-0.5 text-[11px] leading-snug text-slate-700">
-                                  {row.decisionLine}
-                                </p>
-                                <p className="mt-0.5 text-[10px] leading-snug text-slate-500">
-                                  {metaBits.join(" · ")}
-                                </p>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
+                      <p className="mt-1 text-[12px] leading-snug text-slate-600">
+                        {priorityStep.detail}
+                      </p>
+                      <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+                        {priorityStep.kind === "monitoring" ? (
+                          <Link
+                            href={hrefForStep(priorityStep)}
+                            className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                          >
+                            Inspect runtime signals →
+                          </Link>
+                        ) : (
+                          <Link
+                            href={hrefForStep(
+                              priorityStep,
+                              priorityRisk?.incidentId,
+                              priorityActionId
+                            )}
+                            className="inline-flex items-center rounded-md bg-slate-900 px-3 py-1.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-slate-800"
+                          >
+                            {priorityStep.label} →
+                          </Link>
+                        )}
+                        {priorityRisk && priorityStep.kind !== "risk_detail" ? (
+                          <Link
+                            href={scopeHref(routeToIncident(priorityRisk.incidentId))}
+                            className="text-[12px] font-semibold text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-900"
+                          >
+                            Open risk detail
+                          </Link>
+                        ) : null}
+                        {activeOwnerTeamDetails.notificationStatus === "Pending" ? (
+                          <button
+                            type="button"
+                            onClick={notifyOwnerLead}
+                            className="text-[12px] font-semibold text-amber-800 underline decoration-amber-200 underline-offset-2 hover:text-amber-950"
+                          >
+                            Notify owner
+                          </button>
+                        ) : null}
+                      </div>
+                    </section>
+
+                    {ownerQueueRows.length > 0 ? (
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          Agents needing attention
+                        </p>
+                        <ul className="mt-1 divide-y divide-slate-100">
+                          {ownerQueueRows.slice(0, 4).map((row) => {
+                            const step = stepForRisk(row, 1);
+                            const attentionSelected =
+                              row.systemId === selectedSystemId ||
+                              row.systemCanonicalId === selectedSystem?.systemId;
+                            return (
+                              <li key={row.incidentId}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    onPrioritySystemClick(row.systemId, row.incidentId)
+                                  }
+                                  className={cn(
+                                    "relative w-full cursor-pointer py-2 pl-2 text-left transition",
+                                    attentionSelected ? SELECTED_ROW : "hover:bg-slate-50"
+                                  )}
+                                >
+                                  {attentionSelected ? (
+                                    <span className={SELECTED_ACCENT} aria-hidden />
+                                  ) : null}
+                                  <p className="flex flex-wrap items-center gap-x-2 text-[12px] font-semibold leading-snug text-slate-900">
+                                    <span>{row.systemName}</span>
+                                    <TriageBadge tone={triageTone(row.severityLabel)}>
+                                      {row.severityLabel}
+                                    </TriageBadge>
+                                  </p>
+                                  <p className="mt-0.5 text-[11px] text-slate-600">
+                                    {row.incidentId} · {step.label}
+                                  </p>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </>
@@ -609,71 +876,98 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
       </div>
 
       {/* Systems table */}
-      <div className="space-y-3">
-        <div>
+      <Card className="overflow-hidden shadow-none ring-1 ring-slate-100">
+        <div className="border-b border-slate-100 px-4 py-4">
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">
-            Systems Requiring Governance Action
+            Agents requiring governance action
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Prioritized AI systems with open governance incidents.
+          <p className="mt-1 text-[13px] text-slate-600">
+            {filters.ownerTeam || "All owners"}
+            {" · "}
+            {filteredSystems.length} governed{" "}
+            {filteredSystems.length === 1 ? "agent" : "agents"}
+            {" · "}
+            {filteredActiveRisks} active {filteredActiveRisks === 1 ? "risk" : "risks"}
+            {" · "}
+            {filteredCritical} critical
           </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <FilterSelect
-            label="Owner Team"
-            value={filters.ownerTeam}
-            onChange={onOwnerTeamFilterChange}
-            options={["", ...ownerTeams]}
-            format={(v) => v || "All"}
-          />
-          <FilterSelect
-            label="Risk Category"
-            value={filters.riskCategory}
-            onChange={(v) => setFilters((f) => ({ ...f, riskCategory: v }))}
-            options={["", "Technology Risk", "Output Reliability", "Cyber Risk", "Governance"]}
-            format={(v) => v || "All"}
-          />
-          <FilterSelect
-            label="Severity"
-            value={filters.severity}
-            onChange={(v) => setFilters((f) => ({ ...f, severity: v }))}
-            options={["", "Critical", "High", "Medium", "Low"]}
-            format={(v) => v || "All"}
-          />
-        </div>
-        {filters.ownerTeam ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-slate-50/90 px-3 py-2 text-[12px] text-slate-600">
-            <span>
-              Showing systems owned by:{" "}
-              <span className="font-medium text-slate-800">{filters.ownerTeam}</span>
-            </span>
-            <button
-              type="button"
-              onClick={clearOwnerFilter}
-              className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-            >
-              Clear
-            </button>
+          {selectedSystem ? (
+            <p className="mt-2 text-[12px] leading-snug text-slate-600">
+              <span className="font-semibold text-slate-900">{selectedSystem.name}</span>
+              <span className="text-slate-300"> · </span>
+              {selectedSystem.status} posture
+              <span className="text-slate-300"> · </span>
+              {selectedSystem.openIncidents} open
+              <span className="text-slate-300"> · </span>
+              Next: {selectedSystemStep.label}
+            </p>
+          ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <FilterSelect
+              label="Owner Team"
+              value={filters.ownerTeam}
+              onChange={onOwnerTeamFilterChange}
+              options={["", ...ownerTeams]}
+              format={(v) => v || "All"}
+            />
+            <FilterSelect
+              label="Risk Category"
+              value={filters.riskCategory}
+              onChange={(v) => setFilters((f) => ({ ...f, riskCategory: v }))}
+              options={["", "Technology Risk", "Output Reliability", "Cyber Risk", "Governance"]}
+              format={(v) => v || "All"}
+            />
+            <FilterSelect
+              label="Severity"
+              value={filters.severity}
+              onChange={(v) => setFilters((f) => ({ ...f, severity: v }))}
+              options={["", "Critical", "High", "Medium", "Low"]}
+              format={(v) => v || "All"}
+            />
+            {filters.ownerTeam ? (
+              <FilterChip
+                label={`Owner: ${filters.ownerTeam}`}
+                onClear={clearOwnerFilter}
+              />
+            ) : null}
+            {filters.riskCategory ? (
+              <FilterChip
+                label={`Risk: ${filters.riskCategory}`}
+                onClear={() => setFilters((f) => ({ ...f, riskCategory: "" }))}
+              />
+            ) : null}
+            {filters.severity ? (
+              <FilterChip
+                label={`Severity: ${filters.severity}`}
+                onClear={() => setFilters((f) => ({ ...f, severity: "" }))}
+              />
+            ) : null}
           </div>
-        ) : null}
-        <Card className="overflow-hidden shadow-none">
-          <div className="overflow-x-auto">
+        </div>
+        <div className="overflow-x-auto">
             <table className="w-full min-w-[960px] border-collapse text-[13px]">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2.5 text-left">AI System</th>
+                  <th className="px-3 py-2.5 text-left">Agent</th>
                   <th className="px-3 py-2.5 text-left">Type</th>
                   <th className="px-3 py-2.5 text-left">Platform</th>
                   <th className="px-3 py-2.5 text-left">Owner</th>
                   <th className="px-3 py-2.5 text-left">Primary Risk</th>
-                  <th className="px-3 py-2.5 text-left">Status</th>
+                  <th className="px-3 py-2.5 text-left">Posture</th>
                   <th className="px-3 py-2.5 text-right">Open</th>
                   <th className="px-3 py-2.5 text-right">Critical</th>
-                  <th className="px-3 py-2.5 text-left">Evidence Age</th>
-                  <th className="px-3 py-2.5 text-left">Next Action</th>
+                  <th className="px-3 py-2.5 text-left">Last evidence</th>
+                  <th className="px-3 py-2.5 text-left">Next step</th>
                 </tr>
               </thead>
               <tbody>
+                {filteredSystems.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="px-3 py-8 text-center text-[13px] text-slate-500">
+                      No agents match these filters. Clear a filter to see the governed fleet.
+                    </td>
+                  </tr>
+                ) : null}
                 {filteredSystems.map((sys) => {
                   const sel =
                     sys.ownerTeam === selectedOwnerTeam && sys.id === selectedSystemId;
@@ -687,14 +981,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                         if (e.key === "Enter" || e.key === " ") onSystemRowClick(sys);
                       }}
                       className={cn(
-                        "cursor-pointer border-b border-slate-100 transition-colors last:border-b-0",
-                        sel ? "bg-slate-50" : "hover:bg-slate-50/70"
+                        "cursor-pointer border-b border-slate-100 bg-white transition-colors last:border-b-0",
+                        sel ? SELECTED_ROW : "hover:bg-slate-50"
                       )}
                     >
                       <td className="relative px-3 py-2.5">
-                        {sel ? (
-                          <span className="absolute left-0 top-0 h-full w-0.5 bg-slate-900" aria-hidden />
-                        ) : null}
+                        {sel ? <span className={SELECTED_ACCENT} aria-hidden /> : null}
                         <span className="font-medium text-slate-900">{sys.name}</span>
                         <span className="ml-1.5 font-mono text-[11px] text-slate-400">{sys.id}</span>
                       </td>
@@ -703,19 +995,62 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                       <td className="px-3 py-2.5 text-slate-700">{sys.ownerTeam}</td>
                       <td className="px-3 py-2.5 text-slate-700">{sys.primaryRisk}</td>
                       <td className="px-3 py-2.5">
-                        <Badge tone={statusBadgeTone(sys.status)} size="xs">
-                          {sys.status}
-                        </Badge>
+                        <TriageBadge tone={triageTone(sys.status)}>{sys.status}</TriageBadge>
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-800">
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
                         {sys.openIncidents}
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">
-                        {sys.criticalIncidents}
+                      <td className="px-3 py-2.5 text-right">
+                        {sys.criticalIncidents > 0 ? (
+                          <TriageBadge tone="critical">{sys.criticalIncidents}</TriageBadge>
+                        ) : (
+                          <span className="tabular-nums text-slate-400">0</span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 tabular-nums text-slate-700">{sys.evidenceAge}</td>
                       <td className="px-3 py-2.5 text-[12px] font-medium text-slate-800">
-                        {sys.nextAction}
+                        {(() => {
+                          const risk = allQueueRows.find(
+                            (row) =>
+                              row.systemId === sys.id ||
+                              row.systemCanonicalId === sys.systemId
+                          );
+                          const step = stepForRisk(
+                            risk
+                              ? {
+                                  incidentId: risk.incidentId,
+                                  systemCanonicalId: risk.systemCanonicalId,
+                                  stage: risk.stage
+                                }
+                              : sys.openIncidents > 0 && flagshipRiskForSystem(sys.systemId)
+                                ? {
+                                    incidentId: flagshipRiskForSystem(sys.systemId) ?? "",
+                                    systemCanonicalId: sys.systemId,
+                                    stage: ""
+                                  }
+                                : null,
+                            sys.openIncidents
+                          );
+                          const actionId = risk
+                            ? primaryActions.find(
+                                (row) =>
+                                  row.alias_id === risk.incidentId ||
+                                  row.incident_id === risk.incidentId
+                              )?.id
+                            : undefined;
+                          if (step.kind === "monitoring") {
+                            return <span className="font-medium text-slate-500">Monitoring</span>;
+                          }
+                          return (
+                            <Link
+                              href={hrefForStep(step, risk?.incidentId ?? flagshipRiskForSystem(sys.systemId), actionId)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 hover:text-indigo-800"
+                            >
+                              {step.label}
+                            </Link>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -723,8 +1058,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
               </tbody>
             </table>
           </div>
-        </Card>
-      </div>
+      </Card>
 
       {/* Operational metrics — single scan-friendly snapshot */}
       <section aria-labelledby="dashboard-operational-metrics-heading" className="space-y-2">
@@ -750,7 +1084,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                 <OperationalMetricGrid
                   columns={4}
                   items={[
-                    { label: "Open incidents", value: loopMetrics.investigations.open },
+                    { label: "Active risks", value: loopMetrics.investigations.open },
                     {
                       label: "Awaiting approval",
                       value: loopMetrics.investigations.awaitingApproval
@@ -767,7 +1101,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                 href={scopeHref(routeToIncidentsOwnerQueue(selectedOwnerTeam))}
                 className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
-                Open Incident Queue →
+                Review risk queue →
               </Link>
             </div>
           </div>
@@ -808,7 +1142,7 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                 href={scopeHref(routes.outcomes())}
                 className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
               >
-                Evidence Library →
+                View outcome evidence →
               </Link>
             </div>
           </div>
@@ -871,24 +1205,20 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
   );
 }
 
-function evidenceStatusPhrase(details: OwnerTeamDetails): string {
-  switch (details.evidencePackStatus) {
-    case "Not generated":
-      return "Evidence not generated";
-    case "Generated":
-      return "Evidence generated";
-    case "Sent":
-      return "Evidence sent";
-    default:
-      return "Evidence";
-  }
-}
-
-function ownerPivotStatusPill(s: OwnerNotificationUIFlag): string {
-  if (s === "Pending") return "border border-amber-200 bg-amber-50 text-amber-900";
-  if (s === "Monitoring") return "border border-slate-200 bg-slate-50 text-slate-600";
-  if (s === "Acknowledged") return "border border-slate-200/80 bg-white text-slate-700";
-  return "border border-emerald-200/70 bg-emerald-50/80 text-emerald-900";
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+    >
+      {label}
+      <span aria-hidden className="text-slate-400">
+        ×
+      </span>
+      <span className="sr-only">Clear {label}</span>
+    </button>
+  );
 }
 
 function OwnerPivotToolbar({

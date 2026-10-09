@@ -20,7 +20,10 @@ import {
 } from "@/lib/governance-api";
 import { mapLiveSignalsFromApi } from "@/lib/governance-merge";
 import {
-  routeToEvidenceLibraryIncidentRecord,
+  flagshipRiskForSystem
+} from "@/lib/governed-fleet-registry";
+import {
+  routeToIncident,
   routeToIncidentsOwnerQueue,
   routes
 } from "@/lib/routes";
@@ -142,39 +145,45 @@ export function SystemGovernanceDetail({ systemId }: Props) {
         <FleetracAnalysisPanel summary={undefined} />
       )}
 
-      <DisclosureSection title="Open incidents" defaultOpen>
+      <DisclosureSection title="Open risks" defaultOpen>
         {openIncidents.length === 0 ? (
           <p className="text-[13px] text-slate-600">
-            No open incidents. Run a simulator pitch or scenario to generate governance events.
+            No open risks. Run a simulator pitch (e.g. Treasury unsupported claim) to generate
+            governance events
+            {flagshipRiskForSystem(systemId)
+              ? ` — flagship alias ${flagshipRiskForSystem(systemId)}`
+              : ""}
+            .
           </p>
         ) : (
           <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
-            {openIncidents.map((inc) => (
+            {openIncidents.map((inc) => {
+              const riskId = inc.alias_id ?? inc.id;
+              return (
               <li key={inc.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{inc.title}</p>
                   <p className="text-[11px] text-slate-600">
-                    {inc.alias_id ?? inc.id} · {inc.lifecycle} · {inc.severity}
+                    {riskId} · {inc.lifecycle} · {inc.severity}
                   </p>
                 </div>
                 <div className="flex gap-2">
                   <Link
-                    href={routeToIncidentsOwnerQueue(detail.owner_team)}
+                    href={routeToIncident(riskId)}
                     className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold"
                   >
-                    Queue
+                    Risk Detail
                   </Link>
-                  {inc.alias_id ? (
-                    <Link
-                      href={routeToEvidenceLibraryIncidentRecord(inc.alias_id, detail.owner_team)}
-                      className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold"
-                    >
-                      Evidence
-                    </Link>
-                  ) : null}
+                  <Link
+                    href={routeToIncidentsOwnerQueue(detail.owner_team, riskId)}
+                    className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold"
+                  >
+                    Risk Queue
+                  </Link>
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
         )}
       </DisclosureSection>
@@ -197,7 +206,7 @@ export function SystemGovernanceDetail({ systemId }: Props) {
           </ul>
         )}
         <Link href={routes.liveSignals()} className="mt-2 inline-block text-[11px] font-semibold text-slate-700">
-          Open Live Signals →
+          Inspect runtime signals →
         </Link>
       </DisclosureSection>
 

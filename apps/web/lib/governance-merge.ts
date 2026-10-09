@@ -15,9 +15,10 @@ import type {
   TeamLibraryRow
 } from "@/lib/evidence-library-types";
 import { INCIDENT_LIFECYCLE_ORDER } from "@/lib/evidence-library-types";
-import type {
-  OwnerReviewTableRow,
-  QueueTableRow
+import {
+  diagnosisLabelFor,
+  type OwnerReviewTableRow,
+  type QueueTableRow
 } from "@/lib/incident-queue-types";
 import type {
   LiveRuntimeSignal,
@@ -25,6 +26,7 @@ import type {
   LiveSignalSeverity
 } from "@/lib/live-signals-types";
 import type { LiveSignalsSummary } from "@/lib/live-signals-types";
+import { keyMetricLine } from "@/lib/live-signal-display";
 
 export function governanceApiEnabled(): boolean {
   return true;
@@ -109,6 +111,9 @@ export function mapLiveSignalRow(row: LiveSignalRowDTO): GovernanceLiveSignal {
     parentSpanId: row.parent_span_id ?? undefined,
     latencyMs: row.latency_ms ?? undefined,
     signalState: row.signal_state,
+    eventType: row.operation_type,
+    normalizedSignalType: row.normalized_signal_type,
+    keyMetric: keyMetricLine(row.evaluation_signals, row.latency_ms),
     governanceSource: "api"
   };
 }
@@ -175,11 +180,16 @@ export function mapApiOwnerQueueRow(
 ): OwnerReviewTableRow {
   const priority = row.priority as OwnerReviewTableRow["priority"];
   const incidentId = row.alias_id ?? row.id;
+  const recommended =
+    row.recommended_next_step?.trim() ||
+    row.summary.slice(0, 120);
   return {
     incidentId,
+    canonicalId: row.id,
     priority: priority === "P1" || priority === "P2" || priority === "P3" ? priority : "P2",
     title: row.title,
     systemId: row.display_system_id,
+    systemCanonicalId: row.system_id,
     systemName: row.system_name_alias ?? row.system_name,
     riskCategory: row.classification_category,
     severityLabel: capitalizeWord(row.severity),
@@ -188,11 +198,29 @@ export function mapApiOwnerQueueRow(
     evidenceItemsCount,
     evidenceSyncStatus: "Synced",
     ageLabel: formatAgeLabel(row.opened_at),
-    nextAction: "Open evidence record",
+    updatedLabel: formatAgeLabel(row.last_seen_at ?? row.updated_at),
+    nextAction: "Review risk detail",
     decisionNeeded: row.summary.slice(0, 80),
-    recommendedAction: row.summary.slice(0, 120),
+    recommendedAction: recommended,
     evidenceSummary: row.summary,
-    investigationTimeline: "Signal detected → Incident packaged → Owner review"
+    investigationTimeline: "Signal detected → Risk packaged → Review",
+    diagnosisFamily: row.diagnosis_family ?? null,
+    diagnosisLabel: diagnosisLabelFor(row.diagnosis_family),
+    severityReason: row.severity_reason ?? null,
+    highestSeverity: row.highest_severity
+      ? capitalizeWord(row.highest_severity)
+      : null,
+    responderTeam: row.responder_team ?? row.owner_team,
+    controlId: row.rule_id ?? null,
+    controlName: row.control_name ?? null,
+    metricName: row.metric_name ?? null,
+    thresholdValue: row.threshold_value ?? null,
+    thresholdOperator: row.threshold_operator ?? null,
+    latestObservedValue: row.latest_observed_value ?? null,
+    worstObservedValue: row.worst_observed_value ?? null,
+    eventCount: row.occurrence_count ?? null,
+    triggerEventId: row.trigger_event_id ?? null,
+    lastSeenAt: row.last_seen_at ?? null
   };
 }
 
@@ -208,6 +236,20 @@ export function buildOwnerQueueRowsFromApi(
   });
 }
 
+const SEVERITY_SORT: Record<string, number> = {
+  Critical: 0,
+  High: 1,
+  Medium: 2,
+  Low: 3
+};
+
+function queueRowPriority(row: QueueTableRow): number {
+  const sev = SEVERITY_SORT[row.severityLabel] ?? 9;
+  const escalated =
+    row.stage === "Action Approval" || row.stage === "Remediation" ? 0 : 1;
+  return sev * 10 + escalated;
+}
+
 export function buildGlobalOwnerQueueRowsFromApi(
   queues: Record<string, OwnerQueueResponseDTO | null>,
   evidenceByAlias: Record<string, EvidenceRecordDTO | null>
@@ -220,7 +262,11 @@ export function buildGlobalOwnerQueueRowsFromApi(
       rows.push({ ...mapApiOwnerQueueRow(row, count), ownerTeam: team });
     }
   }
-  return rows;
+  return rows.sort((a, b) => {
+    const pr = queueRowPriority(a) - queueRowPriority(b);
+    if (pr !== 0) return pr;
+    return (b.eventCount ?? 0) - (a.eventCount ?? 0);
+  });
 }
 
 export function findOwnerTeamInQueues(
@@ -364,7 +410,13 @@ export function mapApiEvidenceToDetail(dto: EvidenceRecordDTO): IncidentEvidence
     recommendedAction: analysis.recommended_actions[0] ?? "",
     expectedImpact: analysis.bounded_scope,
     nextStep: "Send remediation to Action Center.",
-    outcomeVerification: lifecycle.toLowerCase().includes("closed") ? "complete" : "not_started",
+    outcomeVerification:
+      lifecycle.toLowerCase().includes("closed") ||
+      dto.items.some((item) => item.kind === "verification_result")
+        ? "complete"
+        : "not_started",
+    outcomeResult: dto.items.find((item) => item.kind === "verification_result")?.reference_id,
+    outcomeReason: dto.items.find((item) => item.kind === "verification_result")?.summary,
     fleetracAnalysis: {
       narrative: analysis.summary,
       rootSignal: analysis.evidence_highlights[0] ?? analysis.summary,
@@ -411,7 +463,9 @@ export function mapEvidenceLibraryItemToOwnerRecord(
     evidenceCount: item.evidence_items_count,
     lastUpdated: "Live",
     confidence: "High",
-    nextAction: "View record"
+    nextAction: item.verification_summary
+      ? `${item.verification_outcome ?? "Verified"} · ${item.verification_summary.slice(0, 80)}`
+      : "View record"
   };
 }
 
@@ -480,10 +534,10 @@ export function buildLivePackagesFromApi(
         id: record.id,
         title: record.title,
         systemName: record.systemName,
-        outcome: "Closed",
+        outcome: item.verification_outcome ?? "Closed",
         closedAt: "Live",
         evidenceCount: record.evidenceCount,
-        verificationResult: "Recorded"
+        verificationResult: item.verification_summary ?? "Verified"
       });
     } else {
       out[team].active.push(record);

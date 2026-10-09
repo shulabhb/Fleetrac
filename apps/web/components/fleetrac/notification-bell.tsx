@@ -23,29 +23,50 @@ function hrefForNotification(
 ): string {
   const target = event.target ?? "incident-queue";
   if (target === "action-center") {
-    const qs = new URLSearchParams({ tab: "pending" });
-    if (event.incidentId) qs.set("action", event.incidentId);
-    return scopeHref(`${routes.actions()}?${qs.toString()}`);
+    const qs = new URLSearchParams();
+    if (event.kind === "verify") qs.set("tab", "ready");
+    else if (event.kind === "rollback" || event.kind === "follow_up") qs.set("tab", "closed");
+    if (event.actionId) qs.set("action", event.actionId);
+    else if (event.incidentId) qs.set("action", event.incidentId);
+    const query = qs.toString();
+    return scopeHref(query ? `${routes.actions()}?${query}` : routes.actions());
   }
   if (target === "evidence" && event.incidentId) {
     return scopeHref(
-      routeToEvidenceLibraryIncidentRecord(event.incidentId, event.ownerTeam)
+      routeToEvidenceLibraryIncidentRecord(event.incidentId, event.ownerTeam || undefined)
     );
   }
   if (event.incidentId) {
-    return scopeHref(routeToIncidentsOwnerQueue(event.ownerTeam, event.incidentId));
+    return scopeHref(routeToIncidentsOwnerQueue(event.ownerTeam || "Model Risk Management", event.incidentId));
   }
-  return scopeHref(routeToIncidentsOwnerQueue(event.ownerTeam));
+  return scopeHref(routeToIncidentsOwnerQueue(event.ownerTeam || "Model Risk Management"));
 }
 
 function openLabelFor(event: NotificationEvent): string {
+  switch (event.kind) {
+    case "verify":
+      return "Verify impact";
+    case "rollback":
+      return "Review rollback path";
+    case "follow_up":
+      return "Review follow-up";
+    case "improvement":
+      return "View outcome evidence";
+    case "severity":
+    case "regression":
+      return "Review risk";
+    case "decision":
+      return "Review governed action";
+    default:
+      break;
+  }
   switch (event.target ?? "incident-queue") {
     case "action-center":
-      return "Open Action Center";
+      return "Review governed action";
     case "evidence":
-      return "Open evidence record";
+      return "View outcome evidence";
     default:
-      return "Open Incident Queue";
+      return "Review risk";
   }
 }
 
@@ -221,6 +242,7 @@ export function NotificationBell({
                           openNotification(event);
                         }
                       }}
+                      aria-label={`${event.summary}. ${openLabelFor(event)}`}
                       className={cn(
                         "group flex w-full cursor-pointer gap-2 px-3 py-2.5 text-left transition hover:bg-slate-50",
                         !isRead && "bg-sky-50/40"
@@ -246,7 +268,7 @@ export function NotificationBell({
                           {event.channel} · {event.at}
                           {event.ownerTeam ? ` · ${event.ownerTeam}` : ""}
                         </p>
-                        <p className="mt-1 text-[10px] font-medium text-slate-600 opacity-0 transition group-hover:opacity-100">
+                        <p className="mt-1 text-[10px] font-medium text-slate-700">
                           {openLabelFor(event)} →
                         </p>
                       </div>

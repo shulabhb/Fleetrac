@@ -7,16 +7,19 @@ from app.fleet.registry import FLEET_SYSTEMS, RULE_SPECS
 
 
 RUNTIME_TABLES = (
-    "raw_events",
-    "normalized_events",
-    "incidents",
-    "evidence_records",
+    "severity_history",
+    "risk_assessments",
+    "signal_clusters",
     "evidence_items",
+    "evidence_records",
     "fleetrac_analysis",
+    "verification_outcomes",
+    "governed_actions",
     "notifications",
     "assignments",
-    "governed_actions",
-    "verification_outcomes",
+    "normalized_events",
+    "raw_events",
+    "incidents",
 )
 
 

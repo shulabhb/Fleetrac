@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight } from "lucide-react";
-import type { Action, ExecutionState } from "@/lib/action-types";
+import type { Action, ExecutionState, MonitoringStatus } from "@/lib/action-types";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
 import {
   routeToAction,
-  routeToBobInvestigation,
   routeToControl,
   routeToIncident
 } from "@/lib/routes";
@@ -134,20 +133,12 @@ export function ActionCard({
 
       <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5 pl-1.5 text-[11px]">
         <div className="flex items-center gap-3 text-slate-500">
-          {action.bob_investigation_id ? (
-            <Link
-              href={routeToBobInvestigation(action.bob_investigation_id)}
-              className="hover:text-slate-900 hover:underline"
-            >
-              Fleetrac analysis →
-            </Link>
-          ) : null}
           {action.related_incident_id ? (
             <Link
               href={routeToIncident(action.related_incident_id)}
               className="hover:text-slate-900 hover:underline"
             >
-              Incident →
+              Risk Detail →
             </Link>
           ) : null}
           {action.related_control_id ? (
@@ -155,7 +146,7 @@ export function ActionCard({
               href={routeToControl(action.related_control_id)}
               className="hover:text-slate-900 hover:underline"
             >
-              Control →
+              Agent controls →
             </Link>
           ) : null}
         </div>
@@ -163,7 +154,7 @@ export function ActionCard({
           href={href}
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 font-medium text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
         >
-          Review governed action
+          {actionCtaLabel(action.execution_status, action.monitoring_status)}
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
@@ -226,11 +217,11 @@ function PhaseBadge({
   // front so the scanner instantly knows where in the lifecycle this sits.
   const label =
     phase === "prepare"
-      ? "Prepared"
+      ? "Awaiting decision"
       : phase === "approved"
-        ? "Approved"
+        ? "Approved — verify impact"
         : phase === "executed"
-          ? "Executed"
+          ? "Under verification"
           : phase === "blocked"
             ? "Blocked"
             : phase === "closed"
@@ -279,11 +270,35 @@ function describeIfApproved(action: Action): string {
   return action.prepared_change_summary;
 }
 
+function actionCtaLabel(execution: ExecutionState, monitoring: MonitoringStatus): string {
+  if (execution === "awaiting_approval" || execution === "drafted" || execution === "prepared") {
+    return "Review decision";
+  }
+  if (monitoring === "rollback_recommended" || monitoring === "regression_detected") {
+    return "Review rollback";
+  }
+  if (monitoring === "improvement_observed") {
+    return "View outcome";
+  }
+  if (
+    execution === "approved" ||
+    execution === "ready_to_execute" ||
+    execution === "executed"
+  ) {
+    return "Verify impact";
+  }
+  if (execution === "monitoring_outcome" || monitoring === "monitoring_next_window") {
+    return "View verification";
+  }
+  return "Review governed action";
+}
+
 /**
- * Slim single-line row for embedding in system / incident / Bob surfaces
+ * Slim single-line row for embedding in system / risk surfaces
  * where full cards would be too heavy.
  */
 export function ActionMiniRow({ action }: { action: Action }) {
+  const cta = actionCtaLabel(action.execution_status, action.monitoring_status);
   return (
     <Link
       href={routeToAction(action.id)}
@@ -297,9 +312,10 @@ export function ActionMiniRow({ action }: { action: Action }) {
           {action.risk_level === "high" ? <RiskBadge risk={action.risk_level} /> : null}
           <span>{executionStateLabel(action.execution_status)}</span>
           {action.monitoring_status !== "not_applicable" ? (
-            <span>· monitored</span>
+            <MonitoringBadge status={action.monitoring_status} />
           ) : null}
         </div>
+        <p className="mt-0.5 text-[10px] font-medium text-slate-700">Next: {cta}</p>
       </div>
       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
     </Link>

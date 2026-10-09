@@ -15,17 +15,17 @@ export default async function SystemDetailPage({ params }: Props) {
   return (
     <GovernancePageShell
       loop="context"
-      eyebrow="Context · System detail"
-      title="System governance"
+      eyebrow="Context · Agent detail"
+      title="Agent governance"
       subtitle={systemId}
-      workflowLine="Telemetry and incidents inferred from simulator ingest pipeline"
+      workflowLine="Telemetry and risks inferred from simulator ingest pipeline"
       headerAction={
         <Link
           href={routes.systems()}
           className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          Back to registry
+          Back to Agent Fleet
         </Link>
       }
     >

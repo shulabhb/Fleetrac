@@ -17,9 +17,9 @@ import {
 } from "./operations-badges";
 import {
   routeToAction,
-  routeToBobInvestigation,
   routeToIntegrationSettings,
-  routeToSystem
+  routeToSystem,
+  routes
 } from "@/lib/routes";
 
 const OUTCOMES: (ExecutionConsoleOutcome | "all")[] = [
@@ -42,12 +42,12 @@ const SEVERITIES: (ExecutionConsoleSeverity | "all")[] = [
 
 /**
  * Governed operational acts — enterprise execution / audit log, not a shell.
- * Filters help operators trace lineage across systems, integrations, and Bob.
+ * Filters help operators trace lineage across systems, integrations, and actions.
  */
 export function ExecutionConsole({
   entries,
   title = "Execution Console",
-  caption = "Governed operational acts prepared, staged and executed by Bob. Every row links to the governing Action and target system where applicable.",
+  caption = "Governed operational acts prepared, staged, and executed with approval. Every row links to the governing action and target agent where applicable.",
   initialIntegrationId
 }: {
   entries: ExecutionConsoleEntry[];
@@ -227,10 +227,10 @@ function ExecutionRow({ entry }: { entry: ExecutionConsoleEntry }) {
         )}
         {entry.investigation_id && (
           <Link
-            href={routeToBobInvestigation(entry.investigation_id)}
+            href={routes.actions()}
             className="inline-flex items-center gap-0.5 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
           >
-            Bob
+            Action Center
             <ArrowRight className="h-3 w-3" />
           </Link>
         )}

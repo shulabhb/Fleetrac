@@ -2,10 +2,8 @@ import {
   Activity,
   AlertTriangle,
   LayoutDashboard,
-  LineChart,
   PlayCircle,
-  Server,
-  Settings
+  Server
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { routes } from "./routes";
@@ -19,23 +17,42 @@ export type NavItem = {
   loop: GovernanceLoop;
 };
 
-/** Product IA — calm, governance-first navigation (dashboard workflow is primary). */
+/**
+ * Primary IA — runtime agent governance loop (Phases A–E).
+ *
+ * Core loop only:
+ *   Overview → Agent Fleet → Runtime Monitor → Risk Queue → Action Center
+ *
+ * Secondary (sidebar footer / direct URL, not primary nav):
+ *   Outcomes (`/outcomes`) — historical evidence / audit search
+ *   Settings (`/settings`) — connectors / admin
+ *
+ * Redirected legacy destinations (see next.config.ts):
+ *   /bob, /activity, /controls, /usage → Overview or Agent Fleet
+ */
 export const navItems: NavItem[] = [
-  { label: "Dashboard", href: routes.dashboard(), icon: LayoutDashboard, loop: "orient" },
-  { label: "Live Signals", href: routes.liveSignals(), icon: Activity, loop: "observe" },
+  { label: "Overview", href: routes.dashboard(), icon: LayoutDashboard, loop: "orient" },
+  { label: "Agent Fleet", href: routes.systems(), icon: Server, loop: "context" },
+  { label: "Runtime Monitor", href: routes.liveSignals(), icon: Activity, loop: "observe" },
   {
-    label: "Incident Queue",
+    label: "Risk Queue",
     href: routes.incidents(),
     icon: AlertTriangle,
     loop: "investigate"
   },
-  { label: "System Registry", href: routes.systems(), icon: Server, loop: "context" },
-  { label: "Action Center", href: routes.actions(), icon: PlayCircle, loop: "act" },
-  { label: "Evidence Library", href: routes.outcomes(), icon: LineChart, loop: "measure" },
+  { label: "Action Center", href: routes.actions(), icon: PlayCircle, loop: "act" }
+];
+
+/** Secondary admin / audit destinations — do not compete with the primary loop. */
+export const secondaryNavItems: { label: string; href: string; caption: string }[] = [
   {
-    label: "Settings / Connectors",
+    label: "Outcomes Audit",
+    href: routes.outcomes(),
+    caption: "Verification outcomes · historical lookup"
+  },
+  {
+    label: "Settings",
     href: routes.settings(),
-    icon: Settings,
-    loop: "configure"
+    caption: "Connectors · admin"
   }
 ];

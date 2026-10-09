@@ -7,7 +7,7 @@ import {
   Target
 } from "lucide-react";
 import type { AccessPolicy } from "@/lib/action-types";
-import { BobOperatingModeBadge, actionTypeLabel } from "./index";
+import { InvestigationModeBadge, actionTypeLabel } from "./index";
 import { humanizeLabel } from "@/lib/present";
 
 /**
@@ -32,7 +32,7 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
             required before anything executes.
           </p>
         </div>
-        <BobOperatingModeBadge mode={policy.bob_operating_mode} />
+        <InvestigationModeBadge mode={policy.bob_operating_mode} />
       </header>
 
       {/* Trust summary — the governance contract, at a glance. */}
@@ -45,7 +45,7 @@ export function AccessPolicyPanel({ policy }: { policy: AccessPolicy }) {
           <span className="font-medium text-slate-800">
             {actionLevelLabel(policy.action_level)}
           </span>
-          . Bob remains approval-gated, bounded, audit-linked, and reversible by
+          . Investigation support remains approval-gated, bounded, audit-linked, and reversible by
           default where supported.
         </p>
       </div>

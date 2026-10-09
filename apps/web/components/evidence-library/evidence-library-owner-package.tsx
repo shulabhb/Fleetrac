@@ -78,7 +78,7 @@ export function EvidenceLibraryOwnerPackage({
     <div className="space-y-6">
       <nav className="flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
         <Link href={scopeHref(routeToEvidenceLibraryTeam())} className="hover:text-slate-800">
-          Evidence Library
+          Outcomes
         </Link>
         <ChevronRight className="h-3 w-3 shrink-0 text-slate-400" />
         <span className="font-medium text-slate-800">{ownerTeam}</span>

@@ -20,11 +20,11 @@ const EXEC_CFG: Record<
     className: "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
   },
   awaiting_approval: {
-    label: "Awaiting approval",
+    label: "Awaiting decision",
     className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
   },
   approved: {
-    label: "Approved",
+    label: "Approved — verify impact",
     className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
   },
   rejected: {
@@ -32,19 +32,19 @@ const EXEC_CFG: Record<
     className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
   },
   prepared: {
-    label: "Prepared",
+    label: "Awaiting decision",
     className: "bg-sky-50 text-sky-700 ring-1 ring-sky-200"
   },
   ready_to_execute: {
-    label: "Approved · ready",
+    label: "Approved — verify impact",
     className: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
   },
   executed: {
-    label: "Executed",
+    label: "Ready to verify",
     className: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
   },
   monitoring_outcome: {
-    label: "Monitoring outcome",
+    label: "Under verification",
     className: "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
   },
   closed: {
@@ -97,7 +97,7 @@ const APPROVAL_CFG: Record<
     className: "bg-slate-50 text-slate-600 ring-1 ring-slate-200"
   },
   pending: {
-    label: "Awaiting approval",
+    label: "Awaiting decision",
     className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
   },
   approved: {
@@ -253,7 +253,7 @@ const MON_CFG: Record<MonitoringStatus, { label: string; className: string }> = 
     className: "bg-slate-50 text-slate-500 ring-1 ring-slate-200"
   },
   monitoring_next_window: {
-    label: "Under monitoring",
+    label: "Under verification",
     className: "bg-violet-50 text-violet-700 ring-1 ring-violet-200"
   },
   awaiting_telemetry: {
@@ -265,15 +265,15 @@ const MON_CFG: Record<MonitoringStatus, { label: string; className: string }> = 
     className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
   },
   improvement_observed: {
-    label: "Improvement observed",
+    label: "Improved",
     className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
   },
   regression_detected: {
-    label: "Regression detected",
+    label: "Follow-up required",
     className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
   },
   rollback_recommended: {
-    label: "Rollback recommended",
+    label: "Rollback candidate",
     className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
   },
   reviewer_signoff_pending: {
@@ -304,9 +304,9 @@ export function MonitoringBadge({
   );
 }
 
-// --- Bob operating mode ---------------------------------------------------
+// --- Investigation / operating mode (legacy type name BobOperatingMode) ---
 
-const BOB_MODE_CFG: Record<
+const INVESTIGATION_MODE_CFG: Record<
   BobOperatingMode,
   { label: string; className: string }
 > = {
@@ -332,6 +332,7 @@ const BOB_MODE_CFG: Record<
   }
 };
 
+/** @deprecated Prefer InvestigationModeBadge — kept for import compatibility. */
 export function BobOperatingModeBadge({
   mode,
   className
@@ -339,7 +340,17 @@ export function BobOperatingModeBadge({
   mode: BobOperatingMode;
   className?: string;
 }) {
-  const c = BOB_MODE_CFG[mode];
+  return <InvestigationModeBadge mode={mode} className={className} />;
+}
+
+export function InvestigationModeBadge({
+  mode,
+  className
+}: {
+  mode: BobOperatingMode;
+  className?: string;
+}) {
+  const c = INVESTIGATION_MODE_CFG[mode];
   return (
     <span
       className={cn(
@@ -348,13 +359,13 @@ export function BobOperatingModeBadge({
         className
       )}
     >
-      Mode: {c.label}
+      Investigation: {c.label}
     </span>
   );
 }
 
 export function bobOperatingModeLabel(mode: BobOperatingMode): string {
-  return BOB_MODE_CFG[mode].label;
+  return INVESTIGATION_MODE_CFG[mode].label;
 }
 
 // --- Helpers for humanizing action types ----------------------------------

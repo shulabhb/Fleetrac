@@ -90,6 +90,7 @@ def append_cluster_evidence(
     incident_id: str,
     candidate,
     assessment,
+    explanation: str | None = None,
 ) -> None:
     record = db.query(EvidenceRecord).filter(EvidenceRecord.incident_id == incident_id).one_or_none()
     if record is None:
@@ -97,7 +98,9 @@ def append_cluster_evidence(
 
     role = candidate.evidence_role
     span = candidate.source_span_name or "span"
-    summary = f"[{role}] {span} signal={candidate.signal_type} trace={candidate.trace_id}"
+    summary = explanation or (
+        f"[{role}] {span} signal={candidate.signal_type} trace={candidate.trace_id}"
+    )
 
     existing = (
         db.query(EvidenceItem)

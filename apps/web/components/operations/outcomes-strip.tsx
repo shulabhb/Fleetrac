@@ -14,10 +14,9 @@ import { routes, routeToOutcomesTab } from "@/lib/routes";
  * from Action Center to Outcomes. Intentionally minimal — it reports post-
  * execution state only, not approval queues.
  *
- * Optionally accepts a `bobImpact` summary and renders its distinctive delta
- * metrics (recurrence reduced, reviewer burden reduced, control fires
- * reduced) as a secondary stat group, avoiding a redundant second strip on
- * the Dashboard.
+ * Optionally accepts a verification-impact summary and renders distinctive
+ * delta metrics (recurrence reduced, reviewer burden reduced) as a secondary
+ * group — avoiding a redundant second strip on the Dashboard.
  */
 export function OutcomesStrip({
   changes,
@@ -26,6 +25,7 @@ export function OutcomesStrip({
 }: {
   changes: Change[];
   density?: "full" | "compact";
+  /** @deprecated prop name retained; treat as verification impact summary */
   bobImpact?: BobImpactSummary | null;
 }) {
   const monitoring = changes.filter(
@@ -69,7 +69,7 @@ export function OutcomesStrip({
           href={routes.outcomes()}
           className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-slate-700 hover:text-slate-900"
         >
-          Evidence Library
+          Outcomes audit
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
@@ -86,7 +86,7 @@ export function OutcomesStrip({
         </>
       }
       caption="Verify executed changes, close evidence, or route rollback follow-up."
-      cta={{ label: "Evidence Library", href: routes.outcomes() }}
+      cta={{ label: "Outcomes audit", href: routes.outcomes() }}
       stats={
         <>
           <StripStat

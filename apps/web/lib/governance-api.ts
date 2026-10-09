@@ -118,6 +118,39 @@ export type OwnerQueueRowDTO = {
   reviewer: string | null;
   opened_at: string;
   updated_at: string;
+  diagnosis_family?: string | null;
+  severity_reason?: string | null;
+  assessment_confidence?: number | null;
+  occurrence_count?: number | null;
+  trace_count?: number | null;
+  highest_severity?: string | null;
+  /** Phase G — runtime breach snapshot */
+  rule_id?: string | null;
+  control_name?: string | null;
+  metric_name?: string | null;
+  threshold_value?: number | null;
+  threshold_operator?: string | null;
+  latest_observed_value?: number | null;
+  worst_observed_value?: number | null;
+  recommended_next_step?: string | null;
+  trigger_event_id?: string | null;
+  last_seen_at?: string | null;
+  signal_type?: string | null;
+};
+
+export type SeverityHistoryItemDTO = {
+  id: string;
+  previous_severity: string;
+  new_severity: string;
+  score: number;
+  reason: string;
+  assessment_id: string;
+  changed_at: string;
+};
+
+export type SeverityHistoryResponseDTO = {
+  items: SeverityHistoryItemDTO[];
+  total: number;
 };
 
 export type OwnerQueueResponseDTO = {
@@ -198,6 +231,11 @@ export type EvidenceLibraryItemDTO = {
   display_system_id: string;
   system_name: string;
   system_name_alias: string | null;
+  verification_outcome?: string | null;
+  verification_summary?: string | null;
+  verification_metric?: string | null;
+  verification_baseline?: number | null;
+  verification_post_action?: number | null;
 };
 
 export type EvidenceLibraryResponseDTO = {
@@ -284,6 +322,12 @@ export type GovernedActionDTO = {
   recommended_action: string;
   assigned_to?: string | null;
   created_at?: string | null;
+  updated_at?: string | null;
+  action_type?: string | null;
+  expected_metric?: string | null;
+  expected_direction?: string | null;
+  rollback_eligible?: boolean;
+  expected_result?: string | null;
 };
 
 export const GOVERNANCE_UPDATED_EVENT = "fleetrac-governance-updated";
@@ -296,10 +340,15 @@ export function notifyGovernanceUpdated(): void {
 export type NotificationDTO = {
   id: string;
   incident_id: string;
+  alias_id?: string | null;
+  owner_team?: string | null;
   channel: string;
   recipient: string;
   status: string;
   message: string;
+  kind?: string | null;
+  target?: string | null;
+  action_id?: string | null;
   created_at: string;
 };
 
@@ -373,6 +422,14 @@ export async function fetchEvidence(
 ): Promise<EvidenceRecordDTO | null> {
   return governanceFetch<EvidenceRecordDTO>(
     `/governance/evidence/${encodeURIComponent(incidentId)}`
+  );
+}
+
+export async function fetchSeverityHistory(
+  incidentId: string
+): Promise<SeverityHistoryResponseDTO | null> {
+  return governanceFetch<SeverityHistoryResponseDTO>(
+    `/governance/incidents/${encodeURIComponent(incidentId)}/severity-history`
   );
 }
 

@@ -43,6 +43,13 @@ IMPLEMENTED_SCENARIOS: dict[str, ScenarioConfig] = {
         expected_incident=False,
         status="implemented",
     ),
+    "soft_degradation": ScenarioConfig(
+        id="soft_degradation",
+        eligible_archetypes=("decision", "retrieval_grounded", "document", "security_operations"),
+        detection_phase=0,
+        expected_incident=False,
+        status="implemented",
+    ),
 }
 
 PLANNED_SCENARIOS: dict[str, ScenarioConfig] = {

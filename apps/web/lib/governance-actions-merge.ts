@@ -34,13 +34,19 @@ function mapStatus(status: string): GovernedActionStatus {
 
 function mapVerificationStatus(status: string): GovernedVerificationStatus {
   const normalized = status.toLowerCase();
-  if (normalized === "complete" || normalized.includes("improvement observed")) {
+  if (
+    normalized === "complete" ||
+    normalized.includes("improvement") ||
+    normalized.includes("rollback") ||
+    normalized.includes("regression") ||
+    normalized.includes("no material") ||
+    normalized.includes("follow")
+  ) {
     return "Complete";
   }
   if (
     normalized === "monitoring" ||
-    normalized === "awaiting measurement" ||
-    normalized.includes("no material change")
+    normalized === "awaiting measurement"
   ) {
     return "Awaiting measurement";
   }
@@ -75,20 +81,50 @@ export function mapApiActionToGoverned(
     executionMode: mapExecutionMode(dto.execution_mode),
     status: mapStatus(dto.status),
     verificationStatus: mapVerificationStatus(dto.verification_status),
+    rawVerificationStatus: dto.verification_status || "Not started",
     riskLevel: severityToRisk(dto.severity),
     createdAtLabel: dto.created_at
       ? formatRelativeTime(new Date(dto.created_at))
       : "Just now",
     createdAtMs: Number.isFinite(createdMs) ? createdMs : Date.now(),
-    governanceSource: "api"
+    governanceSource: "api",
+    expectedMetric: dto.expected_metric ?? null
   };
+}
+
+function isSupersededAction(dto: GovernedActionDTO): boolean {
+  return (
+    dto.status === "Superseded" ||
+    (dto.verification_status || "").toLowerCase() === "superseded"
+  );
+}
+
+/** One card per incident: recipe-backed row wins over a legacy duplicate. */
+export function primaryApiActions(apiItems: GovernedActionDTO[]): GovernedActionDTO[] {
+  const byIncident = new Map<string, GovernedActionDTO>();
+  for (const dto of apiItems) {
+    if (isSupersededAction(dto)) continue;
+    const key = dto.alias_id || dto.incident_id;
+    const current = byIncident.get(key);
+    if (!current || prefersAction(dto, current)) byIncident.set(key, dto);
+  }
+  return [...byIncident.values()];
+}
+
+function prefersAction(candidate: GovernedActionDTO, current: GovernedActionDTO): boolean {
+  const candidateRecipe = Boolean(candidate.expected_metric && candidate.expected_direction);
+  const currentRecipe = Boolean(current.expected_metric && current.expected_direction);
+  if (candidateRecipe !== currentRecipe) return candidateRecipe;
+  const candidateTs = candidate.created_at ? Date.parse(candidate.created_at) : 0;
+  const currentTs = current.created_at ? Date.parse(current.created_at) : 0;
+  return candidateTs > currentTs;
 }
 
 export function mapApiActionsToGovernedList(
   apiItems: GovernedActionDTO[],
   evidenceByAlias: Record<string, EvidenceRecordDTO | null> = {}
 ): GovernedAction[] {
-  return apiItems
+  return primaryApiActions(apiItems)
     .map((dto) => {
       const alias = dto.alias_id ?? dto.incident_id;
       return mapApiActionToGoverned(dto, evidenceByAlias[alias] ?? null);

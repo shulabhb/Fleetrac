@@ -4,9 +4,7 @@ Fill this before coding. Keep scope small. Prefer one vertical slice.
 
 ## Objective
 
-_What outcome should exist when this task is done?_
-
-Example: Harden Action Center verify path so Treasury `inc-mrm-001` closes after `improvement_observed` and Evidence Library shows verification evidence.
+One current in-app notification per risk. Update it on create, approve, verify, severity escalation to critical, and regression. Hide legacy Slack/email rows from the bell. Do not change Overview counts or the Owner Action Panel.
 
 ## Scope
 

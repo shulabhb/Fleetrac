@@ -20,9 +20,15 @@ from app.correlation.policies import POLICY_BY_FAMILY
 from app.db.models import FleetracAnalysisRow, Incident, RiskAssessment, SeverityHistory, SignalCluster
 from app.detection.engine import DetectionMatch
 from app.fleet.registry import SYSTEM_BY_ID, canonical_incident_id, incident_alias, responder_team_for_risk
+from app.governance.actions import ensure_action_for_incident
 from app.governance.evidence import append_cluster_evidence, ensure_evidence_for_incident
 from app.governance.incidents import _history_entry, _incident_title
-from app.governance.notifications import record_notification_and_assignment
+from app.governance.notifications import (
+    notify_regression,
+    notify_severity_escalation,
+    record_notification_and_assignment,
+)
+from app.governance.risk_snapshot import apply_breach_snapshot, evidence_explanation
 from app.schemas.fleetrac_event import FleetracEvent
 
 
@@ -216,10 +222,22 @@ def _upsert_incident(
     if incident is None:
         incident = db.query(Incident).filter(Incident.alias_id == alias_id).one_or_none()
 
+    trigger_span = (trigger_event.evaluation_signals or {}).get("span_name")
+    explanation = evidence_explanation(
+        system_id=cluster.system_id,
+        match=match,
+        occurrence_count=cluster.occurrence_count,
+        signal_type=signal_type,
+        trace_id=trigger_event.trace_id,
+        span_name=str(trigger_span) if trigger_span else None,
+        operation_type=trigger_event.operation_type,
+    )
+
     if incident is None:
         rule_id = match.rule_id if match else "correlation_policy"
         priority = match.priority if match else "P1"
         lifecycle = match.lifecycle_final if match else "Owner Review"
+        # Critical / security tool-scope → escalate into Action Approval when rule says so
         incident = Incident(
             id=canonical_id,
             alias_id=alias_id,
@@ -249,6 +267,15 @@ def _upsert_incident(
             trace_count=cluster.trace_count,
             cluster_id=cluster.id,
         )
+        apply_breach_snapshot(
+            incident,
+            match=match,
+            recommended_action=assessment.recommended_action,
+            trigger_event_id=trigger_event.event_id,
+            observed_at=trigger_event.timestamp,
+            signal_type=signal_type,
+            evaluation=dict(trigger_event.evaluation_signals or {}),
+        )
         db.add(incident)
         db.flush()
         ensure_evidence_for_incident(
@@ -257,13 +284,11 @@ def _upsert_incident(
             normalized_event_id=trigger_event.event_id,
             raw_event_id=trigger_event.raw_payload_reference,
             metric_value=match.metric_value if match else float(assessment.score),
-            summary=(
-                f"{assessment.diagnosis_label}: "
-                f"{trigger_event.evaluation_signals.get('span_name') or trigger_event.operation_type}"
-            ),
+            summary=explanation,
             signal_type=signal_type,
             system_id=cluster.system_id,
         )
+        ensure_action_for_incident(db, incident)
         record_notification_and_assignment(
             db,
             incident_id=incident.id,
@@ -290,6 +315,15 @@ def _upsert_incident(
         + " | "
         + "; ".join(assessment.reasons[:2])
     )
+    apply_breach_snapshot(
+        incident,
+        match=match,
+        recommended_action=assessment.recommended_action,
+        trigger_event_id=trigger_event.event_id,
+        observed_at=trigger_event.timestamp,
+        signal_type=signal_type,
+        evaluation=dict(trigger_event.evaluation_signals or {}),
+    )
     if previous != assessment.severity:
         incident.lifecycle_history = list(incident.lifecycle_history or []) + [
             _history_entry(
@@ -307,6 +341,16 @@ def _upsert_incident(
                 reason="; ".join(assessment.reasons[:3]),
                 assessment_id=assessment.assessment_id,
             )
+        )
+    ensure_action_for_incident(db, incident)
+    if incident.lifecycle == "Closed" and match is not None:
+        notify_regression(db, incident)
+    else:
+        notify_severity_escalation(
+            db,
+            incident,
+            previous=previous,
+            new=assessment.severity,
         )
     return incident
 
@@ -511,6 +555,18 @@ def reassess_cluster_for_incident(
     incident.occurrence_count = cluster.occurrence_count
     incident.trace_count = cluster.trace_count
 
+    # Prefer primary candidate for breach snapshot backfill (Phase G)
+    primary = next((c for c in candidates if c.evidence_role == "primary"), None) or candidates[-1]
+    apply_breach_snapshot(
+        incident,
+        match=None,
+        recommended_action=assessment.recommended_action,
+        trigger_event_id=primary.event_id,
+        observed_at=primary.timestamp,
+        signal_type=primary.signal_type or incident.signal_type,
+        evaluation=dict(primary.relevant_attributes or {}),
+    )
+
     if previous != assessment.severity:
         db.add(
             SeverityHistory(
@@ -522,6 +578,12 @@ def reassess_cluster_for_incident(
                 reason="; ".join(assessment.reasons[:3]),
                 assessment_id=assessment.assessment_id,
             )
+        )
+        notify_severity_escalation(
+            db,
+            incident,
+            previous=previous,
+            new=assessment.severity,
         )
 
     _persist_assessment(db, assessment, incident.id)
@@ -599,6 +661,15 @@ def process_correlation_event(
         incident_id=incident.id,
         candidate=candidate,
         assessment=assessment,
+        explanation=evidence_explanation(
+            system_id=cluster.system_id,
+            match=match,
+            occurrence_count=cluster.occurrence_count,
+            signal_type=candidate.signal_type,
+            trace_id=candidate.trace_id,
+            span_name=candidate.source_span_name,
+            operation_type=event.operation_type,
+        ),
     )
 
     event.incident_id = incident.id

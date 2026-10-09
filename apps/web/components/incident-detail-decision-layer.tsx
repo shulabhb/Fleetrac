@@ -72,7 +72,10 @@ const ownerOptions = [
   { value: "System owner", detail: "Service context and rollback authority" },
   { value: "Control owner", detail: "Policy and threshold accountability" },
   { value: "On-call engineer", detail: "Runtime investigation and mitigation" },
-  { value: "Bob Copilot", detail: "Bounded diagnosis and governed recommendation" }
+  {
+    value: "Fleetrac Analysis",
+    detail: "Bounded diagnosis and governed recommendation"
+  }
 ];
 
 const peopleOptions = [
@@ -196,7 +199,7 @@ function buildJiraDraft(params: {
     `Responder: ${params.specialist}`,
     "",
     `h2. Acceptance`,
-    "- Link Fleetrac incident and any Bob investigation",
+    "- Link Fleetrac risk and Fleetrac Analysis package",
     "- Document blast radius and rollback posture",
     "",
     `_Generated draft — policy-checked workflow applies._`
@@ -628,7 +631,7 @@ export function IncidentDetailDecisionLayer({
                 Last step · {latestStatus}
               </p>
               <p className="mt-0.5 text-[9px] leading-snug text-slate-400">
-                Bob is bounded, policy-checked, approval-gated, and audit-linked; governed execution
+                Fleetrac Analysis is bounded, policy-checked, approval-gated, and audit-linked; governed execution
                 only through Action Center.
               </p>
             </div>
@@ -736,7 +739,7 @@ function RoutingTabContent({
                 : "bg-indigo-600 text-white"
             )}
           >
-            {responseLane === "fleet" ? "Fleet lane" : "Bob lane"}
+            {responseLane === "fleet" ? "Fleet lane" : "Analysis lane"}
           </span>
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
           <span className="font-semibold text-slate-900">{assignedOwner}</span>
@@ -745,8 +748,8 @@ function RoutingTabContent({
         </div>
         <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
           {responseLane === "fleet"
-            ? "Human fleet owns acknowledgement, comms, and bridge — Bob stays optional for analysis."
-            : "Bob prepares bounded findings; fleet still approves governed changes in Action Center."}
+            ? "Human fleet owns acknowledgement, comms, and bridge — Fleetrac Analysis stays optional support."
+            : "Fleetrac Analysis prepares bounded findings; fleet still approves governed changes in Action Center."}
         </p>
       </div>
 
@@ -805,12 +808,12 @@ function RoutingTabContent({
             aria-checked={responseLane === "bob"}
             onClick={() => {
               setResponseLane("bob");
-              setAssignedOwner("Bob Copilot");
+              setAssignedOwner("Fleetrac Analysis");
               runResponseAction({
                 action: "bob_queue_assigned",
-                label: "Response lane: Bob Copilot",
-                details: `Incident "${incidentTitle}" routed to Bob's bounded investigation queue; recommendations remain policy-checked and approval-gated.`,
-                status: "Response assigned to Bob queue (bounded)"
+                label: "Response lane: Fleetrac Analysis",
+                details: `Risk "${incidentTitle}" routed to investigation support; recommendations remain policy-checked and approval-gated.`,
+                status: "Response assigned to investigation support (bounded)"
               });
             }}
             className={cn(
@@ -827,7 +830,7 @@ function RoutingTabContent({
                   responseLane === "bob" ? "text-white" : "text-indigo-600"
                 )}
               />
-              <span className="text-[12px] font-bold">Bob-assisted</span>
+              <span className="text-[12px] font-bold">Analysis-assisted</span>
             </div>
             <p
               className={cn(
@@ -835,7 +838,7 @@ function RoutingTabContent({
                 responseLane === "bob" ? "text-indigo-100" : "text-indigo-900/80"
               )}
             >
-              Route triage through Bob&apos;s bounded queue — still approval-gated and audit-linked for
+              Route triage through investigation support — still approval-gated and audit-linked for
               actions.
             </p>
           </button>
@@ -936,7 +939,7 @@ function RoutingTabContent({
               className="inline-flex h-9 items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-3 text-[11px] font-semibold text-indigo-900 transition hover:border-indigo-300 hover:bg-indigo-100"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              Open Bob
+              Fleetrac Analysis
             </Link>
           </div>
         </div>

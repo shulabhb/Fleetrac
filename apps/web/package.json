@@ -7,7 +7,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:risk-detail": "node --experimental-strip-types --test lib/risk-detail-copy.test.ts lib/action-verification-ux.test.ts lib/live-signal-display.test.ts lib/overview-summary.test.ts",
+    "demo:reset": "curl -s -X POST http://127.0.0.1:8000/api/v1/simulator/reset-demo",
+    "demo:stop": "curl -s -X POST http://127.0.0.1:8000/api/v1/simulator/stop",
+    "demo:baseline": "curl -s -X POST http://127.0.0.1:8000/api/v1/simulator/start -H 'Content-Type: application/json' -d '{\"mode\":\"continuous\",\"rate_profile\":\"baseline\",\"profile\":\"demo\",\"seed\":42}'",
+    "demo:treasury": "curl -s -X POST http://127.0.0.1:8000/api/v1/simulator/pitch/treasury_unsupported_claim",
+    "demo:phishing": "curl -s -X POST http://127.0.0.1:8000/api/v1/simulator/pitch/security_tool_scope",
+    "demo:platform": "curl -s -X POST http://127.0.0.1:8000/api/v1/simulator/pitch/cs_latency_regression",
+    "demo:health": "python3 ../../scripts/demo_health_check.py"
   },
   "dependencies": {
     "@radix-ui/react-tooltip": "^1.2.8",

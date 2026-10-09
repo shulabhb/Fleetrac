@@ -45,7 +45,7 @@ function iconFor(action: string): IconSpec {
     return { icon: Waypoints, tone: "text-indigo-700 bg-indigo-50 ring-indigo-100" };
   if (a === "owner.assigned" || a.startsWith("owner."))
     return { icon: UserRound, tone: "text-slate-700 bg-slate-100 ring-slate-200" };
-  // Bob-specific events get the Sparkles icon family (indigo) for quick scan.
+  // Analysis events get the Sparkles icon family (indigo) for quick scan.
   if (a.startsWith("bob.")) {
     if (a.includes("approved"))
       return { icon: ThumbsUp, tone: "text-indigo-600 bg-indigo-50 ring-indigo-100" };
@@ -80,17 +80,17 @@ const EVENT_LABELS: Record<string, string> = {
   "incident.false_positive": "False positive marked",
   "control.triggered": "Control triggered",
   "audit.threshold_breach_detected": "Audit floor breached",
-  "bob.investigation_opened": "Bob investigation opened",
-  "bob.recommendation_drafted": "Bob recommendation drafted",
-  "bob.recommendation_approved": "Bob recommendation approved",
-  "bob.recommendation_rejected": "Bob recommendation rejected",
-  "bob.escalation_suggested": "Bob suggested escalation",
-  "bob.control_tuning_suggested": "Bob suggested control tuning",
+  "bob.investigation_opened": "Fleetrac Analysis opened",
+  "bob.recommendation_drafted": "Bounded recommendation drafted",
+  "bob.recommendation_approved": "Bounded recommendation approved",
+  "bob.recommendation_rejected": "Bounded recommendation rejected",
+  "bob.escalation_suggested": "Escalation suggested",
+  "bob.control_tuning_suggested": "Control tuning suggested",
   "followup.scheduled": "Follow-up scheduled",
   "telemetry.processed": "Telemetry processed",
   "outreach.slack": "Slack alert sent",
   "outreach.jira": "Jira recorded",
-  "routing.bob_queue": "Response routed to Bob queue",
+  "routing.bob_queue": "Response routed to investigation support",
   "owner.assigned": "Assignment updated",
   "bridge.opened": "Incident bridge opened",
   "tool.logs.opened": "Logs opened",

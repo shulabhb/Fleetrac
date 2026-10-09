@@ -4,7 +4,7 @@ import type { ChangeLifecycleState } from "@/lib/operations-types";
  * Cross-surface helpers for the governed-remediation lifecycle.
  *
  * Fleetrac's governance story is:
- *   Bob drafts → Action Center governs → Outcomes measures
+ *   Risk Detail (Fleetrac Analysis) → Action Center (approve/verify) → Outcomes (audit)
  *
  * These helpers keep Action Center and Outcomes using identical labels,
  * verdicts, and recommended next steps so the workflow reads consistently
@@ -23,25 +23,25 @@ type ChangeLike = {
 export function outcomeLabel(state: ChangeLifecycleState | string): string {
   switch (state) {
     case "improvement_observed":
-      return "Improvement observed";
+      return "Improved";
     case "no_material_change":
       return "No material change";
     case "regression_detected":
-      return "Regression detected";
+      return "Follow-up required";
     case "rollback_candidate":
       return "Rollback candidate";
     case "follow_up_required":
       return "Follow-up required";
     case "monitoring":
-      return "Under monitoring";
+      return "Under verification";
     case "executed":
-      return "Executed · monitoring";
+      return "Approved — verify impact";
     case "closed":
       return "Closed";
     case "approved":
-      return "Approved";
+      return "Approved — verify impact";
     case "proposed":
-      return "Proposed";
+      return "Awaiting approval";
     default:
       return String(state).replace(/_/g, " ");
   }

@@ -14,7 +14,6 @@ from app.db.models import (
     GovernedActionRow,
     Incident,
     NormalizedEvent,
-    Notification,
     RawEvent,
     System,
     VerificationOutcomeRow,
@@ -187,13 +186,68 @@ def ingest_log(
     return IngestLogResponse(items=items, total=len(items))
 
 
+_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+_LIFECYCLE_ESCALATED = {"Action Approval", "Escalated", "Remediation"}
+
+
+def _owner_queue_sort_key(inc: Incident) -> tuple:
+    """Prioritize critical → escalated → newest last_seen → oldest unresolved."""
+    sev = _SEVERITY_RANK.get((inc.severity or "").lower(), 9)
+    escalated = 0 if inc.lifecycle in _LIFECYCLE_ESCALATED else 1
+    last = inc.last_seen_at or inc.updated_at
+    # Newest first among same severity/lifecycle
+    last_ts = -(last.timestamp() if last else 0)
+    opened = inc.opened_at.timestamp() if inc.opened_at else 0
+    return (sev, escalated, last_ts, opened)
+
+
+def _latest_eval_for_incident(db: Session, incident_id: str, metric_name: str | None = None) -> dict:
+    """Prefer an evaluation that carries the breached metric; else latest linked event."""
+    norms = (
+        db.query(NormalizedEvent)
+        .filter(NormalizedEvent.incident_id == incident_id)
+        .order_by(NormalizedEvent.timestamp.desc())
+        .limit(40)
+        .all()
+    )
+    if not norms:
+        return {}
+    if metric_name:
+        for norm in norms:
+            ev = norm.evaluation_signals or {}
+            if metric_name == "latency_ms" and (
+                ev.get("operation_latency_ms") is not None or ev.get("latency_ms") is not None
+            ):
+                return dict(ev)
+            if metric_name in ev:
+                return dict(ev)
+    return dict(norms[0].evaluation_signals or {})
+
+
 def owner_queue(db: Session, *, owner_team: str) -> OwnerQueueResponse:
+    from app.governance.risk_snapshot import backfill_breach_snapshot_if_needed
+
     rows = (
         db.query(Incident)
         .filter(Incident.responder_team == owner_team)
-        .order_by(Incident.updated_at.desc())
         .all()
     )
+    dirty = False
+    for inc in rows:
+        from app.governance.risk_snapshot import RULE_BY_SIGNAL
+
+        metric = inc.metric_name or (
+            RULE_BY_SIGNAL[inc.signal_type].threshold_field
+            if inc.signal_type in RULE_BY_SIGNAL
+            else None
+        )
+        if backfill_breach_snapshot_if_needed(
+            inc, _latest_eval_for_incident(db, inc.id, metric)
+        ):
+            dirty = True
+    if dirty:
+        db.commit()
+    rows = sorted(rows, key=_owner_queue_sort_key)
     items: list[OwnerQueueRow] = []
     for inc in rows:
         system = db.get(System, inc.system_id)
@@ -224,6 +278,17 @@ def owner_queue(db: Session, *, owner_team: str) -> OwnerQueueResponse:
                 occurrence_count=inc.occurrence_count,
                 trace_count=inc.trace_count,
                 highest_severity=inc.highest_severity,
+                rule_id=inc.rule_id,
+                control_name=inc.control_name,
+                metric_name=inc.metric_name,
+                threshold_value=inc.threshold_value,
+                threshold_operator=inc.threshold_operator,
+                latest_observed_value=inc.latest_observed_value,
+                worst_observed_value=inc.worst_observed_value,
+                recommended_next_step=inc.recommended_next_step,
+                trigger_event_id=inc.trigger_event_id,
+                last_seen_at=inc.last_seen_at,
+                signal_type=inc.signal_type,
                 **ident,
             )
         )
@@ -311,7 +376,10 @@ def dashboard_summary(db: Session) -> dict:
     )
     verification = (
         db.query(GovernedActionRow)
-        .filter(GovernedActionRow.verification_status != "Not started")
+        .filter(
+            GovernedActionRow.verification_status != "Not started",
+            GovernedActionRow.status != "Superseded",
+        )
         .count()
     )
     awaiting_approval = (
@@ -369,6 +437,12 @@ def evidence_library(db: Session, *, owner_team: str | None = None) -> dict:
             .filter(EvidenceRecord.incident_id == inc.id)
             .count()
         )
+        latest_verification = (
+            db.query(VerificationOutcomeRow)
+            .filter(VerificationOutcomeRow.incident_id == inc.id)
+            .order_by(VerificationOutcomeRow.created_at.desc())
+            .first()
+        )
         records.append(
             {
                 "incident_id": inc.id,
@@ -377,6 +451,13 @@ def evidence_library(db: Session, *, owner_team: str | None = None) -> dict:
                 "lifecycle": inc.lifecycle,
                 "owner_team": inc.owner_team,
                 "evidence_items_count": item_count,
+                "verification_outcome": latest_verification.outcome if latest_verification else None,
+                "verification_summary": latest_verification.summary if latest_verification else None,
+                "verification_metric": latest_verification.metric_name if latest_verification else None,
+                "verification_baseline": latest_verification.baseline_value if latest_verification else None,
+                "verification_post_action": latest_verification.post_action_value
+                if latest_verification
+                else None,
                 **ident,
             }
         )
@@ -553,16 +634,6 @@ def system_controls(db: Session, system_id: str) -> dict:
 
 
 def list_notifications(db: Session, *, limit: int = 50) -> list[dict]:
-    rows = db.query(Notification).order_by(Notification.created_at.desc()).limit(limit).all()
-    return [
-        {
-            "id": n.id,
-            "incident_id": n.incident_id,
-            "channel": n.channel,
-            "recipient": n.recipient,
-            "status": n.status,
-            "message": n.message,
-            "created_at": n.created_at.isoformat(),
-        }
-        for n in rows
-    ]
+    from app.governance.notifications import list_current_notifications
+
+    return list_current_notifications(db, limit=limit)

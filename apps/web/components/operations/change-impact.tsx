@@ -117,7 +117,7 @@ export function ChangeImpactCard({ change }: { change: Change }) {
       <div className="grid gap-3 rounded-md bg-slate-50 p-3 md:grid-cols-2">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-            Bob expected
+            Expected impact
           </p>
           <p className="mt-1 text-[12px] text-slate-700">
             {change.expected_impact_summary}

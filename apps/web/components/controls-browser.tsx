@@ -412,7 +412,7 @@ function compareControls(
       return a.rule.name.localeCompare(b.rule.name);
     case "priority":
     default:
-      // Smart default: Bob-flagged first, then recent fires, then severity,
+      // Smart default: investigation-flagged first, then recent fires, then severity,
       // then total fires. Keeps the most operationally urgent rows on top.
       if (Boolean(b.bob) !== Boolean(a.bob)) return b.bob ? 1 : -1;
       if (b.recentCount !== a.recentCount) return b.recentCount - a.recentCount;

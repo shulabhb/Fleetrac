@@ -88,7 +88,9 @@ export function IncidentDetailHero({
               className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-slate-300 bg-gradient-to-b from-slate-100 to-slate-200 px-4 text-[12px] font-semibold text-slate-950 shadow-sm transition hover:border-slate-900 hover:bg-gradient-to-b hover:from-slate-900 hover:to-black hover:text-white"
             >
               <SiOpenai className="h-4 w-4 shrink-0" />
-              {hasInvestigation ? "Open Bob investigation" : "Start Bob investigation"}
+              {hasInvestigation
+                ? "Open Fleetrac Analysis"
+                : "Open investigation support"}
             </Link>
             <Link
               href={actionHref}
@@ -157,8 +159,12 @@ export function IncidentDetailHero({
                 <QuickMenuButton onClick={() => flash("Routing set to Fleet owner lane.")}>
                   Route to Fleet owner
                 </QuickMenuButton>
-                <QuickMenuButton onClick={() => flash("Routing set to Bob queue (bounded).")}>
-                  Route to Bob queue
+                <QuickMenuButton
+                  onClick={() =>
+                    flash("Routing set to investigation support (bounded, approval-gated).")
+                  }
+                >
+                  Route to investigation support
                 </QuickMenuButton>
               </>
             }

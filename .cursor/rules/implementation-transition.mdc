@@ -1,0 +1,53 @@
+---
+description: Phased transition from mock/demo data to real OTEL ingest, normalization, and risk mitigation
+alwaysApply: true
+---
+
+# Mock → Implementation transition (ImplementationV1)
+
+Fleetrac is **incrementally replacing** demo mocks with a real governance pipeline. Do not add net-new mock catalogs or Excel fiction. Extend the live path one vertical slice at a time.
+
+## North star
+
+**Observe → normalize → detect risk → package evidence → human-gated mitigate → measure.**
+
+Production-shaped telemetry enters through **one ingest contract**; everything downstream reads SQLite (later Postgres), not `MOCK_STORE` or `*-mock.ts` rows.
+
+## Phase order (do not skip)
+
+| Phase | Goal | Done when |
+|-------|------|-----------|
+| **1 — OTEL ingest** | Simple, realistic OpenTelemetry-style spans/logs (`trace_id`, `span_id`, `operation`, `evaluation`, metadata-only) | `POST /api/v1/ingest/events` persists raw + normalized; pytest + raw log UI prove it |
+| **2 — Normalize** | Stable `FleetracEvent` from OTEL adapter (`pipeline/adapters/otel_agent.py`, `normalizer.py`) | Golden fixtures; model/system fields align to fleet registry |
+| **3 — Risk engine** | Rule evaluation + correlation → incidents (`detection/engine.py`, `correlator.py`) | At least one rule fires on realistic span; incident + evidence created |
+| **4 — Mitigate** | Governed response: notify, owner queue, evidence, Action Center handoff | Pitch path works end-to-end without mock row fallbacks |
+| **5 — Expand** | More rules, cloud adapters, continuous sim — **only after Phase 1–4 pass for one system** | Treasury/M40 or next approved system |
+
+**Current fleet scope:** 10 governed agents (`apps/api/app/fleet/registry.py`). System Registry and UI show these only.
+
+## Implementation rules
+
+1. **Ingest is the front door** — Simulator and future collectors MUST `POST` to `/api/v1/ingest/events`; never write incidents/signals directly to DB from generators.
+2. **OTEL first** — Prefer `otel_agent_trace` / `langgraph_trace` envelopes (`schemas/ingestion.py`) before adding new source types.
+3. **No parallel patterns** — Extend `ingest_pipeline.py`, `governance/read_models.py`, `governance-api.ts`, `governance-merge.ts`; do not duplicate ID graphs or label maps.
+4. **Mocks are legacy** — Do not add rows to `governance-*-mock.ts`. Empty/zero UI states beat fictional demo data when API has no events.
+5. **One system per slice** — Prove full loop on one system (default `sys-agt-treasury-001` / M40) before fleet-wide changes.
+6. **Tests per step** — Each phase needs pytest covering ingest → normalize → detect (and mitigation when in scope).
+7. **Trust language** — Detection and mitigation stay bounded, approval-gated, audit-linked; not autonomous AI.
+
+## Key paths
+
+- Ingest: `apps/api/app/api/routes/ingestion.py`, `services/ingest_pipeline.py`
+- OTEL schema: `apps/api/app/schemas/ingestion.py` (`RawOtelEnvelope`)
+- Pipeline: `apps/api/app/pipeline/`
+- Detection: `apps/api/app/detection/`
+- Governance read: `apps/api/app/governance/`
+- UI observe: `apps/web/components/live-signals/` (governed + raw ingest log tabs)
+- Client: `apps/web/lib/governance-api.ts`, `hooks/use-governance-data.ts`
+
+## Before merging implementation work
+
+- [ ] Change advances the **current phase** only (no scope creep)
+- [ ] Mock fallbacks not reintroduced on governance loop pages
+- [ ] `npm run build` + relevant `pytest` pass
+- [ ] `AGENTS.md` updated if phase boundaries or architecture shift
