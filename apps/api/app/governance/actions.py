@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -225,6 +226,86 @@ def approve_action(db: Session, action: GovernedActionRow) -> GovernedActionRow:
 
 
 def reject_action(db: Session, action: GovernedActionRow) -> GovernedActionRow:
+    from app.governance.notifications import sync_current_notification
+
     action.status = "Rejected"
     action.verification_status = "Not started"
+    inc = db.get(Incident, action.incident_id)
+    if inc and inc.lifecycle != "Closed":
+        advance_lifecycle(db, inc, "Closed", note="Governed action rejected")
+        sync_current_notification(db, inc, trigger="derive")
+    return action
+
+
+RESOLUTION_STATUSES = {
+    "rollback_required",
+    "externally_handled",
+    "follow_up_assigned",
+    "monitoring_continued",
+    "risk_accepted",
+    "resolved",
+}
+
+_CLOSE_ON_RESOLUTION = {"externally_handled", "risk_accepted", "resolved"}
+
+_DEFAULT_RESOLUTION_NOTES = {
+    "rollback_required": (
+        "Operator recorded rollback required. Fleetrac did not execute rollback or change agent code."
+    ),
+    "externally_handled": (
+        "Operator recorded this risk as handled outside Fleetrac. "
+        "Fleetrac did not execute rollback or change agent code."
+    ),
+    "follow_up_assigned": (
+        "Operator assigned follow-up review. Fleetrac recorded the decision and did not create a duplicate action."
+    ),
+    "monitoring_continued": (
+        "Operator chose to keep monitoring. Fleetrac recorded the decision only."
+    ),
+    "risk_accepted": "Operator accepted the risk for now. Fleetrac recorded the decision only.",
+    "resolved": (
+        "Operator marked the risk resolved after reviewing outcome evidence. "
+        "Fleetrac recorded the decision only."
+    ),
+}
+
+
+def record_action_resolution(
+    db: Session,
+    action: GovernedActionRow,
+    *,
+    resolution_status: str,
+    note: str = "",
+    recorded_by: str = "Fleet Governor",
+) -> GovernedActionRow:
+    """Record an operator decision after verification. Does not execute rollback or change code."""
+    status = (resolution_status or "").strip().lower()
+    if status not in RESOLUTION_STATUSES:
+        raise ValueError(f"Unknown resolution_status: {resolution_status}")
+
+    action.resolution_status = status
+    action.resolution_note = (note or "").strip() or _DEFAULT_RESOLUTION_NOTES[status]
+    action.resolution_recorded_at = datetime.now(timezone.utc)
+    action.resolution_recorded_by = recorded_by or "Fleet Governor"
+
+    inc = db.get(Incident, action.incident_id)
+    if inc is None:
+        return action
+
+    from app.governance.notifications import sync_current_notification
+
+    if status in _CLOSE_ON_RESOLUTION:
+        if action.status not in {"Rejected", "Policy-blocked", "Superseded"}:
+            action.status = "Closed"
+        if inc.lifecycle != "Closed":
+            advance_lifecycle(db, inc, "Closed", note=f"Resolution: {status}")
+    else:
+        if inc.lifecycle == "Closed":
+            advance_lifecycle(db, inc, "Verification", note=f"Resolution: {status}")
+        elif inc.lifecycle != "Verification":
+            advance_lifecycle(db, inc, "Verification", note=f"Resolution: {status}")
+        if action.status == "Closed" and status == "monitoring_continued":
+            action.status = "Monitoring"
+
+    sync_current_notification(db, inc, trigger="derive")
     return action

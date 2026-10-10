@@ -285,6 +285,12 @@ class GovernedActionRow(Base):
     expected_direction: Mapped[str | None] = mapped_column(String(32), nullable=True)
     rollback_eligible: Mapped[bool] = mapped_column(default=False)
     expected_result: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resolution_status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolution_recorded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolution_recorded_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

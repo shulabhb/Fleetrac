@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import { findOwnerTeamForQueueIncident } from "@/lib/governance-incident-routing";
-import { routeToIncidentsOwnerQueue, routes } from "@/lib/routes";
+import { routeToIncidentsQueue } from "@/lib/routes";
 
 type IncidentDetailPageProps = {
   params: Promise<{ id: string }>;
@@ -9,9 +8,5 @@ type IncidentDetailPageProps = {
 /** Legacy incident detail — route into the unified Incident Queue workbench. */
 export default async function IncidentDetailPage({ params }: IncidentDetailPageProps) {
   const { id } = await params;
-  const queueOwner = findOwnerTeamForQueueIncident(id);
-  if (queueOwner) {
-    redirect(routeToIncidentsOwnerQueue(queueOwner, id));
-  }
-  redirect(routes.incidents());
+  redirect(routeToIncidentsQueue({ incidentId: id }));
 }

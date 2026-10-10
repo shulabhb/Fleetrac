@@ -67,90 +67,85 @@ export type OverviewNextStep = {
   step: string;
 };
 
-export function overviewNextStep(input: {
-  openIncidents?: number;
-  lifecycle?: string | null;
-  actionStatus?: string | null;
-  verificationStatus?: string | null;
-  incidentId?: string | null;
-  bottleneck?: string | null;
-}): OverviewNextStep {
-  const verification = (input.verificationStatus ?? "").toLowerCase();
-  const status = (input.actionStatus ?? "").toLowerCase();
-  const lifecycle = (input.lifecycle ?? "").toLowerCase();
-  const open = input.openIncidents ?? 0;
-  const bottleneck = input.bottleneck?.trim() || "";
+/** Loop tab that matches the CTA wording — never Summary / analysis. */
+export type OverviewLoopTab = "decision" | "verification" | "evidence" | "history";
 
-  if (
-    verification.includes("rollback") ||
-    verification.includes("regression") ||
-    status.includes("rollback")
-  ) {
-    return {
-      kind: "rollback",
-      label: "Review rollback path",
-      detail: "Verification recorded a rollback candidate.",
-      step: "Rollback candidate"
-    };
+export function drawerTabForOverviewStep(kind: OverviewStepKind): OverviewLoopTab {
+  switch (kind) {
+    case "governed_action":
+      return "decision";
+    case "verify":
+    case "rollback":
+    case "follow_up":
+      return "verification";
+    case "outcome":
+      return "evidence";
+    case "risk_detail":
+      return "evidence";
+    default:
+      return "history";
   }
-  if (verification.includes("no material") || verification.includes("follow")) {
-    return {
-      kind: "follow_up",
-      label: "Review follow-up",
-      detail: "Verification recorded no material change.",
-      step: "Verification"
-    };
+}
+
+export function drawerTabForNotificationKind(kind: string | null | undefined): OverviewLoopTab {
+  switch (kind) {
+    case "decision":
+      return "decision";
+    case "verify":
+    case "rollback":
+    case "follow_up":
+    case "regression":
+      return "verification";
+    case "improvement":
+      return "evidence";
+    default:
+      return "history";
   }
-  if (verification.includes("improvement")) {
-    return {
-      kind: "outcome",
-      label: "View outcome evidence",
-      detail: "Verification recorded improvement.",
-      step: "Closed"
-    };
+}
+
+export type OverviewCtaSurface = "risk_detail" | "action_center" | "outcomes_audit";
+
+export function overviewStepKindFromNotification(
+  kind: string | null | undefined
+): OverviewStepKind {
+  switch (kind) {
+    case "decision":
+      return "governed_action";
+    case "verify":
+      return "verify";
+    case "rollback":
+    case "regression":
+      return "rollback";
+    case "follow_up":
+      return "follow_up";
+    case "improvement":
+      return "outcome";
+    default:
+      return "risk_detail";
   }
-  if (
-    status.includes("awaiting") ||
-    status.includes("pending") ||
-    lifecycle.includes("approval") ||
-    lifecycle.includes("owner review")
-  ) {
-    return {
-      kind: "governed_action",
-      label: "Review governed action",
-      detail: "A decision is waiting on this risk.",
-      step: bottleneck || "Action Approval"
-    };
+}
+
+/** Overview CTAs: Risk Detail only for fresh / owner / evidence review. */
+export function overviewCtaSurface(kind: OverviewStepKind): OverviewCtaSurface {
+  switch (kind) {
+    case "governed_action":
+    case "verify":
+    case "rollback":
+    case "follow_up":
+      return "action_center";
+    case "outcome":
+      return "outcomes_audit";
+    default:
+      return "risk_detail";
   }
-  if (
-    status === "approved" ||
-    status === "monitoring" ||
-    status === "executed" ||
-    lifecycle === "verification" ||
-    lifecycle === "remediation"
-  ) {
-    return {
-      kind: "verify",
-      label: "Verify impact",
-      detail: "The action is approved. Record the verification result.",
-      step: "Verification"
-    };
-  }
-  if (open > 0 || input.incidentId) {
-    const id = input.incidentId?.trim();
-    return {
-      kind: "risk_detail",
-      label: id ? `Review risk ${id}` : "Review risk detail",
-      detail: "Open the risk to read the breach and the evidence.",
-      step: bottleneck || "Owner Review"
-    };
-  }
-  return {
-    kind: "monitoring",
-    label: "Monitoring",
-    detail: "No threshold is breached for this owner.",
-    step: "Monitoring"
-  };
+}
+
+export function actionCenterTabForOverviewStep(
+  kind: OverviewStepKind
+): "pending" | "ready" | "closed" {
+  if (kind === "governed_action") return "pending";
+  if (kind === "verify") return "ready";
+  return "closed";
 }
 
 export function filterModels<T extends OverviewModel & { primaryRisk: string }>(

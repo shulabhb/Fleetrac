@@ -18,6 +18,18 @@ def test_action_handoff_approve_reject(client):
     reject = client.post(f"/api/v1/governance/actions/{action_id}/reject")
     assert reject.status_code == 200
     assert reject.json()["status"] == "Rejected"
+    evidence = client.get(f"/api/v1/governance/evidence/{INCIDENT_ALIAS_ID}")
+    assert evidence.status_code == 200
+    assert evidence.json()["lifecycle"] == "Closed"
+
+    again = client.post(
+        f"/api/v1/governance/incidents/{INCIDENT_ALIAS_ID}/actions",
+        json={"execution_mode": "approval_required"},
+    )
+    assert again.status_code == 200
+    assert again.json()["action_id"] == action_id
+    evidence_after = client.get(f"/api/v1/governance/evidence/{INCIDENT_ALIAS_ID}")
+    assert evidence_after.json()["lifecycle"] == "Closed"
 
 
 def test_verification_regression_outcome(client):

@@ -1,5 +1,3 @@
-import { findOwnerTeamForQueueIncident } from "@/lib/governance-incident-routing";
-
 /**
  * Canonical route builders for Fleetrac.
  *
@@ -66,6 +64,7 @@ export const routes = {
   incidents: () => "/incidents",
   activity: () => "/activity",
   systems: () => "/systems",
+  codeInvestigations: () => "/code-investigations",
   controls: () => "/controls",
   actions: () => "/actions",
   outcomes: () => "/outcomes",
@@ -79,9 +78,7 @@ export const routes = {
 // ---------------------------------------------------------------------------
 
 export function routeToIncident(id: string): string {
-  const owner = findOwnerTeamForQueueIncident(id);
-  if (owner) return routeToIncidentsQueue({ ownerTeam: owner, incidentId: id });
-  return `/incidents/${encodeURIComponent(id)}`;
+  return routeToIncidentsQueue({ incidentId: id });
 }
 
 /** Incident Queue workbench — global or owner-scoped (`queue=owner`). */
@@ -229,6 +226,31 @@ export function routeToOutcomesTab(tab: OutcomesSegment): string {
 
 export function routeToActionsTab(tab: ActionSegment): string {
   return `/actions?tab=${encodeURIComponent(tab)}`;
+}
+
+/** Action Center with one governed action selected (list lane, not Risk Detail). */
+export function routeToActionCenterAction(
+  actionOrIncidentId: string,
+  tab: "pending" | "ready" | "closed"
+): string {
+  const qs = new URLSearchParams();
+  if (tab !== "pending") qs.set("tab", tab);
+  qs.set("action", actionOrIncidentId);
+  return `/actions?${qs.toString()}`;
+}
+
+/** Outcomes Audit opened on one incident evidence record. */
+export function routeToOutcomesAuditIncident(
+  incidentId: string,
+  ownerTeam?: string
+): string {
+  const qs = new URLSearchParams({
+    surface: "audit",
+    evidenceMode: "incident-record",
+    incidentId
+  });
+  if (ownerTeam) qs.set("owner", ownerTeam);
+  return `/outcomes?${qs.toString()}`;
 }
 
 /** @deprecated `/bob` redirects to Overview. */

@@ -72,7 +72,7 @@ export function ExecutionStateBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center rounded-none px-1.5 py-0.5 text-[11px] font-medium",
         c.className,
         className
       )}
@@ -125,7 +125,7 @@ export function ApprovalStateBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center rounded-none px-1.5 py-0.5 text-[11px] font-medium",
         c.className,
         className
       )}
@@ -139,16 +139,16 @@ export function ApprovalStateBadge({
 
 const RISK_CFG: Record<RiskLevel, { label: string; className: string }> = {
   low: {
-    label: "Low risk",
-    className: "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
+    label: "Low",
+    className: "bg-emerald-700 text-white"
   },
   medium: {
-    label: "Medium risk",
-    className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
+    label: "Medium",
+    className: "bg-amber-100 text-amber-900"
   },
   high: {
-    label: "High risk",
-    className: "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
+    label: "High",
+    className: "bg-orange-700 text-white"
   }
 };
 
@@ -163,21 +163,11 @@ export function RiskBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center rounded-none px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide",
         c.className,
         className
       )}
     >
-      <span
-        className={cn(
-          "h-1.5 w-1.5 rounded-full",
-          risk === "high"
-            ? "bg-rose-500"
-            : risk === "medium"
-              ? "bg-amber-500"
-              : "bg-slate-400"
-        )}
-      />
       {c.label}
     </span>
   );
@@ -196,7 +186,7 @@ const BLAST_LABELS: Record<BlastRadius, string> = {
 
 export function BlastRadiusBadge({ radius }: { radius: BlastRadius }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
+    <span className="inline-flex items-center gap-1 rounded-none bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-800">
       <svg
         aria-hidden
         viewBox="0 0 12 12"
@@ -217,7 +207,7 @@ export function ReversibleBadge({ reversible }: { reversible: boolean }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center gap-1 rounded-none px-1.5 py-0.5 text-[11px] font-medium",
         reversible
           ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
           : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
@@ -239,7 +229,7 @@ const EXEC_MODE_LABELS: Record<ExecutionMode, string> = {
 
 export function ExecutionModeChip({ mode }: { mode: ExecutionMode }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 ring-1 ring-indigo-100">
+    <span className="inline-flex items-center gap-1 rounded-none bg-sky-800 px-1.5 py-0.5 text-[11px] font-semibold text-white">
       {EXEC_MODE_LABELS[mode]}
     </span>
   );
@@ -294,7 +284,7 @@ export function MonitoringBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center rounded-none px-1.5 py-0.5 text-[11px] font-medium",
         c.className,
         className
       )}
@@ -354,7 +344,7 @@ export function InvestigationModeBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center gap-1 rounded-none px-1.5 py-0.5 text-[11px] font-medium",
         c.className,
         className
       )}

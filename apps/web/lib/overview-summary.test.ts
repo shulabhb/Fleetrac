@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  actionCenterTabForOverviewStep,
   countDemoRisks,
+  drawerTabForNotificationKind,
+  drawerTabForOverviewStep,
   filterModels,
-  overviewNextStep,
+  overviewCtaSurface,
+  overviewStepKindFromNotification,
   pickHighestPriorityModel,
   verificationResultCount
 } from "./overview-summary.ts";
+import { overviewNextStep } from "./resolve-next-step.ts";
 
 const demo = (id: string) => id.startsWith("sys-agt-");
 
@@ -69,7 +74,7 @@ describe("Overview summary", () => {
         actionStatus: "Awaiting approval",
         lifecycle: "Action Approval"
       }).label,
-      "Review governed action"
+      "Approve governed action"
     );
     assert.equal(
       overviewNextStep({ actionStatus: "Approved", verificationStatus: "Monitoring" }).label,
@@ -77,13 +82,33 @@ describe("Overview summary", () => {
     );
     assert.equal(
       overviewNextStep({ verificationStatus: "Improvement Observed" }).label,
-      "View outcome evidence"
+      "Close risk"
     );
     assert.equal(overviewNextStep({ openIncidents: 0 }).label, "Monitoring");
     assert.equal(
       overviewNextStep({ openIncidents: 1, incidentId: "inc-sec-001" }).label,
-      "Review risk inc-sec-001"
+      "Review risk evidence"
     );
+    assert.equal(drawerTabForOverviewStep("rollback"), "verification");
+    assert.equal(drawerTabForOverviewStep("follow_up"), "verification");
+    assert.equal(drawerTabForOverviewStep("governed_action"), "decision");
+    assert.equal(drawerTabForOverviewStep("verify"), "verification");
+    assert.equal(drawerTabForOverviewStep("outcome"), "evidence");
+    assert.equal(drawerTabForNotificationKind("rollback"), "verification");
+    assert.equal(drawerTabForNotificationKind("decision"), "decision");
+    assert.equal(
+      overviewNextStep({ lifecycle: "Owner Review", incidentId: "inc-sec-001" }).kind,
+      "risk_detail"
+    );
+    assert.equal(overviewCtaSurface("risk_detail"), "risk_detail");
+    assert.equal(overviewCtaSurface("governed_action"), "action_center");
+    assert.equal(overviewCtaSurface("verify"), "action_center");
+    assert.equal(overviewCtaSurface("rollback"), "action_center");
+    assert.equal(overviewCtaSurface("follow_up"), "action_center");
+    assert.equal(overviewCtaSurface("outcome"), "outcomes_audit");
+    assert.equal(actionCenterTabForOverviewStep("rollback"), "closed");
+    assert.equal(actionCenterTabForOverviewStep("verify"), "ready");
+    assert.equal(overviewStepKindFromNotification("improvement"), "outcome");
   });
 
   it("sums verification results from backend counters", () => {

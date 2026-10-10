@@ -2,27 +2,27 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
-import { RiskDetailPanel } from "@/components/incidents/risk-detail-panel";
+import { RiskTriageDrawer, type RiskDrawerTab } from "@/components/incidents/risk-detail-panel";
+import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
-import { SummaryMini } from "@/components/ui/summary-mini";
 import { cn } from "@/lib/cn";
 import { normalizeAiScope, withAiScope, type AiScopeId } from "@/lib/ai-scope";
-import { buildOwnerInsightsFromApi } from "@/lib/dashboard-merge";
 import { handoffIncidentToActionCenter } from "@/lib/governance-api";
 import {
   buildGlobalOwnerQueueRowsFromApi,
   buildOwnerQueueRowsFromApi
 } from "@/lib/governance-merge";
 import {
-  PRIMARY_OWNER_QUEUE_TEAMS,
   type OwnerReviewTableRow,
   type QueueTableRow
 } from "@/lib/incident-queue-types";
 import { primaryApiActions } from "@/lib/governance-actions-merge";
 import { isDemoAgent } from "@/lib/governed-fleet-registry";
 import { useGovernanceData } from "@/hooks/use-governance-data";
+import { drawerTabForOverviewStep } from "@/lib/overview-summary";
+import { categoryToOverviewKind, resolveIncidentLifecycle } from "@/lib/resolve-next-step";
 import {
   routeToIncidentsOwnerQueue,
   routeToIncidentsQueue,
@@ -86,16 +86,19 @@ export function pickDefaultOwnerIncident(
   return sorted[0] as OwnerReviewTableRow;
 }
 
-function severityTextClass(severity: string): string {
-  if (severity === "Critical" || severity === "High") return "text-rose-800";
-  if (severity === "Medium") return "text-amber-800";
-  return "text-emerald-800";
+function severityBadgeTone(
+  severity: string
+): "critical" | "high" | "medium" | "low" {
+  if (severity === "Critical") return "critical";
+  if (severity === "High") return "high";
+  if (severity === "Medium") return "medium";
+  return "low";
 }
 
-function actionHintForRow(
+function nextStepForRow(
   row: QueueTableRow,
   actions: ReturnType<typeof useGovernanceData>["actions"]
-): string {
+) {
   const linked =
     primaryApiActions(
       actions.filter(
@@ -105,15 +108,27 @@ function actionHintForRow(
           a.incident_id === row.canonicalId
       )
     )[0] ?? null;
-  if (!linked) return "Review governed action";
-  const verification = linked.verification_status.toLowerCase();
-  const status = linked.status.toLowerCase();
-  if (verification.includes("rollback") || status.includes("rollback")) return "Review rollback path";
-  if (verification.includes("no material") || verification.includes("follow")) return "Review follow-up";
-  if (verification.includes("improvement")) return "View outcome";
-  if (status.includes("awaiting")) return "Review decision";
-  if (status.includes("approved") || verification.includes("monitor")) return "Verify impact";
-  return linked.status;
+  return resolveIncidentLifecycle({
+    openIncidents: 1,
+    lifecycle: row.stage,
+    actionStatus: linked?.status,
+    verificationStatus: linked?.verification_status,
+    resolutionStatus: linked?.resolution_status,
+    actionId: linked?.id,
+    incidentId: row.incidentId,
+    severity: row.severityLabel,
+    ownerTeam: row.ownerTeam ?? row.responderTeam,
+    evidenceCount: row.evidenceItemsCount
+  });
+}
+
+function drawerTabForRow(
+  row: QueueTableRow,
+  actions: ReturnType<typeof useGovernanceData>["actions"]
+): RiskDrawerTab {
+  return drawerTabForOverviewStep(
+    categoryToOverviewKind(nextStepForRow(row, actions).category)
+  );
 }
 
 export function IncidentQueueWorkspace() {
@@ -123,7 +138,6 @@ export function IncidentQueueWorkspace() {
   const {
     ownerQueues,
     evidenceByAlias,
-    dashboard,
     actions,
     loading
   } = useGovernanceData();
@@ -158,24 +172,35 @@ export function IncidentQueueWorkspace() {
     );
   }, [isOwnerScoped, ownerParam, ownerQueues, evidenceByAlias, incidentParam]);
 
-  const ownerInsights = useMemo(
-    () => buildOwnerInsightsFromApi(ownerQueues, dashboard),
-    [ownerQueues, dashboard]
-  );
-
   const [stageFilter, setStageFilter] = useState("All");
   const [severityFilter, setSeverityFilter] = useState("All");
+  const [teamFilter, setTeamFilter] = useState("All");
   const [selectedId, setSelectedId] = useState<string | null>(incidentParam);
+  const [drawerOpen, setDrawerOpen] = useState(Boolean(incidentParam));
+  const [drawerTab, setDrawerTab] = useState<RiskDrawerTab>("decision");
+  const dismissedIncident = useRef<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  const teamOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        allRows
+          .map((row) => row.ownerTeam || row.responderTeam || "")
+          .filter((team) => team.length > 0)
+      )
+    ).sort();
+  }, [allRows]);
 
   const filteredRows = useMemo(() => {
     return allRows.filter((row) => {
       if (stageFilter !== "All" && row.stage !== stageFilter) return false;
       if (severityFilter !== "All" && row.severityLabel !== severityFilter) return false;
+      const team = row.ownerTeam || row.responderTeam || "";
+      if (teamFilter !== "All" && team !== teamFilter) return false;
       return true;
     });
-  }, [allRows, stageFilter, severityFilter]);
+  }, [allRows, stageFilter, severityFilter, teamFilter]);
 
   const syncUrl = useCallback(
     (incidentId: string | null) => {
@@ -186,6 +211,7 @@ export function IncidentQueueWorkspace() {
       }
       if (stageFilter !== "All") qs.set("stage", stageFilter);
       if (severityFilter !== "All") qs.set("severity", severityFilter);
+      if (teamFilter !== "All") qs.set("team", teamFilter);
       if (incidentId) qs.set("incident", incidentId);
       const scopeQs = new URLSearchParams(window.location.search).get("scope");
       if (scopeQs) qs.set("scope", scopeQs);
@@ -199,7 +225,8 @@ export function IncidentQueueWorkspace() {
       isOwnerScoped,
       ownerParam,
       stageFilter,
-      severityFilter
+      severityFilter,
+      teamFilter
     ]
   );
 
@@ -225,6 +252,13 @@ export function IncidentQueueWorkspace() {
     () => filteredRows.find((r) => r.incidentId === selectedId) ?? null,
     [filteredRows, selectedId]
   );
+
+  useEffect(() => {
+    if (!selectedRow) return;
+    setDrawerTab(drawerTabForRow(selectedRow, actions));
+    // Tab follows the selected risk's current step, not live action polls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRow?.incidentId]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -255,11 +289,6 @@ export function IncidentQueueWorkspace() {
     showToast("Sent to Action Center");
   };
 
-  const openCount = filteredRows.filter((r) => r.stage !== "Closed").length;
-  const criticalCount = filteredRows.filter(
-    (r) => r.severityLabel === "Critical" || r.severityLabel === "High"
-  ).length;
-
   return (
     <div className="space-y-5">
       <header className="space-y-3 border-b border-slate-100 pb-4">
@@ -271,8 +300,7 @@ export function IncidentQueueWorkspace() {
             Risk Queue
           </h1>
           <p className="mt-1 text-[13px] text-slate-600">
-            Active governance risks from correlated runtime signals — select a risk to review
-            diagnosis, evidence, and next action.
+            Active governance risks from correlated runtime signals. Select a risk to open triage.
           </p>
         </div>
         {isOwnerScoped && ownerParam ? (
@@ -294,23 +322,6 @@ export function IncidentQueueWorkspace() {
           </div>
         ) : null}
       </header>
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <SummaryMini label="Open risks" value={String(openCount)} />
-        <SummaryMini label="Critical / high" value={String(criticalCount)} />
-        <SummaryMini
-          label="Decisions needed"
-          value={String(dashboard?.decisions_needed ?? 0)}
-        />
-        <SummaryMini
-          label="Teams with open risks"
-          value={String(
-            ownerInsights.filter((o) =>
-              (PRIMARY_OWNER_QUEUE_TEAMS as readonly string[]).includes(o.ownerTeam)
-            ).filter((o) => o.open > 0).length
-          )}
-        />
-      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Select
@@ -335,9 +346,22 @@ export function IncidentQueueWorkspace() {
             </option>
           ))}
         </Select>
+        <Select
+          value={teamFilter}
+          onChange={(e) => setTeamFilter(e.target.value)}
+          className="h-8 min-w-[160px] text-[11px]"
+          aria-label="Team"
+        >
+          <option value="All">Team: All</option>
+          {teamOptions.map((team) => (
+            <option key={team} value={team}>
+              Team: {team}
+            </option>
+          ))}
+        </Select>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_minmax(300px,380px)]">
+      <div>
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 bg-slate-50/80 px-3 py-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -352,14 +376,15 @@ export function IncidentQueueWorkspace() {
                   <th className="px-2 py-2 text-left font-medium">Agent</th>
                   <th className="px-2 py-2 text-left font-medium">Diagnosis</th>
                   <th className="px-2 py-2 text-left font-medium">Severity</th>
-                  <th className="px-2 py-2 text-left font-medium">Status</th>
-                  <th className="px-2 py-2 text-left font-medium">Updated</th>
+                  <th className="px-2 py-2 text-left font-medium">Stage</th>
+                  <th className="px-2 py-2 text-left font-medium">Next step</th>
                   <th className="px-2 py-2 text-left font-medium">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredRows.map((row) => {
                   const selected = row.incidentId === selectedId;
+                  const step = nextStepForRow(row, actions);
                   return (
                     <tr
                       key={row.incidentId}
@@ -367,11 +392,19 @@ export function IncidentQueueWorkspace() {
                       role="button"
                       aria-selected={selected}
                       aria-label={`Review risk ${row.incidentId}`}
-                      onClick={() => setSelectedId(row.incidentId)}
+                      onClick={() => {
+                        dismissedIncident.current = null;
+                        setDrawerTab(drawerTabForRow(row, actions));
+                        setSelectedId(row.incidentId);
+                        setDrawerOpen(true);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
+                          dismissedIncident.current = null;
+                          setDrawerTab(drawerTabForRow(row, actions));
                           setSelectedId(row.incidentId);
+                          setDrawerOpen(true);
                         }
                       }}
                       className={cn(
@@ -398,22 +431,35 @@ export function IncidentQueueWorkspace() {
                       <td className="max-w-[160px] px-2 py-2 text-[11px] text-slate-600">
                         {row.diagnosisLabel ?? row.riskCategory}
                       </td>
-                      <td
-                        className={cn(
-                          "whitespace-nowrap px-2 py-2 font-medium",
-                          severityTextClass(row.severityLabel)
-                        )}
-                      >
-                        {row.severityLabel}
+                      <td className="whitespace-nowrap px-2 py-2">
+                        <Badge tone={severityBadgeTone(row.severityLabel)} size="xs">
+                          {row.severityLabel}
+                        </Badge>
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-slate-700">
-                        {row.stage}
+                        {step.currentStageLabel}
                       </td>
-                      <td className="whitespace-nowrap px-2 py-2 text-slate-500">
-                        {row.updatedLabel ?? row.ageLabel}
+                      <td className="max-w-[160px] px-2 py-2 text-[11px] text-slate-600">
+                        {step.nextRequiredStep}
                       </td>
                       <td className="whitespace-nowrap px-2 py-2 text-[11px] font-semibold text-slate-800">
-                        {actionHintForRow(row, actions)}
+                        <button
+                          type="button"
+                          className="text-left underline decoration-slate-300 underline-offset-2 hover:text-slate-950"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (step.primaryDestination.surface === "risk_detail") {
+                              dismissedIncident.current = null;
+                              setDrawerTab(drawerTabForRow(row, actions));
+                              setSelectedId(row.incidentId);
+                              setDrawerOpen(true);
+                              return;
+                            }
+                            router.push(scopeHref(step.primaryDestination.href));
+                          }}
+                        >
+                          {step.primaryCtaLabel}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -444,24 +490,23 @@ export function IncidentQueueWorkspace() {
             </p>
           ) : null}
         </div>
-
-        <aside className="rounded-lg border border-slate-200 bg-white shadow-sm lg:sticky lg:top-4 lg:self-start">
-          {selectedRow ? (
-            <RiskDetailPanel
-              row={selectedRow}
-              evidence={evidenceByAlias[selectedRow.incidentId]}
-              actions={actions}
-              scopeHref={scopeHref}
-              onSendToActionCenter={sendToActionCenter}
-              sending={sending}
-            />
-          ) : (
-            <p className="p-4 text-[13px] text-slate-500">
-              Select a risk to review diagnosis, evidence, and recommended action.
-            </p>
-          )}
-        </aside>
       </div>
+
+      <RiskTriageDrawer
+        open={drawerOpen}
+        row={selectedRow}
+        evidence={selectedRow ? evidenceByAlias[selectedRow.incidentId] : null}
+        actions={actions}
+        scopeHref={scopeHref}
+        sending={sending}
+        onSendToActionCenter={() => void sendToActionCenter()}
+        onToast={showToast}
+        initialTab={drawerTab}
+        onClose={() => {
+          dismissedIncident.current = selectedRow?.incidentId ?? selectedId;
+          setDrawerOpen(false);
+        }}
+      />
 
       {toast ? (
         <div

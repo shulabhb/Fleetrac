@@ -1,3 +1,73 @@
+# Completion Report — Action workflow closure polish
+
+Verification results now have a real operator resolution step. Action Center shows Rollback review / Follow-up review / Close-ready panels with recorded choices. Decisions persist on the existing governed action (`resolution_status`, `resolution_note`, recorded at/by) via `POST /governance/actions/{id}/resolve`. Fleetrac records the decision only — it does not execute rollback or change agent code. Next-step copy updates after recording, so Risk Detail / Action Center / Outcomes no longer loop on “Review rollback path”. Closed/resolved risks leave the active queue; Outcomes still shows evidence.
+
+Pytest: 5 resolve/verify tests passed. Helper tests: 43 passed. `npm run build` passed. Frontend at http://127.0.0.1:3000 (HTTP 200). API restarted on :8000.
+
+---
+
+# Completion Report — Actionable next-step routing
+
+Next-step CTAs now deep-link to the selected action or incident (`?action=` + `?incident=`). Action Center waits to resolve the requested action, shows its detail panel (not only the list), and does not auto-select the first card while resolving. Missing targets show “Action not found” with a Risk Queue link. Outcomes still open the incident record. No backend change.
+
+Helper tests: 39 passed. `npm run build` passed. Frontend restarted at http://127.0.0.1:3000.
+
+---
+
+# Completion Report — Incident lifecycle workflow
+
+Shared `resolveIncidentLifecycle` maps existing incident/action/verification fields to stages (Detected → Evidence review → Decision required → Approved — verify impact → Improved / Rollback / Follow-up → Closed). Improved is close-ready; rollback and no-material-change stay open. Overview, Risk Queue, Risk Detail, Action Center, and Outcomes use the same labels and destinations. No backend, nav, or model change.
+
+Helper tests: 32 passed. `npm run build` passed. Frontend restarted at http://127.0.0.1:3000.
+
+---
+
+# Completion Report — Dynamic next-step resolver
+
+Shared `resolveNextStep` drives next-required-step copy and destinations across Overview, Risk Detail, Risk Queue, Action Center, and Outcomes. Destinations follow workflow state (evidence review, awaiting decision, ready to verify, rollback, follow-up, improvement, critical), not a hardcoded alias. Overview row titles still open Risk Detail; CTAs follow the resolver. No backend, nav, or layout redesign.
+
+Helper tests: 30 passed. `npm run build` passed. Frontend restarted at http://127.0.0.1:3000.
+
+---
+
+# Completion Report — Overview CTAs stay in sidecar
+
+Overview “Risks requiring action” and recent activity open the Risk Detail drawer on the matching tab (Decision, Verification, or Evidence). They no longer navigate to Action Center or Outcomes Audit. Action Center and Evidence Library remain secondary links inside the drawer.
+
+---
+
+# Completion Report — Risk click routing polish
+
+Overview CTAs no longer always open Risk Detail. Fresh / owner / evidence review still does. Awaiting decision and ready-to-verify go to Action Center with the action selected. Rollback and follow-up go to Action Center Verification results. Improvement observed goes to Outcomes Audit for that incident. Risk Detail Code is disabled without source access. Applied-externally and Low-confidence copy stay honest. Aliases unchanged. No backend change.
+
+Helper tests: 17 passed. `npm run build` passed.
+
+---
+
+# Completion Report — Overview CTA destinations
+
+Risks requiring action now open the incident on the matching loop tab: Review rollback path / Review follow-up / Verify impact → Verification; Review governed action → Decision; View outcome evidence → Evidence. Summary (Fleetrac Analysis) is no longer the default. Owner teams “Awaiting” is “Needs attention.” Header button is “Review risk queue” and lands on the full `/incidents` list.
+
+Helper tests: `lib/overview-summary.test.ts` — 5 passed.
+
+---
+
+# Completion Report — Action Center → full Risk Queue
+
+Action Center “Review risk queue” now opens `/incidents` (all teams). Incident deep links from Act (`routeToIncident`) select that risk on the full queue instead of `queue=owner` for one team. Dashboard team clicks still use the owner-scoped queue.
+
+Frontend restarted at http://127.0.0.1:3000.
+
+---
+
+# Completion Report — Risk triage drawer
+
+Risk rows on Overview and the Risk Queue open a right-side drawer with Summary, Evidence, Code Investigation, Actions, and History. The header shows severity, owner, uncertainty, and the next step. Code investigation stays read-only and reports insufficient evidence unless a file citation is already on the record. Proposed, Approved, Applied externally, and Verified stay separate. Approval does not apply or deploy a change. The Evidence Library package link uses the existing incident record route.
+
+Triage helper tests passed (11 with the existing risk-detail copy tests). `npm run build` passed. Checked on Overview and the Risk Queue with `inc-sec-001`.
+
+---
+
 # Completion Report — Overview color polish
 
 Risk Ownership Insights, the Owner Action Panel, and the agents table stay on white. Severity is a small badge or a thin left border. Selected owner and agent rows use a soft indigo wash and a thin indigo accent, including when the risk is critical. The primary action button stays dark.

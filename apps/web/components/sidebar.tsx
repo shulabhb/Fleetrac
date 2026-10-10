@@ -1,150 +1,62 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
-import { navItems, secondaryNavItems } from "@/lib/nav";
-import { ResetDemoStateButton } from "@/components/reset-demo-state-button";
+import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { navItems } from "@/lib/nav";
 import { cn } from "@/lib/cn";
-import {
-  AI_SCOPE_OPTIONS,
-  normalizeAiScope,
-  withAiScope,
-  type AiScopeId
-} from "@/lib/ai-scope";
+import { normalizeAiScope, withAiScope, type AiScopeId } from "@/lib/ai-scope";
 
 export function Sidebar() {
   const pathname = usePathname() ?? "";
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const [scope, setScopeState] = useState<AiScopeId>("all");
-  const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
-  const scopeMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const qs = new URLSearchParams(window.location.search);
     setScopeState(normalizeAiScope(qs.get("scope")));
-  }, [pathname]);
-
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      if (!scopeMenuRef.current) return;
-      if (!scopeMenuRef.current.contains(event.target as Node)) {
-        setScopeMenuOpen(false);
-      }
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, []);
-
-  const setScope = (next: string) => {
-    const qs = new URLSearchParams(window.location.search);
-    if (!next || next === "all") qs.delete("scope");
-    else qs.set("scope", next);
-    const out = qs.toString();
-    setScopeState(normalizeAiScope(next));
-    setScopeMenuOpen(false);
-    router.replace(out ? `${pathname}?${out}` : pathname, { scroll: false });
-  };
-  const activeScopeLabel =
-    AI_SCOPE_OPTIONS.find((opt) => opt.id === scope)?.label ?? "All";
+  }, [pathname, searchParams]);
 
   return (
-    <aside className="flex h-full min-h-0 w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+    <aside className="flex h-full min-h-0 w-60 shrink-0 flex-col bg-[#0e2438] text-slate-100">
       <div className="shrink-0 px-4 pb-4 pt-5">
-        <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-900 text-[11px] font-bold text-white">
-          Ft
-        </div>
-        <div>
-          <p className="text-sm font-semibold tracking-tight text-slate-900">Fleetrac</p>
-          <p className="text-[10px] uppercase tracking-wide text-slate-400">
-            Runtime Agent Governance
-          </p>
-        </div>
-        </div>
-        <div className="mt-3 rounded-md border border-slate-200 bg-slate-50/80 px-2.5 py-2">
-          <div className="flex items-center gap-2">
-            <div className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100">
-              <span className="h-3 w-3 rounded-full border border-white bg-slate-950" aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-extrabold tracking-tight text-slate-950">
-                Fleet Governor
-              </p>
-              <p className="truncate text-[11px] font-medium text-slate-700">
-                Production AI scope
-              </p>
-            </div>
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/15 text-[12px] font-bold text-emerald-300 ring-1 ring-emerald-400/30">
+            Ft
           </div>
-          <div className="relative mt-2" ref={scopeMenuRef}>
-            <button
-              type="button"
-              onClick={() => setScopeMenuOpen((prev) => !prev)}
-              className="flex h-8 w-full items-center justify-between rounded-md border border-slate-300 bg-white/95 px-2.5 text-[11px] font-medium tracking-tight text-slate-800 shadow-sm transition hover:border-slate-400"
-              aria-haspopup="listbox"
-              aria-expanded={scopeMenuOpen}
-              aria-label="Active scope"
-              title="Active scope"
-            >
-              <span className="truncate">{activeScopeLabel}</span>
-              <ChevronDown
-                className={cn(
-                  "h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform",
-                  scopeMenuOpen && "rotate-180"
-                )}
-                aria-hidden
-              />
-            </button>
-            {scopeMenuOpen ? (
-              <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
-                <ul className="max-h-56 overflow-y-auto" role="listbox" aria-label="Scope options">
-                  {AI_SCOPE_OPTIONS.map((opt) => (
-                    <li key={opt.id}>
-                      <button
-                        type="button"
-                        onClick={() => setScope(opt.id)}
-                        className={cn(
-                          "flex w-full items-center rounded px-2 py-1.5 text-left text-[11px] font-medium transition",
-                          opt.id === scope
-                            ? "bg-slate-900 text-white"
-                            : "text-slate-700 hover:bg-slate-100"
-                        )}
-                        role="option"
-                        aria-selected={opt.id === scope}
-                      >
-                        {opt.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+          <div>
+            <p className="text-sm font-semibold tracking-tight text-white">Fleetrac</p>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-400">
+              Agent governance
+            </p>
           </div>
         </div>
       </div>
       <nav className="mt-2 min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-2">
         {navItems.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(item.href));
+          const path = item.href.split("?")[0] ?? item.href;
+          const onOutcomes = pathname === "/outcomes" || pathname.startsWith("/outcomes/");
+          const auditSurface = searchParams.get("surface") === "audit";
+          const active = path === "/outcomes"
+            ? onOutcomes && (item.label === "Outcomes Audit" ? auditSurface : !auditSurface)
+            : pathname === path || (path !== "/" && pathname.startsWith(path));
           const Icon = item.icon;
           const href = withAiScope(item.href, scope);
           return (
             <Link
-              key={item.href}
+              key={item.label}
               href={href}
               className={cn(
                 "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition",
                 active
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  ? "bg-white/10 text-white"
+                  : "text-slate-300 hover:bg-white/10 hover:text-white"
               )}
             >
               <Icon
                 className={cn(
                   "h-4 w-4 shrink-0",
-                  active ? "text-white" : "text-slate-400 group-hover:text-slate-700"
+                  active ? "text-emerald-300" : "text-slate-400 group-hover:text-slate-200"
                 )}
               />
               <span className="min-w-0 flex-1">
@@ -164,39 +76,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="shrink-0 border-t border-slate-200 p-3">
-        <div className="mb-2 space-y-0.5">
-          <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Audit · admin
-          </p>
-          {secondaryNavItems.map((item) => {
-            const active =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={withAiScope(item.href, scope)}
-                className={cn(
-                  "block rounded-md px-2.5 py-1.5 transition",
-                  active
-                    ? "bg-slate-100 text-slate-900"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                )}
-              >
-                <span className="block text-[12px] font-medium">{item.label}</span>
-                <span className="block text-[10px] text-slate-400">{item.caption}</span>
-              </Link>
-            );
-          })}
-        </div>
-        <div className="mb-2 flex items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span className="text-[11px] font-medium text-slate-700">Demo environment</span>
-          <span className="ml-auto text-[10px] text-slate-400">demo</span>
-        </div>
-        <ResetDemoStateButton />
-      </div>
     </aside>
   );
 }

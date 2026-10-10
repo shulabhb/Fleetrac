@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, ChevronRight, Circle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
@@ -12,15 +12,20 @@ import {
   type IncidentEvidenceDetail,
   type StructuredEvidenceRow
 } from "@/lib/evidence-library-types";
-import {
-  archiveIncidentInPackage,
-  type LivePackageState
-} from "@/lib/evidence-library-package-state";
+import type { LivePackageState } from "@/lib/evidence-library-package-state";
 import { handoffIncidentToActionCenter } from "@/lib/governance-api";
-import { useGovernanceData } from "@/hooks/use-governance-data";
+import { riskDetailCta } from "@/lib/risk-detail-copy";
+import { resolveIncidentLifecycle } from "@/lib/resolve-next-step";
+import { NextRequiredStepCard } from "@/components/governance/next-required-step";
 import {
+  RiskTriageDrawer,
+  type RiskDrawerTab
+} from "@/components/incidents/risk-detail-panel";
+import {
+  buildGlobalOwnerQueueRowsFromApi,
   mapApiEvidenceToDetail
 } from "@/lib/governance-merge";
+import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
   routeToEvidenceLibraryOwnerPackage,
   routeToEvidenceLibraryTeam,
@@ -45,25 +50,6 @@ function currentStageLabel(
   return fallback;
 }
 
-function mergeLifecycle(
-  base: IncidentEvidenceDetail["lifecycleTimestamps"] | undefined,
-  patch: IncidentEvidenceDetail["lifecycleTimestamps"] | undefined
-): IncidentEvidenceDetail["lifecycleTimestamps"] {
-  const out: IncidentEvidenceDetail["lifecycleTimestamps"] = { ...(base ?? {}) };
-  if (!patch) return out;
-  for (const key of Object.keys(patch)) {
-    const k = key as keyof typeof patch;
-    const p = patch[k];
-    if (!p) continue;
-    const existing = out[k];
-    out[k] = {
-      ...(existing && typeof existing === "object" ? existing : {}),
-      ...p
-    } as (typeof out)[typeof k];
-  }
-  return out;
-}
-
 export function EvidenceLibraryIncidentRecord({
   incidentId,
   ownerTeam,
@@ -78,7 +64,7 @@ export function EvidenceLibraryIncidentRecord({
   setLivePackages: Dispatch<SetStateAction<LivePackageState>>;
 }) {
   const router = useRouter();
-  const { evidenceByAlias } = useGovernanceData();
+  const { evidenceByAlias, actions, ownerQueues } = useGovernanceData();
   const detail = useMemo(() => {
     const apiEvidence = evidenceByAlias[incidentId];
     if (apiEvidence) {
@@ -95,18 +81,17 @@ export function EvidenceLibraryIncidentRecord({
 
   const isArchived = Boolean(resolvedArchiveRow);
 
-  const [lifecycle, setLifecycle] = useState<
-    IncidentEvidenceDetail["lifecycleTimestamps"] | undefined
-  >(detail?.lifecycleTimestamps);
-  const [decisionLabel, setDecisionLabel] = useState<string | null>(null);
-  const [needsMoreEvidence, setNeedsMoreEvidence] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [riskOpen, setRiskOpen] = useState(false);
 
-  useEffect(() => {
-    setLifecycle(detail?.lifecycleTimestamps);
-    setDecisionLabel(null);
-    setNeedsMoreEvidence(false);
-  }, [incidentId, detail]);
+  const action = useMemo(
+    () =>
+      actions.find(
+        (item) => item.alias_id === incidentId || item.incident_id === incidentId
+      ) ?? null,
+    [actions, incidentId]
+  );
 
   const structuredRows: StructuredEvidenceRow[] = useMemo(() => {
     return detail?.structuredEvidence ?? [];
@@ -119,94 +104,88 @@ export function EvidenceLibraryIncidentRecord({
 
   const subtitleLine = detail?.recordSubtitle ?? "";
 
+  const queueRows = useMemo(
+    () => buildGlobalOwnerQueueRowsFromApi(ownerQueues, evidenceByAlias),
+    [ownerQueues, evidenceByAlias]
+  );
+  const drawerRow =
+    queueRows.find(
+      (row) => row.incidentId === incidentId || row.canonicalId === incidentId
+    ) ?? null;
+  const awaiting =
+    !action ||
+    action.status.toLowerCase().includes("awaiting") ||
+    action.status.toLowerCase().includes("pending");
+  const statusText = `${action?.status ?? ""} ${action?.verification_status ?? ""}`.toLowerCase();
+  const drawerTab: RiskDrawerTab = !action
+    ? "evidence"
+    : awaiting
+      ? "decision"
+      : statusText.includes("approved") || statusText.includes("monitor")
+        ? "verification"
+        : "history";
+  const rejected = (action?.status ?? "").toLowerCase().includes("reject");
+  const recordedDecision = action
+    ? riskDetailCta(action.status, action.verification_status)
+    : "Send to Action Center";
+  const resolvedStep = resolveIncidentLifecycle({
+    incidentId,
+    lifecycle: detail?.recordSubtitle,
+    actionId: action?.id,
+    actionStatus: action?.status,
+    verificationStatus: action?.verification_status,
+    resolutionStatus: action?.resolution_status,
+    ownerTeam: resolvedOwner === "—" ? null : resolvedOwner,
+    outcome: action?.verification_status,
+    evidenceCount: detail?.structuredEvidence?.length,
+    ctaSurface: "outcomes"
+  });
+
   const sendToActionCenter = async () => {
-    const ok = await handoffIncidentToActionCenter(incidentId);
-    if (!ok) {
+    setBusy("handoff");
+    const actionId = action?.id ?? (await handoffIncidentToActionCenter(incidentId));
+    setBusy(null);
+    if (!actionId) {
       showToast("Could not send to Action Center — check API connection");
       return;
     }
-    showToast("Sent to Action Center");
-    if (!isArchived) {
-      setLifecycle((prev) =>
-        mergeLifecycle(prev ?? detail?.lifecycleTimestamps, {
-          action_approval: { label: "Action approval", at: "Awaiting approval", state: "current" },
-          owner_review: { label: "Owner review", at: "Complete", state: "done" },
-          remediation: { label: "Remediation", state: "pending" },
-          verification: { label: "Verification", state: "pending" },
-          closed: { label: "Closed / archived", state: "pending" }
-        })
-      );
-    }
-  };
-
-  const approveRemediation = () => {
-    setDecisionLabel("Approved");
-    setNeedsMoreEvidence(false);
-    setLifecycle((prev) =>
-      mergeLifecycle(prev ?? detail?.lifecycleTimestamps, {
-        owner_review: { label: "Owner review", at: "Complete", state: "done" },
-        action_approval: { label: "Action approval", at: "Pending", state: "current" },
-        remediation: { label: "Remediation", state: "pending" },
-        verification: { label: "Verification", state: "pending" },
-        closed: { label: "Closed / archived", state: "pending" }
-      })
-    );
-    showToast("Remediation approved");
-  };
-
-  const requestMoreEvidence = () => {
-    setDecisionLabel("More evidence requested");
-    setNeedsMoreEvidence(true);
-    setLifecycle((prev) =>
-      mergeLifecycle(prev ?? detail?.lifecycleTimestamps, {
-        owner_review: { label: "Owner review", at: "In progress", state: "current" }
-      })
-    );
-    showToast("More evidence requested");
-  };
-
-  const markFalsePositive = () => {
-    if (!detail || resolvedOwner === "—") return;
-    setDecisionLabel("False positive");
-    setLivePackages((prev) =>
-      archiveIncidentInPackage(prev, resolvedOwner, incidentId, {
-        title: detail.title,
-        systemName: detail.systemName,
-        outcome: "False positive",
-        evidenceCount: structuredRows.length,
-        verificationResult: "Closed without material risk"
-      })
-    );
-    showToast("Incident moved to resolved archive");
-    router.push(scopeHref(routeToEvidenceLibraryOwnerPackage(resolvedOwner)));
+    const tab = awaiting ? "pending" : rejected ? "closed" : "ready";
+    router.push(scopeHref(`${routes.actions()}?tab=${tab}&action=${encodeURIComponent(actionId)}`));
   };
 
   if (!detail) {
     return (
-      <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center shadow-sm">
-        <p className="text-[13px] text-slate-600">
-          No evidence record for <span className="font-medium text-slate-900">{incidentId}</span> yet.
-          Run a simulator pitch to generate governed evidence from live logs.
-        </p>
-        <Link
-          href={scopeHref(routeToEvidenceLibraryTeam())}
-          className="mt-3 inline-block text-[12px] font-semibold text-slate-800 hover:underline"
-        >
-          Back to Outcomes
-        </Link>
+      <div className="space-y-4">
+        <NextRequiredStepCard
+        lifecycle={resolvedStep}
+        scopeHref={scopeHref}
+        hideActions={resolvedStep.primaryDestination.surface === "outcomes_audit"}
+      />
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-10 text-center shadow-sm">
+          <p className="text-[13px] text-slate-600">
+            No evidence record for <span className="font-medium text-slate-900">{incidentId}</span> yet.
+            Run a simulator pitch to generate governed evidence from live logs.
+          </p>
+          <Link
+            href={scopeHref(routeToEvidenceLibraryTeam())}
+            className="mt-3 inline-block text-[12px] font-semibold text-slate-800 hover:underline"
+          >
+            Back to Outcomes
+          </Link>
+        </div>
       </div>
     );
   }
 
   const title = detail.title;
   const summary = detail.summary ?? "";
-  const timelineSource = lifecycle ?? detail.lifecycleTimestamps;
+  const timelineSource = detail.lifecycleTimestamps;
   const stageDisplay = currentStageLabel(
     timelineSource,
     detail.recordSubtitle?.split(" · ").pop() ?? "—"
   );
   const recordKind = isArchived ? "Resolved" : "Active";
-  const handoffReady = decisionLabel === "Approved";
+  const handoffReady = Boolean(action);
 
   return (
     <div className="space-y-6">
@@ -248,9 +227,6 @@ export function EvidenceLibraryIncidentRecord({
             <dt className="text-slate-500">Evidence confidence</dt>
             <dd className="font-medium text-slate-900">
               {detail?.evidenceConfidence ?? "Medium"}
-              {needsMoreEvidence ? (
-                <span className="ml-2 text-amber-800">· Needs more evidence</span>
-              ) : null}
             </dd>
           </div>
         </dl>
@@ -271,6 +247,12 @@ export function EvidenceLibraryIncidentRecord({
           </span>
         </p>
       </header>
+
+      <NextRequiredStepCard
+        lifecycle={resolvedStep}
+        scopeHref={scopeHref}
+        hideActions={resolvedStep.primaryDestination.surface === "outcomes_audit"}
+      />
 
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
         <Link
@@ -391,36 +373,22 @@ export function EvidenceLibraryIncidentRecord({
             {detail.recommendedAction}
           </p>
           <p className="mt-2 text-[12px] text-slate-600">
-            Reviewer decision:
-            {decisionLabel ? (
-              <span className="ml-1 font-medium text-slate-900">{decisionLabel}</span>
-            ) : (
-              <span className="ml-1 text-slate-500">None recorded</span>
-            )}
+            Recorded decision:
+            <span className="ml-1 font-medium text-slate-900">
+              {action ? `${action.status} · ${action.verification_status}` : "No governed action yet"}
+            </span>
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={approveRemediation}
-              className="rounded-md bg-slate-900 px-3 py-2 text-[12px] font-semibold text-white hover:bg-slate-800"
+          <p className="mt-1 text-[12px] text-slate-600">
+            Next step: {recordedDecision}. Approval does not change agent code. More evidence arrives from telemetry; there is no separate evidence-request integration.
+          </p>
+          {resolvedStep.primaryDestination.surface === "outcomes_audit" ? null : (
+            <Link
+              href={scopeHref(resolvedStep.primaryDestination.href)}
+              className="mt-4 inline-flex rounded-md bg-slate-900 px-3 py-2 text-[12px] font-semibold text-white hover:bg-slate-800"
             >
-              Approve remediation
-            </button>
-            <button
-              type="button"
-              onClick={requestMoreEvidence}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
-            >
-              Request more evidence
-            </button>
-            <button
-              type="button"
-              onClick={markFalsePositive}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 hover:bg-slate-50"
-            >
-              Mark false positive
-            </button>
-          </div>
+              {resolvedStep.primaryCtaLabel}
+            </Link>
+          )}
         </section>
       ) : null}
 
@@ -434,13 +402,13 @@ export function EvidenceLibraryIncidentRecord({
           <h2 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Action handoff
           </h2>
-          {handoffReady ? (
-            <p className="mt-1 text-[11px] text-slate-600">
-              Remediation approved — ready to route to Action Center.
-            </p>
-          ) : null}
+          <p className="mt-1 text-[11px] text-slate-600">
+            {action
+              ? "Opens the governed action. A later visit does not rewind an approved or verified risk."
+              : "Creates the governed action and opens Action Center."}
+          </p>
           <p className="mt-2 text-[13px] font-medium text-slate-900">
-            Next step · {detail?.nextStep ?? "Send remediation to Action Center"}
+            Next step · {recordedDecision}
           </p>
           {detail?.actionHandoffPreview?.length ? (
             <ul className="mt-2 list-inside list-disc space-y-1 text-[13px] text-slate-700">
@@ -462,7 +430,7 @@ export function EvidenceLibraryIncidentRecord({
                 : "border border-slate-900 bg-white text-slate-900 hover:bg-slate-50"
             )}
           >
-            Send to Action Center →
+            {busy === "handoff" ? "Opening…" : "Open in Action Center →"}
           </button>
         </section>
       ) : null}
@@ -513,6 +481,19 @@ export function EvidenceLibraryIncidentRecord({
           Action Center
         </Link>
       </div>
+
+      <RiskTriageDrawer
+        open={riskOpen && Boolean(drawerRow)}
+        row={drawerRow}
+        evidence={evidenceByAlias[incidentId] ?? null}
+        actions={actions}
+        scopeHref={scopeHref}
+        initialTab={drawerTab}
+        sending={busy === "handoff"}
+        onToast={showToast}
+        onSendToActionCenter={() => void sendToActionCenter()}
+        onClose={() => setRiskOpen(false)}
+      />
 
       {toast ? (
         <div

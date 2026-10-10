@@ -37,7 +37,7 @@ const ID_TO_KEY: Record<string, string> = {
   int_databricks: "databricks",
   int_snowflake: "snowflake",
   int_openai: "openai",
-  int_azure_openai: "openai",
+  int_azure_openai: "azure",
   int_anthropic: "anthropic",
   int_vertex: "vertex",
   int_bedrock: "bedrock",

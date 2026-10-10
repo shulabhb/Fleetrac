@@ -257,6 +257,13 @@ def _derived(
             "evidence",
             None,
         )
+    if "reject" in status:
+        return (
+            "rejected",
+            f"{alias} was rejected. View the evidence record.",
+            "evidence",
+            None,
+        )
     if status in ("approved", "monitoring") or verification == "monitoring":
         return (
             "verify",

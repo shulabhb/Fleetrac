@@ -44,7 +44,8 @@ function isKind(value: string | null | undefined): value is NonNullable<Notifica
     value === "follow_up" ||
     value === "improvement" ||
     value === "severity" ||
-    value === "regression"
+    value === "regression" ||
+    value === "rejected"
   );
 }
 

@@ -25,7 +25,9 @@ function hrefForNotification(
   if (target === "action-center") {
     const qs = new URLSearchParams();
     if (event.kind === "verify") qs.set("tab", "ready");
-    else if (event.kind === "rollback" || event.kind === "follow_up") qs.set("tab", "closed");
+    else if (event.kind === "rollback" || event.kind === "follow_up" || event.kind === "rejected") {
+      qs.set("tab", "closed");
+    }
     if (event.actionId) qs.set("action", event.actionId);
     else if (event.incidentId) qs.set("action", event.incidentId);
     const query = qs.toString();
@@ -55,6 +57,8 @@ function openLabelFor(event: NotificationEvent): string {
     case "severity":
     case "regression":
       return "Review risk";
+    case "rejected":
+      return "View outcome evidence";
     case "decision":
       return "Review governed action";
     default:

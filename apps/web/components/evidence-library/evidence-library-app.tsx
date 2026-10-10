@@ -15,13 +15,12 @@ import {
   withAiScope,
   type AiScopeId
 } from "@/lib/ai-scope";
-import { routeToEvidenceLibraryOwnerPackage, routes } from "@/lib/routes";
+import { routeToEvidenceLibraryOwnerPackage } from "@/lib/routes";
 import { useGovernanceData } from "@/hooks/use-governance-data";
 import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { SummaryMini } from "@/components/ui/summary-mini";
 import { EvidenceLibraryIncidentRecord } from "@/components/evidence-library/evidence-library-incident-record";
 import { EvidenceLibraryOwnerPackage } from "@/components/evidence-library/evidence-library-owner-package";
-import Link from "next/link";
 
 function resolveEvidenceMode(sp: URLSearchParams): EvidenceLibraryMode {
   const em = sp.get("evidenceMode");
@@ -136,28 +135,6 @@ function TeamLibraryView({
       }
     >
       <div className="space-y-5">
-      <div className="rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-[12px] text-slate-700">
-        <p className="font-medium text-slate-800">Secondary audit surface</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-slate-600">
-          Evidence for active decisions lives on Risk Detail and Action Center verification
-          checkpoints. Use Outcomes to search historical packages across risks.
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link
-            href={scopeHref(routes.incidents())}
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:border-slate-300"
-          >
-            Review risk queue
-          </Link>
-          <Link
-            href={scopeHref(routes.actions())}
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:border-slate-300"
-          >
-            Review governed actions
-          </Link>
-        </div>
-      </div>
-
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-[13px]">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">

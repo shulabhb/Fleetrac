@@ -328,6 +328,10 @@ export type GovernedActionDTO = {
   expected_direction?: string | null;
   rollback_eligible?: boolean;
   expected_result?: string | null;
+  resolution_status?: string | null;
+  resolution_note?: string | null;
+  resolution_recorded_at?: string | null;
+  resolution_recorded_by?: string | null;
 };
 
 export const GOVERNANCE_UPDATED_EVENT = "fleetrac-governance-updated";
@@ -565,11 +569,11 @@ export async function postCreateAction(
 export async function handoffIncidentToActionCenter(
   incidentId: string,
   executionMode = "approval_required"
-): Promise<boolean> {
+): Promise<string | null> {
   const result = await postCreateAction(incidentId, executionMode);
-  if (!result?.action_id) return false;
+  if (!result?.action_id) return null;
   notifyGovernanceUpdated();
-  return true;
+  return result.action_id;
 }
 
 export async function postApproveAction(
@@ -600,6 +604,31 @@ export async function postVerifyAction(
   const result = await governancePost(`/governance/actions/${actionId}/verify`, {
     outcome,
     summary: summary ?? ""
+  });
+  if (result) notifyGovernanceUpdated();
+  return result;
+}
+
+export async function postResolveAction(
+  actionId: string,
+  resolutionStatus: string,
+  note?: string
+): Promise<{
+  action_id: string;
+  status: string;
+  resolution_status: string;
+  resolution_note: string | null;
+  incident_lifecycle: string | null;
+} | null> {
+  const result = await governancePost<{
+    action_id: string;
+    status: string;
+    resolution_status: string;
+    resolution_note: string | null;
+    incident_lifecycle: string | null;
+  }>(`/governance/actions/${encodeURIComponent(actionId)}/resolve`, {
+    resolution_status: resolutionStatus,
+    note: note ?? ""
   });
   if (result) notifyGovernanceUpdated();
   return result;

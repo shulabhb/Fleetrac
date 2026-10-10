@@ -1,11 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import type { GovernanceSystemDTO } from "@/lib/governance-api";
-import { routeToSystem, routes } from "@/lib/routes";
+import {
+  MODEL_PREFS_EVENT,
+  loadPreferences,
+  modelProfileFor,
+  preferenceFor,
+  repositorySummary,
+  telemetrySummary,
+  type ModelPreference
+} from "@/lib/fleet-model-profile";
+import { routeToSystem } from "@/lib/routes";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -21,6 +30,18 @@ export function SystemsFleetView({ systems }: Props) {
   const [hasOpen, setHasOpen] = useState("all");
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("open");
+  const [prefs, setPrefs] = useState<Record<string, ModelPreference> | null>(null);
+
+  useEffect(() => {
+    const read = () => setPrefs(loadPreferences());
+    read();
+    window.addEventListener(MODEL_PREFS_EVENT, read);
+    window.addEventListener("storage", read);
+    return () => {
+      window.removeEventListener(MODEL_PREFS_EVENT, read);
+      window.removeEventListener("storage", read);
+    };
+  }, []);
 
   const owners = useMemo(
     () => Array.from(new Set(systems.map((s) => s.owner_team))).sort(),
@@ -149,12 +170,7 @@ export function SystemsFleetView({ systems }: Props) {
                 <p className="mt-2 text-[11px] text-slate-600">
                   {sys.owner_team} · {sys.platform}
                 </p>
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Last signal:{" "}
-                  {sys.last_signal_at
-                    ? new Date(sys.last_signal_at).toLocaleString()
-                    : "No telemetry yet"}
-                </p>
+                <ModelConnectionLines systemId={sys.system_id} prefs={prefs} hasSignal={Boolean(sys.last_signal_at)} />
                 <p className="mt-2 text-[11px] font-semibold text-slate-800">
                   {sys.open_incidents > 0 ? "Open model · review active risks" : "Open model · inspect runtime signals"}
                 </p>
@@ -163,6 +179,34 @@ export function SystemsFleetView({ systems }: Props) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function ModelConnectionLines({
+  systemId,
+  prefs,
+  hasSignal
+}: {
+  systemId: string;
+  prefs: Record<string, ModelPreference> | null;
+  hasSignal: boolean;
+}) {
+  const profile = modelProfileFor(systemId);
+  const preference = preferenceFor(systemId, prefs);
+  return (
+    <div className="mt-2 space-y-1 text-[11px] text-slate-500">
+      <p>
+        Telemetry:{" "}
+        <span className="text-slate-700">
+          {profile && preference ? telemetrySummary(profile, preference) : "Not recorded"}
+        </span>
+        {hasSignal ? " · signal received" : " · no signal yet"}
+      </p>
+      <p>
+        Source repository:{" "}
+        <span className="text-slate-700">{repositorySummary(preference)}</span>
+      </p>
     </div>
   );
 }

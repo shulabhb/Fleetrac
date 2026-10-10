@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { AppChrome } from "@/components/app-chrome";
 import { AppMainShell } from "@/components/app-main-shell";
@@ -17,7 +18,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <AppChrome sidebar={<Sidebar />}>
+        <AppChrome
+          sidebar={
+            <Suspense fallback={<aside className="h-full w-60 shrink-0 bg-[#0e2438]" />}>
+              <Sidebar />
+            </Suspense>
+          }
+        >
           <AppMainShell>{children}</AppMainShell>
         </AppChrome>
       </body>

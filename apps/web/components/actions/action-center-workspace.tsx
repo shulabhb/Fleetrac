@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ArrowRight, Search } from "lucide-react";
 import { GovernancePageShell } from "@/components/layout/governance-page-shell";
 import { Select } from "@/components/ui/select";
-import { SummaryMini } from "@/components/ui/summary-mini";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
 import { isDemoHighRisk } from "@/lib/governed-actions-types";
@@ -15,7 +14,6 @@ import { useGovernanceData } from "@/hooks/use-governance-data";
 import {
   governedInTab,
   governedSelectionId,
-  parseGovernedSelectionId,
   type GovernedAction
 } from "@/lib/governed-actions-types";
 import {
@@ -23,18 +21,13 @@ import {
   verificationToneClass
 } from "@/lib/action-verification-ux";
 import { isDemoAgent } from "@/lib/governed-fleet-registry";
+import { routes } from "@/lib/routes";
 import {
-  routeToEvidenceLibraryTeam,
-  routeToIncidentsOwnerQueue,
-  routeToIncident,
-  routes
-} from "@/lib/routes";
-import {
-  highestRiskOwnerTeamFromInsights,
-  buildOwnerInsightsFromApi
-} from "@/lib/dashboard-merge";
+  matchRequestedAction,
+  resolveIncidentLifecycle
+} from "@/lib/resolve-next-step";
+import { ActionCenterDetailPanel } from "@/components/actions/action-center-detail-panel";
 import { RiskBadge } from "./index";
-import { ActionCenterDetailPanel } from "./action-center-detail-panel";
 import { ExecutionModeChip } from "@/components/fleetrac/execution-mode-chip";
 
 export type ActionTab = "pending" | "ready" | "closed";
@@ -96,11 +89,19 @@ function prioritizeDemoActions(items: GovernedAction[]): GovernedAction[] {
   });
 }
 
+/** Update the address bar without a Next.js RSC navigation (avoids remount flicker). */
+function replaceQuery(pathname: string, params: URLSearchParams) {
+  const qs = params.toString();
+  const url = qs ? `${pathname}?${qs}` : pathname;
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (current === url) return;
+  window.history.replaceState(window.history.state, "", url);
+}
+
 export function ActionCenterWorkspace({
   defaultTab,
   scopeLabel = "All"
 }: Props) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<ActionTab>(normalizeTab(defaultTab));
@@ -108,12 +109,24 @@ export function ActionCenterWorkspace({
   const [risk, setRisk] = useState<"low" | "medium" | "high" | "all">(
     (searchParams?.get("risk") as "low" | "medium" | "high" | "all") ?? "all"
   );
+  const inboundKey =
+    (
+      searchParams?.get("action") ??
+      searchParams?.get("selectedActionId") ??
+      searchParams?.get("incident") ??
+      ""
+    ).trim() || null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const actionParam = searchParams?.get("action") ?? null;
+  const appliedInbound = useRef<string | null>(null);
 
-  const { enabled: governanceEnabled, actions: apiActions, evidenceByAlias, refresh, ownerQueues, dashboard } =
-    useGovernanceData();
+  const {
+    enabled: governanceEnabled,
+    loading,
+    actions: apiActions,
+    evidenceByAlias,
+    refresh
+  } = useGovernanceData();
 
   const actions = useMemo(() => {
     if (governanceEnabled) {
@@ -125,42 +138,36 @@ export function ActionCenterWorkspace({
   }, [governanceEnabled, apiActions, evidenceByAlias]);
 
   useEffect(() => {
-    const p = new URLSearchParams(searchParams?.toString() ?? "");
-    if (tab === "pending") p.delete("tab");
-    else p.set("tab", tab);
+    const p = new URLSearchParams();
+    if (tab !== "pending") p.set("tab", tab);
     if (query.trim()) p.set("q", query.trim());
-    else p.delete("q");
-    if (risk === "all") p.delete("risk");
-    else p.set("risk", risk);
-    p.delete("type");
-    const next = p.toString();
-    const current = searchParams?.toString() ?? "";
-    if (next !== current) {
-      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    if (risk !== "all") p.set("risk", risk);
+    const selected = actions.find((a) => governedSelectionId(a.id) === selectedId);
+    if (selected) {
+      p.set("action", selected.id);
+      if (selected.incidentId) p.set("incident", selected.incidentId);
+    } else if (inboundKey && !appliedInbound.current) {
+      p.set("action", inboundKey);
     }
-  }, [tab, query, risk, searchParams, pathname, router]);
+    replaceQuery(pathname, p);
+  }, [tab, query, risk, pathname, selectedId, actions, inboundKey]);
 
-  useEffect(() => {
-    if (!actionParam) return;
-    const match = actions.find(
-      (a) => a.id === actionParam || a.incidentId === actionParam
+  const inboundMatch = useMemo(() => {
+    if (!inboundKey) return null;
+    return (
+      actions.find(
+        (a) =>
+          matchRequestedAction(inboundKey, {
+            id: a.id,
+            incidentId: a.incidentId
+          })
+      ) ?? null
     );
-    if (!match) return;
-    setSelectedId(governedSelectionId(match.id));
-    const lane = resolveActionVerificationUx({
-      status: match.status,
-      rawVerificationStatus: match.rawVerificationStatus,
-      verificationStatus: match.verificationStatus,
-      incidentId: match.incidentId
-    }).lane;
-    const laneTab: ActionTab =
-      lane === "awaiting_decision"
-        ? "pending"
-        : lane === "verification_result"
-          ? "closed"
-          : "ready";
-    setTab(laneTab);
-  }, [actionParam, actions]);
+  }, [inboundKey, actions]);
+
+  const resolvingInbound = Boolean(inboundKey) && loading && actions.length === 0;
+  const inboundMissing =
+    Boolean(inboundKey) && !loading && !inboundMatch && !selectedId;
 
   const counts = useMemo(() => {
     const c: Record<ActionTab, number> = { pending: 0, ready: 0, closed: 0 };
@@ -181,23 +188,6 @@ export function ActionCenterWorkspace({
     (a) => a.riskLevel === "high" || isDemoHighRisk(a.severity)
   ).length;
   const underVerification = actions.filter((a) => governedInTab(a, "ready")).length;
-  const verifiedImproved = actions.filter((a) => {
-    const ux = resolveActionVerificationUx({
-      status: a.status,
-      rawVerificationStatus: a.rawVerificationStatus,
-      verificationStatus: a.verificationStatus
-    });
-    return ux.resultKind === "improved";
-  }).length;
-  const rollbackCount = actions.filter((a) => {
-    const ux = resolveActionVerificationUx({
-      status: a.status,
-      rawVerificationStatus: a.rawVerificationStatus,
-      verificationStatus: a.verificationStatus
-    });
-    return ux.resultKind === "rollback";
-  }).length;
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = actions.filter((a) => {
@@ -212,50 +202,57 @@ export function ActionCenterWorkspace({
     return prioritizeDemoActions(list);
   }, [actions, tab, risk, query]);
 
-  const selected = useMemo(() => {
-    const id = selectedId ? parseGovernedSelectionId(selectedId) : null;
-    if (!id) return null;
-    return actions.find((a) => a.id === id) ?? null;
-  }, [selectedId, actions]);
-
   useEffect(() => {
-    if (!selectedId) {
-      if (filtered[0]) setSelectedId(governedSelectionId(filtered[0].id));
+    if (inboundKey && inboundMatch && appliedInbound.current !== inboundKey) {
+      appliedInbound.current = inboundKey;
+      setSelectedId(governedSelectionId(inboundMatch.id));
+      const lane = resolveActionVerificationUx({
+        status: inboundMatch.status,
+        rawVerificationStatus: inboundMatch.rawVerificationStatus,
+        verificationStatus: inboundMatch.verificationStatus,
+        incidentId: inboundMatch.incidentId
+      }).lane;
+      setTab(
+        lane === "awaiting_decision"
+          ? "pending"
+          : lane === "verification_result"
+            ? "closed"
+            : "ready"
+      );
       return;
     }
-    const current = actions.find((a) => governedSelectionId(a.id) === selectedId);
-    if (!current) {
-      if (filtered[0]) setSelectedId(governedSelectionId(filtered[0].id));
-      else setSelectedId(null);
+    if (selectedId) {
+      const current = actions.find((a) => governedSelectionId(a.id) === selectedId);
+      if (!current) {
+        setSelectedId(filtered[0] ? governedSelectionId(filtered[0].id) : null);
+      }
       return;
     }
-    if (governedInTab(current, tab)) return;
-    const lane = resolveActionVerificationUx({
-      status: current.status,
-      rawVerificationStatus: current.rawVerificationStatus,
-      verificationStatus: current.verificationStatus,
-      incidentId: current.incidentId
-    }).lane;
-    setTab(lane === "awaiting_decision" ? "pending" : lane === "verification_result" ? "closed" : "ready");
-  }, [tab, filtered, selectedId, actions]);
+    if (filtered[0]) setSelectedId(governedSelectionId(filtered[0].id));
+  }, [inboundKey, inboundMatch, filtered, selectedId, actions]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const onDecision = useCallback(() => {
-    void refresh(true);
-  }, [refresh]);
-
   const tabDef = TABS.find((t) => t.id === tab)!;
-  const ownerTeam = useMemo(
-    () =>
-      highestRiskOwnerTeamFromInsights(
-        buildOwnerInsightsFromApi(ownerQueues, dashboard)
-      ),
-    [ownerQueues, dashboard]
-  );
+  const selectedAction =
+    actions.find((a) => governedSelectionId(a.id) === selectedId) ?? inboundMatch;
+  const selectedTask = selectedAction
+    ? resolveIncidentLifecycle({
+        incidentId: selectedAction.incidentId,
+        actionId: selectedAction.id,
+        actionStatus: selectedAction.status,
+        verificationStatus:
+          selectedAction.rawVerificationStatus || selectedAction.verificationStatus,
+        resolutionStatus: selectedAction.resolutionStatus,
+        severity: selectedAction.severity,
+        ownerTeam: selectedAction.ownerTeam,
+        outcome: selectedAction.rawVerificationStatus || selectedAction.verificationStatus,
+        ctaSurface: "action_center"
+      })
+    : null;
 
   return (
     <GovernancePageShell
@@ -263,17 +260,10 @@ export function ActionCenterWorkspace({
       eyebrow="Act · Bounded remediation"
       title="Action Center"
       subtitle={`${counts.pending} awaiting decision · ${underVerification} ready to verify · scope: ${scopeLabel}`}
-      workflowLine="Approve bounded action → verify impact → reflect outcome on Risk Detail"
-      summary={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <SummaryMini label="Awaiting decision" value={String(counts.pending)} />
-          <SummaryMini label="Ready to verify" value={String(underVerification)} />
-          <SummaryMini label="Improved" value={String(verifiedImproved)} />
-          <SummaryMini
-            label="Rollback candidates"
-            value={String(rollbackCount)}
-          />
-        </div>
+      workflowLine={
+        selectedTask
+          ? selectedTask.nextRequiredStep
+          : "Decide, then verify. Approval records a decision. It does not change agent code."
       }
     >
       <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -321,7 +311,7 @@ export function ActionCenterWorkspace({
           </p>
         </div>
 
-        <div className="grid gap-4 p-3 lg:grid-cols-[1fr_minmax(300px,360px)]">
+        <div className="grid gap-3 p-3 lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)]">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <div className="border-b border-slate-100 bg-slate-50/80 px-3 py-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
@@ -329,13 +319,17 @@ export function ActionCenterWorkspace({
               </p>
             </div>
             <div className="max-h-[min(70vh,40rem)] space-y-2 overflow-y-auto p-2">
-              {filtered.length === 0 ? (
+              {resolvingInbound && filtered.length === 0 ? (
+                <p className="px-3 py-8 text-center text-[12px] text-slate-500">
+                  Loading selected action…
+                </p>
+              ) : filtered.length === 0 ? (
                 <div className="px-3 py-8 text-center text-[12px] text-slate-500">
                   {tab === "pending" ? (
                     <span>
                       No actions awaiting decision.{" "}
                       <Link
-                        href={routeToIncidentsOwnerQueue(ownerTeam)}
+                        href={routes.incidents()}
                         className="font-medium text-slate-800 underline"
                       >
                         Review risk queue
@@ -360,12 +354,31 @@ export function ActionCenterWorkspace({
               )}
             </div>
           </div>
-
-          <ActionCenterDetailPanel
-            action={selected}
-            onDecision={onDecision}
-            onToast={showToast}
-          />
+          <div className="min-h-[280px]">
+            {resolvingInbound && !selectedAction ? (
+              <div className="flex h-full min-h-[280px] items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-[13px] text-slate-600">
+                Loading selected action…
+              </div>
+            ) : inboundMissing ? (
+              <div className="flex h-full min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+                <p className="text-[13px] font-medium text-slate-800">
+                  Action not found or no longer active
+                </p>
+                <Link
+                  href={routes.incidents()}
+                  className="mt-2 text-[12px] font-semibold text-slate-800 underline underline-offset-2"
+                >
+                  Review risk queue
+                </Link>
+              </div>
+            ) : (
+              <ActionCenterDetailPanel
+                action={selectedAction}
+                onDecision={() => void refresh(true)}
+                onToast={showToast}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -405,13 +418,24 @@ function ActionListCard({
     rawVerificationStatus: action.rawVerificationStatus,
     incidentId: action.incidentId
   });
+  const step = resolveIncidentLifecycle({
+    incidentId: action.incidentId,
+    actionId: action.id,
+    actionStatus: action.status,
+    verificationStatus: action.rawVerificationStatus || action.verificationStatus,
+    resolutionStatus: action.resolutionStatus,
+    severity: action.severity,
+    ownerTeam: action.ownerTeam,
+    outcome: action.rawVerificationStatus || action.verificationStatus,
+    ctaSurface: "action_center"
+  });
 
   return (
     <button
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      aria-label={`${action.incidentId}: ${ux.decisionLabel}. ${ux.nextStepCta}`}
+      aria-label={`${action.incidentId}: ${step.currentStageLabel}. ${step.primaryCtaLabel}`}
       className={cn(
         "w-full rounded-md border px-3 py-2.5 text-left transition",
         selected
@@ -424,14 +448,14 @@ function ActionListCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <span
               className={cn(
-                "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+                "inline-flex items-center rounded-none px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
                 verificationToneClass(ux.tone)
               )}
             >
               {ux.decisionLabel}
             </span>
             {ux.verificationLabel !== "Not started" ? (
-              <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700 ring-1 ring-slate-200">
+              <span className="inline-flex items-center rounded-none bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-800">
                 {ux.verificationLabel}
               </span>
             ) : null}
@@ -448,13 +472,7 @@ function ActionListCard({
             <span className="text-slate-300"> · </span>
             <span>{action.ownerTeam}</span>
             <span className="text-slate-300"> · </span>
-            <Link
-              href={routeToIncident(action.incidentId)}
-              onClick={(e) => e.stopPropagation()}
-              className="font-mono text-slate-500 hover:text-slate-800 hover:underline"
-            >
-              {action.incidentId}
-            </Link>
+            <span className="font-mono text-slate-500">{action.incidentId}</span>
           </p>
           {action.expectedMetric ? (
             <p className="mt-0.5 text-[11px] text-slate-500">
@@ -462,7 +480,11 @@ function ActionListCard({
             </p>
           ) : null}
           <p className="mt-1.5 text-[11px] font-medium text-slate-800">
-            Next: {ux.nextStepCta}
+            {step.currentStageLabel}
+            {step.closureState === "close_ready" ? " · Close-ready" : ""}
+            {step.closureState === "open_rollback" || step.closureState === "open_follow_up"
+              ? " · Stays open"
+              : ""}
           </p>
         </div>
         <div className="shrink-0 text-right">
@@ -473,7 +495,7 @@ function ActionListCard({
               : action.createdAtLabel}
           </p>
           <span className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-semibold text-slate-700">
-            {ux.nextStepCta}
+            {step.primaryCtaLabel}
             <ArrowRight className="h-3 w-3" aria-hidden />
           </span>
         </div>

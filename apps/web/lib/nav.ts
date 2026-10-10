@@ -1,9 +1,12 @@
 import {
-  Activity,
   AlertTriangle,
+  ClipboardList,
+  Code2,
   LayoutDashboard,
+  Library,
   PlayCircle,
-  Server
+  Server,
+  Settings
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { routes } from "./routes";
@@ -18,41 +21,28 @@ export type NavItem = {
 };
 
 /**
- * Primary IA — runtime agent governance loop (Phases A–E).
- *
- * Core loop only:
- *   Overview → Agent Fleet → Runtime Monitor → Risk Queue → Action Center
- *
- * Secondary (sidebar footer / direct URL, not primary nav):
- *   Outcomes (`/outcomes`) — historical evidence / audit search
- *   Settings (`/settings`) — connectors / admin
- *
- * Redirected legacy destinations (see next.config.ts):
- *   /bob, /activity, /controls, /usage → Overview or Agent Fleet
+ * Sidebar order. One stacked list.
+ * Code Investigations is a blank route until that workflow exists.
+ * Evidence Library and Outcomes Audit both open `/outcomes` today.
+ * Runtime Monitor stays at `/live-signals` and is not in this list.
  */
 export const navItems: NavItem[] = [
   { label: "Overview", href: routes.dashboard(), icon: LayoutDashboard, loop: "orient" },
+  { label: "Risk Queue", href: routes.incidents(), icon: AlertTriangle, loop: "investigate" },
   { label: "Agent Fleet", href: routes.systems(), icon: Server, loop: "context" },
-  { label: "Runtime Monitor", href: routes.liveSignals(), icon: Activity, loop: "observe" },
   {
-    label: "Risk Queue",
-    href: routes.incidents(),
-    icon: AlertTriangle,
+    label: "Code Investigations",
+    href: routes.codeInvestigations(),
+    icon: Code2,
     loop: "investigate"
   },
-  { label: "Action Center", href: routes.actions(), icon: PlayCircle, loop: "act" }
-];
-
-/** Secondary admin / audit destinations — do not compete with the primary loop. */
-export const secondaryNavItems: { label: string; href: string; caption: string }[] = [
+  { label: "Evidence Library", href: routes.outcomes(), icon: Library, loop: "measure" },
+  { label: "Action Center", href: routes.actions(), icon: PlayCircle, loop: "act" },
   {
     label: "Outcomes Audit",
-    href: routes.outcomes(),
-    caption: "Verification outcomes · historical lookup"
+    href: `${routes.outcomes()}?surface=audit`,
+    icon: ClipboardList,
+    loop: "measure"
   },
-  {
-    label: "Settings",
-    href: routes.settings(),
-    caption: "Connectors · admin"
-  }
+  { label: "Settings", href: routes.settings(), icon: Settings, loop: "configure" }
 ];

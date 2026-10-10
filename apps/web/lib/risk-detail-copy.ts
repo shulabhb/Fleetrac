@@ -72,6 +72,17 @@ export function riskDetailCta(status: string, verificationStatus: string): strin
   return "Review governed action";
 }
 
+/** In-drawer destination for the primary CTA (tabs stay useful). */
+export function riskDetailCtaTab(
+  status: string,
+  verificationStatus: string
+): "decision" | "verification" | "evidence" {
+  const label = riskDetailCta(status, verificationStatus);
+  if (label === "View outcome evidence") return "evidence";
+  if (label === "Review governed action") return "decision";
+  return "verification";
+}
+
 export function verificationPendingCopy(hasAction: boolean, approved: boolean): string {
   if (!hasAction) return "Verification starts after a governed action is sent for approval.";
   if (!approved) return "Verification pending until the governed action is approved.";

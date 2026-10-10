@@ -88,7 +88,10 @@ export function mapApiActionToGoverned(
       : "Just now",
     createdAtMs: Number.isFinite(createdMs) ? createdMs : Date.now(),
     governanceSource: "api",
-    expectedMetric: dto.expected_metric ?? null
+    expectedMetric: dto.expected_metric ?? null,
+    resolutionStatus: dto.resolution_status ?? null,
+    resolutionNote: dto.resolution_note ?? null,
+    resolutionRecordedAt: dto.resolution_recorded_at ?? null
   };
 }
 

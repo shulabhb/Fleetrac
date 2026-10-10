@@ -7,6 +7,10 @@ import { FleetracAnalysisPanel } from "@/components/fleetrac/fleetrac-analysis-p
 import { ExecutionModeChip } from "@/components/fleetrac/execution-mode-chip";
 import { postApproveAction, postRejectAction, postVerifyAction } from "@/lib/governance-api";
 import {
+  resolutionKindFromVerification,
+  VerificationResolutionPanel
+} from "@/components/actions/verification-resolution-panel";
+import {
   canVerifyAction,
   type GovernedAction
 } from "@/lib/governed-actions-types";
@@ -22,6 +26,8 @@ import {
   routeToEvidenceLibraryIncidentRecord,
   routeToIncident
 } from "@/lib/routes";
+import { resolveIncidentLifecycle } from "@/lib/resolve-next-step";
+import { NextRequiredStepCard } from "@/components/governance/next-required-step";
 
 type Props = {
   action: GovernedAction | null;
@@ -70,8 +76,21 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
     rawVerificationStatus: action.rawVerificationStatus,
     incidentId: action.incidentId
   });
+  const step = resolveIncidentLifecycle({
+    incidentId: action.incidentId,
+    actionId: action.id,
+    actionStatus: action.status,
+    verificationStatus: action.rawVerificationStatus || action.verificationStatus,
+    resolutionStatus: action.resolutionStatus,
+    severity: action.severity,
+    ownerTeam: action.ownerTeam,
+    outcome: action.rawVerificationStatus || action.verificationStatus,
+    ctaSurface: "action_center"
+  });
   const canDecide = ux.awaitingDecision;
   const showVerify = canVerifyAction(action);
+  const resolutionKind = resolutionKindFromVerification(ux.resultKind);
+  const showResolution = Boolean(resolutionKind) && !canDecide && !showVerify;
   const hint = flagshipVerifyHint(action.incidentId);
   const evidenceHref = routeToEvidenceLibraryIncidentRecord(
     action.incidentId,
@@ -115,7 +134,7 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+              "inline-flex items-center rounded-none px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
               verificationToneClass(ux.tone)
             )}
           >
@@ -123,7 +142,7 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
           </span>
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+              "inline-flex items-center rounded-none px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
               verificationToneClass(
                 ux.resultKind === "improved"
                   ? "emerald"
@@ -151,9 +170,13 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
             </>
           ) : null}
         </p>
-        <p className="mt-2 text-[11px] font-medium text-slate-700">
-          Next: {ux.nextStepCta}
-        </p>
+        <div className="mt-2">
+          <NextRequiredStepCard
+            lifecycle={step}
+            compact
+            hideActions={showResolution}
+          />
+        </div>
         <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">
           Decision → Verification → Evidence
         </p>
@@ -290,14 +313,21 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
             </div>
           ) : null}
 
-          {!canDecide && !showVerify ? (
+          {showResolution && resolutionKind ? (
+            <div className="mt-2.5">
+              <VerificationResolutionPanel
+                action={action}
+                kind={resolutionKind}
+                onRecorded={onDecision}
+                onToast={onToast}
+              />
+            </div>
+          ) : !canDecide && !showVerify ? (
             <Link
               href={evidenceHref}
               className="mt-2.5 inline-flex text-[12px] font-semibold text-slate-800 underline decoration-slate-300 underline-offset-2 hover:text-slate-600"
             >
-              {ux.resultKind === "rollback"
-                ? "Review rollback path →"
-                : "View outcome evidence"}
+              View outcome evidence
             </Link>
           ) : null}
         </CheckpointCard>
@@ -327,9 +357,9 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
         </Link>
         <Link
           href={routeToIncident(action.incidentId)}
-          className="block text-center text-[12px] font-medium text-slate-600 hover:text-slate-900"
+          className="block text-center text-[12px] font-medium text-slate-500 hover:text-slate-800"
         >
-          Back to Risk Detail
+          Open Risk Detail (history)
         </Link>
         <p className="text-[10px] leading-snug text-slate-400">
           Bounded actions are approval-gated, policy-checked, audit-linked, and reversible where

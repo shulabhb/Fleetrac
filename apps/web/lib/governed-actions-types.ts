@@ -66,6 +66,9 @@ export type GovernedAction = {
   createdAtMs: number;
   governanceSource?: "api";
   expectedMetric?: string | null;
+  resolutionStatus?: string | null;
+  resolutionNote?: string | null;
+  resolutionRecordedAt?: string | null;
 };
 
 export function governedSelectionId(actionId: string): string {

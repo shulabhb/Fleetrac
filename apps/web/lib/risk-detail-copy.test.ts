@@ -5,6 +5,7 @@ import {
   formatMetricBreach,
   impactExplanation,
   riskDetailCta,
+  riskDetailCtaTab,
   verificationPendingCopy
 } from "./risk-detail-copy.ts";
 
@@ -40,6 +41,10 @@ describe("Risk Detail copy", () => {
       "Review rollback path"
     );
     assert.equal(riskDetailCta("Monitoring", "No Material Change"), "Review follow-up");
+    assert.equal(riskDetailCtaTab("Rollback candidate", "Rollback Candidate"), "verification");
+    assert.equal(riskDetailCtaTab("Closed", "Improvement Observed"), "evidence");
+    assert.equal(riskDetailCtaTab("Awaiting approval", "Not started"), "decision");
+    assert.equal(riskDetailCtaTab("Approved", "Monitoring"), "verification");
   });
 
   it("states verification outcome versus a pending window", () => {

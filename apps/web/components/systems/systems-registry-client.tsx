@@ -30,7 +30,7 @@ export function SystemsRegistryClient({ scope }: { scope: string }) {
           ? "Loading fleet from governance API…"
           : `${systems.length} of ${DEMO_AGENT_IDS.length} focus agents · ${openCount} open risks`
       }
-      workflowLine="Focused runtime governance fleet — open Runtime Monitor or Risk Queue next"
+      workflowLine="Open an agent, then review its risk and decide the next step."
     >
       <SystemsFleetView systems={systems} />
     </GovernancePageShell>

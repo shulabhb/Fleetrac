@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session
 from app.db.models import Incident
 from app.db.session import get_db
 from app.governance.actions import (
+    RESOLUTION_STATUSES,
     approve_action,
     create_action_from_incident,
     get_action,
     list_actions,
+    record_action_resolution,
     reject_action,
 )
 from app.governance.incidents import advance_lifecycle
@@ -53,6 +55,12 @@ class CreateActionRequest(BaseModel):
 class VerifyRequest(BaseModel):
     outcome: str = ""
     summary: str = ""
+
+
+class ResolveRequest(BaseModel):
+    resolution_status: str
+    note: str = ""
+    recorded_by: str = "Fleet Governor"
 
 
 @router.get("/live-signals", response_model=LiveSignalsResponse)
@@ -183,7 +191,13 @@ def post_create_action(
     if inc is None:
         raise HTTPException(status_code=404, detail="Incident not found")
     action = create_action_from_incident(db, inc, execution_mode=body.execution_mode)
-    advance_lifecycle(db, inc, "Action Approval", note="Governed action created")
+    # A later handoff must not pull an approved or verified risk back to Action Approval.
+    if action.status == "Awaiting approval" and inc.lifecycle not in (
+        "Remediation",
+        "Verification",
+        "Closed",
+    ):
+        advance_lifecycle(db, inc, "Action Approval", note="Governed action created")
     db.commit()
     return {"action_id": action.id, "status": action.status}
 
@@ -226,6 +240,12 @@ def get_governed_actions(
                 "expected_direction": r.expected_direction,
                 "rollback_eligible": bool(r.rollback_eligible),
                 "expected_result": r.expected_result,
+                "resolution_status": getattr(r, "resolution_status", None),
+                "resolution_note": getattr(r, "resolution_note", None),
+                "resolution_recorded_at": r.resolution_recorded_at.isoformat()
+                if getattr(r, "resolution_recorded_at", None)
+                else None,
+                "resolution_recorded_by": getattr(r, "resolution_recorded_by", None),
             }
             for r in rows
         ]
@@ -290,6 +310,40 @@ def post_verify_action(
         "recommended_follow_up": row.recommended_follow_up,
         "status": action.status,
         "used_story_fallback": "Story fallback" in (row.summary or ""),
+    }
+
+
+@router.post("/actions/{action_id}/resolve")
+def post_resolve_action(
+    action_id: str,
+    body: ResolveRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    action = get_action(db, action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action not found")
+    status = (body.resolution_status or "").strip().lower()
+    if status not in RESOLUTION_STATUSES:
+        raise HTTPException(status_code=400, detail="Unknown resolution_status")
+    record_action_resolution(
+        db,
+        action,
+        resolution_status=status,
+        note=body.note,
+        recorded_by=body.recorded_by,
+    )
+    db.commit()
+    inc = db.get(Incident, action.incident_id)
+    return {
+        "action_id": action.id,
+        "status": action.status,
+        "verification_status": action.verification_status,
+        "resolution_status": action.resolution_status,
+        "resolution_note": action.resolution_note,
+        "resolution_recorded_at": action.resolution_recorded_at.isoformat()
+        if action.resolution_recorded_at
+        else None,
+        "incident_lifecycle": inc.lifecycle if inc else None,
     }
 
 

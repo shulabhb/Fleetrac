@@ -9,7 +9,8 @@ export type NotificationKind =
   | "follow_up"
   | "improvement"
   | "severity"
-  | "regression";
+  | "regression"
+  | "rejected";
 
 export type NotificationEvent = {
   id: string;
