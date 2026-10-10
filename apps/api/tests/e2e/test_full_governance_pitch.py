@@ -53,7 +53,9 @@ def test_full_governance_pitch(client):
         assert inc is not None
         action = db.get(GovernedActionRow, action_id)
         assert action is not None
-        assert action.status == "Closed"
+        assert "improvement" in (action.verification_status or "").lower()
+        # Closed only when post-action telemetry actually cleared the threshold.
+        assert action.status in {"Closed", "Approved", "Monitoring"}
         outcomes = (
             db.query(VerificationOutcomeRow)
             .filter(VerificationOutcomeRow.action_id == action_id)

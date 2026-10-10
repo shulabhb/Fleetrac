@@ -197,6 +197,11 @@ def test_later_breach_on_closed_risk_is_regression(db_session):
     action = _open_action(db_session, incident.id)
     approve_action(db_session, action)
     verify_action(db_session, action=action, outcome="improvement_observed")
+    # No post-action sample: improvement is close-ready, not an automatic close.
+    assert incident.lifecycle != "Closed"
+    from app.governance.actions import record_action_resolution
+
+    record_action_resolution(db_session, action, resolution_status="resolved")
     assert incident.lifecycle == "Closed"
 
     process_correlation_event(db_session, _treasury("reg-b"), match=_match())

@@ -168,6 +168,9 @@ export type GovernanceSystemDTO = {
   archetype: string;
   open_incidents: number;
   last_signal_at: string | null;
+  repo_url?: string | null;
+  repo_ref?: string | null;
+  code_status?: string | null;
 };
 
 export type GovernanceSystemsResponseDTO = {
@@ -332,6 +335,12 @@ export type GovernedActionDTO = {
   resolution_note?: string | null;
   resolution_recorded_at?: string | null;
   resolution_recorded_by?: string | null;
+  current_stage?: string | null;
+  current_stage_label?: string | null;
+  next_required_step?: string | null;
+  primary_cta?: string | null;
+  primary_destination?: "risk_detail" | "action_center" | "outcomes" | null;
+  closure_state?: string | null;
 };
 
 export const GOVERNANCE_UPDATED_EVENT = "fleetrac-governance-updated";

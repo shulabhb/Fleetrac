@@ -75,15 +75,40 @@ def verify_action(
             incident_id=action.incident_id,
             outcome=decision.outcome,
             summary=recorded_summary,
+            close_record=(
+                decision.outcome == "improvement_observed"
+                and decision.computed_outcome == "improvement_observed"
+                and not decision.used_story_fallback
+            ),
         )
         db.flush()
 
     action.verification_status = decision.outcome.replace("_", " ").title()
-    if decision.outcome == "improvement_observed":
+    # Auto-close only when telemetry itself shows improvement. An operator label
+    # without a measured clear stays close-ready.
+    real_improvement = (
+        decision.outcome == "improvement_observed"
+        and decision.computed_outcome == "improvement_observed"
+        and not decision.used_story_fallback
+    )
+    if real_improvement:
         action.status = "Closed"
         if incident.lifecycle != "Closed":
             advance_lifecycle(db, incident, "Closed", note=f"Verification: {decision.outcome}")
-    elif decision.outcome in ("regression_detected", "rollback_candidate"):
+    elif decision.outcome == "improvement_observed":
+        if action.status in {"Closed", "Rejected", "Policy-blocked"}:
+            action.status = "Monitoring"
+        elif action.status not in {"Approved", "Monitoring", "Executed"}:
+            action.status = "Monitoring"
+        if incident.lifecycle == "Closed":
+            advance_lifecycle(db, incident, "Verification", note="Improvement recorded without a measured clear")
+        elif incident.lifecycle != "Verification":
+            advance_lifecycle(db, incident, "Verification", note=f"Verification: {decision.outcome}")
+    elif decision.outcome == "regression_detected":
+        action.status = "Monitoring"
+        if incident.lifecycle != "Verification":
+            advance_lifecycle(db, incident, "Verification", note=f"Verification: {decision.outcome}")
+    elif decision.outcome == "rollback_candidate":
         action.status = "Rollback candidate"
         if incident.lifecycle != "Verification":
             advance_lifecycle(db, incident, "Verification", note=f"Verification: {decision.outcome}")

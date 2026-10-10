@@ -1,3 +1,46 @@
+# Completion Report — Natural simulator reliability regressions
+
+Regression coverage for the seed 42 bugs: repeated phishing bursts keep one `inc-sec-001` cluster (occurrence past 2, last_seen moves, later traces stay in evidence); near-miss mutations stay on the phishing tool span and the support latency span and do not emit unsupported-claim signals; timezone-less timestamps parse as UTC so a just-recorded action is “just now”. The seed 42 smoke test resets, starts the continuous runner, checks healthy then near-miss, the first breach, the same-risk update, approval, and a later tool-scope sample that verifies `no_material_change` from telemetry. The risk stays open. Overview counts are 1 active risk, 0 awaiting decision, 1 verification result.
+
+The continuous loop now opens its ingest client through the same `http://test` in-process path the rest of the suite uses, so the smoke test still posts to `/api/v1/ingest/events`.
+
+Pytest: `tests/test_natural_simulator_regressions.py`, `tests/test_episode_scheduler.py`, `tests/test_phase_g_runtime_risks.py` — 18 passed. `node --test lib/format.test.ts` — 2 passed.
+
+---
+
+# Completion Report — Natural simulator end-to-end QA
+
+Seed 42 baseline run, after reset: healthy traces first, near-misses opened no incident, then one phishing burst (`inc-sec-001`) whose occurrence count moved 1 → 6 on the same risk. Risk Queue, readable evidence, and one Action Center action all matched. Approval stayed on Monitoring until verification. Verification used a later tool-scope sample (1 → 1, no story fallback) and recorded no material change. Overview counts followed that (1 active risk, 0 awaiting decision, 1 verification result). Settings has no story buttons. `POST /api/v1/simulator/pitch/treasury_unsupported_claim` returned 200.
+
+Fixes from that run: correlation cluster id lists are reassigned so later traces persist; reassessment uses the latest primary event; near-miss nudges only spans that exist, so phishing and support traces no longer look like unsupported-claim breaches; timezone-less API timestamps are read as UTC.
+
+---
+
+# Completion Report — Natural continuous simulator
+
+The continuous runner now owns episodes. Same seed replays the same agent picks. States are idle, active burst, recovery, cooldown. One episode at a time, about nine healthy or near-miss traces per breach trace. Default systems stay the five demo agents. Bursts use existing mutations (treasury claim, phishing tool scope, support child-span latency) plus retrieval-failure and unapproved-region fields the current rules already read. Near-miss traces stay under the rule and the supporting-signal band. After an approved action is still Monitoring, treasury traces recover under the claim threshold, phishing can stay in violation, and support stays on a near-miss. Settings no longer has story buttons. Pitch and scenario endpoints remain for tests. Ingest is still `post_ingest_sequence` to `POST /api/v1/ingest/events`.
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/simulator/start \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"continuous","rate_profile":"baseline","profile":"demo","seed":42}'
+curl http://127.0.0.1:8000/api/v1/simulator/status
+curl -X POST http://127.0.0.1:8000/api/v1/simulator/stop
+curl -X POST http://127.0.0.1:8000/api/v1/simulator/reset
+```
+
+Pytest: `tests/test_episode_scheduler.py`, `tests/test_simulator_runner.py`, `tests/test_simulator_healthy_variation.py` — 17 passed. Correlation, severity policy, aliases, and approval/verify were not changed. A full afternoon still depends on the process staying up; stress rate remains opt-in.
+
+---
+
+# Completion Report — Major workflow upgrade (slices A–F)
+
+Auto-close now happens only when post-action telemetry actually shows improvement. An operator label without a measured clear stays close-ready. Regression goes to Risk Detail; rollback stays on the Action Center panel. Actions carry a computed lifecycle read-model (`current_stage`, next step, closure). Evidence has a plain-language card with a short snippet and optional raw log. Settings can run the six demo story beats (including after-approval telemetry). Code Investigations can connect a public https repo per agent and show cited lines. Ollama drafts fall back to the template when the local model is down.
+
+Pytest (resolve, pitch, notifications, optional layers) passed. Helper tests 44 passed. `npm run build` passed.
+
+---
+
 # Completion Report — Action workflow closure polish
 
 Verification results now have a real operator resolution step. Action Center shows Rollback review / Follow-up review / Close-ready panels with recorded choices. Decisions persist on the existing governed action (`resolution_status`, `resolution_note`, recorded at/by) via `POST /governance/actions/{id}/resolve`. Fleetrac records the decision only — it does not execute rollback or change agent code. Next-step copy updates after recording, so Risk Detail / Action Center / Outcomes no longer loop on “Review rollback path”. Closed/resolved risks leave the active queue; Outcomes still shows evidence.

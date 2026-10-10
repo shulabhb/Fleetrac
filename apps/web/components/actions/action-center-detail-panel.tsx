@@ -82,6 +82,12 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
     actionStatus: action.status,
     verificationStatus: action.rawVerificationStatus || action.verificationStatus,
     resolutionStatus: action.resolutionStatus,
+    serverStage: action.serverStage,
+    serverLabel: action.serverLabel,
+    serverStep: action.serverStep,
+    serverCta: action.serverCta,
+    serverDestination: action.serverDestination,
+    serverClosure: action.serverClosure,
     severity: action.severity,
     ownerTeam: action.ownerTeam,
     outcome: action.rawVerificationStatus || action.verificationStatus,
@@ -226,7 +232,7 @@ export function ActionCenterDetailPanel({ action, onDecision, onToast }: Props) 
               {action.decidedAt ? (
                 <Row
                   label="Decided"
-                  value={formatRelativeTime(new Date(action.decidedAt))}
+                  value={formatRelativeTime(action.decidedAt)}
                 />
               ) : null}
             </dl>

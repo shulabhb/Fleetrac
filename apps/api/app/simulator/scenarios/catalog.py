@@ -109,6 +109,15 @@ PITCH_SEQUENCES = {
         ("healthy_baseline", {"count": 3}),
         ("provider_latency_regression", {"system_id": "sys-agt-cs-002"}),
     ],
+    "treasury_after_approval": [
+        ("remediation_applied", {"system_id": "sys-agt-treasury-001", "count": 4}),
+    ],
+    "security_after_approval": [
+        ("tool_scope_violation", {"system_id": "sys-agt-phish-008"}),
+    ],
+    "platform_after_approval": [
+        ("provider_latency_regression", {"system_id": "sys-agt-cs-002"}),
+    ],
     "treasury_full_governance": [
         ("healthy_baseline", {"count": 5}),
         ("unsupported_claim_spike", {"system_id": "sys-agt-treasury-001"}),

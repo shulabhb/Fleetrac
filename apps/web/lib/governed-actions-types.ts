@@ -69,6 +69,12 @@ export type GovernedAction = {
   resolutionStatus?: string | null;
   resolutionNote?: string | null;
   resolutionRecordedAt?: string | null;
+  serverStage?: string | null;
+  serverLabel?: string | null;
+  serverStep?: string | null;
+  serverCta?: string | null;
+  serverDestination?: "risk_detail" | "action_center" | "outcomes" | null;
+  serverClosure?: string | null;
 };
 
 export function governedSelectionId(actionId: string): string {

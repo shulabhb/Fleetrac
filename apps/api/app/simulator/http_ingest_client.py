@@ -10,6 +10,21 @@ from app.core.config import settings
 _test_asgi_app: Any | None = None
 
 
+def open_ingest_client(base_url: str | None = None, timeout: float | None = None) -> httpx.AsyncClient:
+    """HTTP client for ingest. Uses the in-process app when tests set base_url to http://test."""
+    url_base = (base_url or settings.simulator_api_base_url).rstrip("/")
+    timeout_seconds = timeout if timeout is not None else settings.simulator_http_timeout_seconds
+    if url_base == "http://test" and _test_asgi_app is not None:
+        from httpx import ASGITransport
+
+        return httpx.AsyncClient(
+            transport=ASGITransport(app=_test_asgi_app),
+            base_url=url_base,
+            timeout=timeout_seconds,
+        )
+    return httpx.AsyncClient(timeout=timeout_seconds)
+
+
 def set_test_asgi_app(app: Any | None) -> None:
     """Register FastAPI app for in-process ASGI loopback when base_url is http://test."""
     global _test_asgi_app

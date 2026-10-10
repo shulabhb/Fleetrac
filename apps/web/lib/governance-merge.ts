@@ -15,6 +15,7 @@ import type {
   TeamLibraryRow
 } from "@/lib/evidence-library-types";
 import { INCIDENT_LIFECYCLE_ORDER } from "@/lib/evidence-library-types";
+import { parseApiTimestamp } from "@/lib/format";
 import {
   diagnosisLabelFor,
   type OwnerReviewTableRow,
@@ -43,7 +44,7 @@ function capitalizeWord(value: string): string {
 }
 
 function formatSignalTimestamp(iso: string): string {
-  const then = new Date(iso).getTime();
+  const then = parseApiTimestamp(iso).getTime();
   if (Number.isNaN(then)) return iso;
   const diffMs = Date.now() - then;
   const mins = Math.floor(diffMs / 60000);
@@ -56,7 +57,7 @@ function formatSignalTimestamp(iso: string): string {
 }
 
 function formatAgeLabel(iso: string): string {
-  const then = new Date(iso).getTime();
+  const then = parseApiTimestamp(iso).getTime();
   if (Number.isNaN(then)) return "—";
   const days = Math.max(0, Math.floor((Date.now() - then) / 86400000));
   return days === 0 ? "Today" : `${days}d`;

@@ -10,6 +10,7 @@ export type IncidentLifecycleStage =
   | "APPROVED_READY_TO_VERIFY"
   | "VERIFICATION_IMPROVED"
   | "VERIFICATION_ROLLBACK"
+  | "VERIFICATION_REGRESSION"
   | "VERIFICATION_FOLLOW_UP"
   | "CLOSED";
 
@@ -86,6 +87,14 @@ export type NextStepInput = {
   evidenceCount?: number | null;
   outcome?: string | null;
   ctaSurface?: NextStepCtaSurface;
+  /** From the API lifecycle read-model. Local rules are the fallback. */
+  serverStage?: string | null;
+  serverLabel?: string | null;
+  serverStep?: string | null;
+  serverExplanation?: string | null;
+  serverCta?: string | null;
+  serverDestination?: "risk_detail" | "action_center" | "outcomes" | null;
+  serverClosure?: string | null;
 };
 
 function norm(value: string | null | undefined): string {
@@ -102,6 +111,7 @@ function parseVerificationResultKind(
   | "improved"
   | "follow_up"
   | "rollback"
+  | "regression"
   | "no_material_change"
   | "rejected"
   | "policy_blocked" {
@@ -112,7 +122,8 @@ function parseVerificationResultKind(
   if (s.includes("policy-blocked") || s.includes("policy blocked") || v.includes("policy-blocked")) {
     return "policy_blocked";
   }
-  if (v.includes("rollback") || s.includes("rollback") || v.includes("regression")) {
+  if (v.includes("regression")) return "regression";
+  if (v.includes("rollback") || s.includes("rollback")) {
     return "rollback";
   }
   if (v.includes("improvement") || (s.includes("closed") && v.includes("improv"))) {
@@ -209,6 +220,8 @@ function stageToCategory(stage: IncidentLifecycleStage): NextStepCategory {
       return "verify_impact";
     case "VERIFICATION_ROLLBACK":
       return "rollback_review";
+    case "VERIFICATION_REGRESSION":
+      return "critical_review";
     case "VERIFICATION_FOLLOW_UP":
       return "follow_up";
     case "VERIFICATION_IMPROVED":
@@ -262,6 +275,46 @@ export function resolveIncidentLifecycle(input: NextStepInput): ResolvedIncident
     ...partial,
     category: stageToCategory(partial.currentStage)
   });
+
+  if (input.serverStage && input.serverCta && input.serverDestination) {
+    const stage = input.serverStage as IncidentLifecycleStage;
+    const tab =
+      stage === "APPROVED_READY_TO_VERIFY"
+        ? "ready"
+        : stage === "DECISION_REQUIRED"
+          ? "pending"
+          : "closed";
+    const primaryDestination =
+      input.serverDestination === "outcomes"
+        ? outcomesDest(incidentId, ownerTeam)
+        : input.serverDestination === "risk_detail"
+          ? riskDetailDest(incidentId)
+          : actionCenterDest(tab, actionId, incidentId);
+    const rawClosure = input.serverClosure || "open";
+    const closure: ClosureState =
+      rawClosure === "closed" ||
+      rawClosure === "close_ready" ||
+      rawClosure === "open_rollback" ||
+      rawClosure === "open_follow_up"
+        ? rawClosure
+        : "open";
+    return pack({
+      currentStage: stage,
+      currentStageLabel: input.serverLabel || stage,
+      nextRequiredStep: input.serverStep || input.serverCta,
+      nextStepExplanation: input.serverExplanation || input.serverStep || input.serverCta,
+      primaryCtaLabel:
+        outcomes && input.serverCta === "Review rollback path"
+          ? "Open rollback review"
+          : outcomes && input.serverCta === "Review follow-up"
+            ? "Open follow-up review"
+            : input.serverCta,
+      primaryDestination,
+      canClose: closure === "closed" || closure === "close_ready",
+      closureState: closure,
+      urgency: critical ? "high" : "medium"
+    });
+  }
 
   if (
     !incidentId &&
@@ -371,6 +424,23 @@ export function resolveIncidentLifecycle(input: NextStepInput): ResolvedIncident
         urgency: "low"
       });
     }
+  }
+
+  if (kind === "regression") {
+    return pack({
+      currentStage: "VERIFICATION_REGRESSION",
+      currentStageLabel: "Critical review required",
+      nextRequiredStep: "Review risk",
+      nextStepExplanation:
+        "Verification recorded a regression. Review the risk evidence before another governed change.",
+      primaryCtaLabel: "Review risk",
+      primaryDestination: riskDetailDest(incidentId),
+      secondaryCtaLabel: "View outcome evidence",
+      secondaryDestination: outcomesDest(incidentId, ownerTeam),
+      canClose: false,
+      closureState: "open",
+      urgency: critical ? "critical" : "high"
+    });
   }
 
   if (kind === "rollback" || s.includes("rollback") || norm(verification).includes("rollback")) {

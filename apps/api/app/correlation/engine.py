@@ -140,20 +140,26 @@ def find_active_cluster(
     return None
 
 
-def _append_unique(target: list[str], value: str | None) -> None:
-    if value and value not in target:
-        target.append(value)
+def _assign_unique(current: list[str] | None, value: str | None) -> list[str]:
+    """Return a new list so JSON columns persist. In-place appends are not saved."""
+    items = list(current or [])
+    if value and value not in items:
+        items.append(value)
+    return items
 
 
 def _update_cluster(cluster: SignalCluster, candidate: CorrelationCandidate) -> None:
     cluster.last_seen_at = candidate.timestamp
     cluster.window_end = candidate.timestamp
-    _append_unique(cluster.signal_types, candidate.signal_type)
-    _append_unique(cluster.contributing_event_ids, candidate.event_id)
-    _append_unique(cluster.contributing_trace_ids, candidate.trace_id)
-    _append_unique(cluster.contributing_span_ids, candidate.span_id)
+    cluster.signal_types = _assign_unique(cluster.signal_types, candidate.signal_type)
+    cluster.contributing_event_ids = _assign_unique(cluster.contributing_event_ids, candidate.event_id)
+    cluster.contributing_trace_ids = _assign_unique(cluster.contributing_trace_ids, candidate.trace_id)
+    cluster.contributing_span_ids = _assign_unique(cluster.contributing_span_ids, candidate.span_id)
+    controls = list(cluster.control_ids or [])
     for cid in candidate.control_ids:
-        _append_unique(cluster.control_ids, cid)
+        if cid and cid not in controls:
+            controls.append(cid)
+    cluster.control_ids = controls
     if candidate.business_outcome:
         cluster.current_business_outcome = candidate.business_outcome
     cluster.occurrence_count = len(cluster.contributing_event_ids or [])
@@ -555,8 +561,8 @@ def reassess_cluster_for_incident(
     incident.occurrence_count = cluster.occurrence_count
     incident.trace_count = cluster.trace_count
 
-    # Prefer primary candidate for breach snapshot backfill (Phase G)
-    primary = next((c for c in candidates if c.evidence_role == "primary"), None) or candidates[-1]
+    # Latest primary in this cluster, so a later burst trace moves last_seen and the observed value.
+    primary = next((c for c in reversed(candidates) if c.evidence_role == "primary"), None) or candidates[-1]
     apply_breach_snapshot(
         incident,
         match=None,

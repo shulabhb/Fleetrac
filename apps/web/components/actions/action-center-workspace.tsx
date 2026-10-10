@@ -247,6 +247,12 @@ export function ActionCenterWorkspace({
         verificationStatus:
           selectedAction.rawVerificationStatus || selectedAction.verificationStatus,
         resolutionStatus: selectedAction.resolutionStatus,
+        serverStage: selectedAction.serverStage,
+        serverLabel: selectedAction.serverLabel,
+        serverStep: selectedAction.serverStep,
+        serverCta: selectedAction.serverCta,
+        serverDestination: selectedAction.serverDestination,
+        serverClosure: selectedAction.serverClosure,
         severity: selectedAction.severity,
         ownerTeam: selectedAction.ownerTeam,
         outcome: selectedAction.rawVerificationStatus || selectedAction.verificationStatus,
@@ -424,6 +430,12 @@ function ActionListCard({
     actionStatus: action.status,
     verificationStatus: action.rawVerificationStatus || action.verificationStatus,
     resolutionStatus: action.resolutionStatus,
+    serverStage: action.serverStage,
+    serverLabel: action.serverLabel,
+    serverStep: action.serverStep,
+    serverCta: action.serverCta,
+    serverDestination: action.serverDestination,
+    serverClosure: action.serverClosure,
     severity: action.severity,
     ownerTeam: action.ownerTeam,
     outcome: action.rawVerificationStatus || action.verificationStatus,
@@ -490,9 +502,7 @@ function ActionListCard({
         <div className="shrink-0 text-right">
           <p className="text-[10px] uppercase tracking-wide text-slate-400">Updated</p>
           <p className="text-[11px] tabular-nums text-slate-600">
-            {action.decidedAt
-              ? formatRelativeTime(new Date(action.decidedAt))
-              : action.createdAtLabel}
+            {action.decidedAt ? formatRelativeTime(action.decidedAt) : action.createdAtLabel}
           </p>
           <span className="mt-2 inline-flex items-center gap-0.5 text-[11px] font-semibold text-slate-700">
             {step.primaryCtaLabel}

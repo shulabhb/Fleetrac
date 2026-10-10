@@ -160,6 +160,7 @@ def append_verification_evidence(
     incident_id: str,
     outcome: str,
     summary: str,
+    close_record: bool = False,
 ) -> None:
     record = db.query(EvidenceRecord).filter(EvidenceRecord.incident_id == incident_id).one_or_none()
     if record is None:
@@ -173,4 +174,5 @@ def append_verification_evidence(
             summary=summary,
         )
     )
-    record.status = "Closed" if outcome == "improvement_observed" else record.status
+    if close_record:
+        record.status = "Closed"

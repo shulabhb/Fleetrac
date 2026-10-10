@@ -26,6 +26,18 @@ def apply_scenario_mutation(
         _provider_latency_regression(trace, mode)
     elif scenario_id == "excessive_tool_retries":
         _excessive_tool_retries(trace, mode)
+    elif scenario_id == "retrieval_failure":
+        _retrieval_failure(trace)
+    elif scenario_id == "unapproved_region":
+        _unapproved_region(trace)
+    elif scenario_id == "near_miss":
+        _near_miss(trace)
+        if trace.spans:
+            from app.simulator.trace_builder import finalize_root_span_duration
+
+            finalize_root_span_duration(trace.spans)
+            _append_scenario_logs(trace, scenario_id)
+        return
     elif scenario_id == "soft_degradation":
         _soft_degradation(trace)
         # Soft degradation stays under control thresholds — no incident spam.
@@ -45,9 +57,9 @@ def apply_scenario_mutation(
 
 def _soft_degradation(trace: SimulatedTrace) -> None:
     """Nudge metrics toward thresholds without crossing them (degradation phase)."""
-    claim_span = _find_span(trace, "evaluate.unsupported_claims")
-    ground_span = _find_span(trace, "evaluate.grounding")
-    model_span = _find_span(trace, "model.reasoning", "model_call", "model.generate", "model.summarize")
+    claim_span = _span_named(trace, "evaluate.unsupported_claims")
+    ground_span = _span_named(trace, "evaluate.grounding")
+    model_span = _span_named(trace, "model.reasoning", "model_call", "model.generate", "model.summarize")
     if claim_span:
         # Threshold for unsupported_claim is > 0.03 — stay under.
         claim_span.evaluation["unsupported_claim_rate"] = 0.022
@@ -137,6 +149,7 @@ def _tool_scope_violation(trace: SimulatedTrace, impact_mode: str | None) -> Non
         tool_span.evaluation["tool_scope_violation"] = 1.0
         tool_span.policy_result = "deny"
         tool_span.attributes["gen_ai.tool.name"] = "refund_api_execute"
+        tool_span.attributes["gen_ai.tool.status"] = "error"
         tool_span.attributes["fleetrac.tool.approved"] = False
         tool_span.events.append(
             span_event("fleetrac.tool.call.attempted", tool_span.start_time_unix_nano)
@@ -195,6 +208,44 @@ def _provider_latency_regression(trace: SimulatedTrace, impact_mode: str | None)
         _set_business_outcome(trace, "routing_unavailable")
     else:
         _set_business_outcome(trace, "routed")
+
+
+def _retrieval_failure(trace: SimulatedTrace) -> None:
+    span = _find_span(trace, "retrieve.context", "vector.search", "retrieval")
+    if span:
+        span.evaluation["retrieval_failure_rate"] = 0.22
+        span.attributes["gen_ai.retrieval.hit_count"] = 0
+        span.attributes["gen_ai.operation.name"] = "retrieval"
+    _set_business_outcome(trace, "draft_completed")
+
+
+def _unapproved_region(trace: SimulatedTrace) -> None:
+    span = _find_span(trace, "policy.evaluate", "policy.lookup", "routing_policy.evaluate", "risk.evaluate")
+    if span:
+        span.evaluation["unapproved_region"] = 1.0
+        span.policy_result = "deny"
+        span.attributes["gen_ai.operation.name"] = "policy_eval"
+    _set_business_outcome(trace, "held_for_review")
+
+
+def _span_named(trace: SimulatedTrace, *names: str):
+    for sp in trace.spans:
+        if sp.name in names or sp.operation in names:
+            return sp
+    return None
+
+
+def _near_miss(trace: SimulatedTrace) -> None:
+    """Drift toward a threshold without crossing the rule or the supporting-signal band."""
+    _soft_degradation(trace)
+    claim = _span_named(trace, "evaluate.unsupported_claims")
+    if claim:
+        # Supporting-signal inference treats > 0.02 as elevated. Stay under that.
+        claim.evaluation["unsupported_claim_rate"] = 0.018
+    retrieval = _span_named(trace, "retrieve.context", "vector.search")
+    if retrieval:
+        retrieval.evaluation["retrieval_failure_rate"] = 0.05
+        retrieval.attributes["gen_ai.retrieval.hit_count"] = 2
 
 
 def _excessive_tool_retries(trace: SimulatedTrace, impact_mode: str | None) -> None:

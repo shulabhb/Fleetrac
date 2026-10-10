@@ -16,6 +16,7 @@ export type VerificationResultKind =
   | "improved"
   | "follow_up"
   | "rollback"
+  | "regression"
   | "no_material_change"
   | "rejected"
   | "policy_blocked";
@@ -62,11 +63,8 @@ export function parseVerificationResultKind(
   if (s.includes("policy-blocked") || s.includes("policy blocked")) {
     return "policy_blocked";
   }
-  if (
-    v.includes("rollback") ||
-    s.includes("rollback") ||
-    v.includes("regression")
-  ) {
+  if (v.includes("regression")) return "regression";
+  if (v.includes("rollback") || s.includes("rollback")) {
     return "rollback";
   }
   if (v.includes("improvement") || (s.includes("closed") && v.includes("improv"))) {
@@ -128,6 +126,7 @@ export function resolveActionVerificationUx(action: ActionLike): ActionVerificat
     kind === "improved" ||
     kind === "follow_up" ||
     kind === "rollback" ||
+    kind === "regression" ||
     kind === "no_material_change" ||
     kind === "rejected" ||
     kind === "policy_blocked";
@@ -181,6 +180,20 @@ export function resolveActionVerificationUx(action: ActionLike): ActionVerificat
           : "Verification: no material change",
       tone: "amber",
       resultKind: kind,
+      canRecordVerification: false,
+      awaitingDecision: false
+    };
+  }
+
+  if (kind === "regression") {
+    return {
+      lane: "verification_result",
+      decisionLabel: "Approved",
+      verificationLabel: "Regression detected",
+      nextStepCta: "Review risk",
+      statusLine: "Verification: regression — critical review",
+      tone: "rose",
+      resultKind: "regression",
       canRecordVerification: false,
       awaitingDecision: false
     };

@@ -31,8 +31,8 @@ def emit_bundle(
 
     if mode == "baseline" or mode == "recovery" or mode == "post_action_verification":
         scenario_id = None
-    elif mode == "degradation":
-        scenario_id = "soft_degradation"
+    elif mode in ("degradation", "near_miss"):
+        scenario_id = "near_miss" if mode == "near_miss" else "soft_degradation"
     elif mode in ("incident_window", "regression"):
         scenario_id = mutation_id or "unsupported_claim_spike"
         if resolved_impact is None:

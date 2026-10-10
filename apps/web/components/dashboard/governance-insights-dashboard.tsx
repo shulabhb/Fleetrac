@@ -219,6 +219,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
         actionStatus: action?.status,
         verificationStatus: action?.verification_status,
         resolutionStatus: action?.resolution_status,
+        serverStage: action?.current_stage,
+        serverLabel: action?.current_stage_label,
+        serverStep: action?.next_required_step,
+        serverCta: action?.primary_cta,
+        serverDestination: action?.primary_destination,
+        serverClosure: action?.closure_state,
         actionId: action?.id,
         incidentId,
         severity,
@@ -530,6 +536,12 @@ export function GovernanceInsightsDashboard({ scope }: { scope: AiScopeId }) {
                       actionStatus: action?.status,
                       verificationStatus: action?.verification_status,
                       resolutionStatus: action?.resolution_status,
+                      serverStage: action?.current_stage,
+                      serverLabel: action?.current_stage_label,
+                      serverStep: action?.next_required_step,
+                      serverCta: action?.primary_cta,
+                      serverDestination: action?.primary_destination,
+                      serverClosure: action?.closure_state,
                       ownerTeam: item.owner_team
                     });
                     goToDestination(step.primaryDestination, id, item.incident_id, step.category);

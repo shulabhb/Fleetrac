@@ -1,5 +1,5 @@
 import type { GovernedActionDTO, EvidenceRecordDTO } from "@/lib/governance-api";
-import { formatRelativeTime } from "@/lib/format";
+import { formatRelativeTime, parseApiTimestamp } from "@/lib/format";
 import type {
   GovernedAction,
   GovernedActionSource,
@@ -59,7 +59,7 @@ export function mapApiActionToGoverned(
   source: GovernedActionSource = "Incident Queue"
 ): GovernedAction {
   const incidentId = dto.alias_id ?? dto.incident_id;
-  const createdMs = dto.created_at ? Date.parse(dto.created_at) : Date.now();
+  const createdMs = dto.created_at ? parseApiTimestamp(dto.created_at).getTime() : Date.now();
   const analysis =
     evidence?.fleetrac_analysis?.summary ??
     dto.recommended_action ??
@@ -83,15 +83,19 @@ export function mapApiActionToGoverned(
     verificationStatus: mapVerificationStatus(dto.verification_status),
     rawVerificationStatus: dto.verification_status || "Not started",
     riskLevel: severityToRisk(dto.severity),
-    createdAtLabel: dto.created_at
-      ? formatRelativeTime(new Date(dto.created_at))
-      : "Just now",
+    createdAtLabel: dto.created_at ? formatRelativeTime(dto.created_at) : "Just now",
     createdAtMs: Number.isFinite(createdMs) ? createdMs : Date.now(),
     governanceSource: "api",
     expectedMetric: dto.expected_metric ?? null,
     resolutionStatus: dto.resolution_status ?? null,
     resolutionNote: dto.resolution_note ?? null,
-    resolutionRecordedAt: dto.resolution_recorded_at ?? null
+    resolutionRecordedAt: dto.resolution_recorded_at ?? null,
+    serverStage: dto.current_stage ?? null,
+    serverLabel: dto.current_stage_label ?? null,
+    serverStep: dto.next_required_step ?? null,
+    serverCta: dto.primary_cta ?? null,
+    serverDestination: dto.primary_destination ?? null,
+    serverClosure: dto.closure_state ?? null
   };
 }
 

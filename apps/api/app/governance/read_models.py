@@ -491,6 +491,9 @@ def governance_systems(db: Session) -> dict:
                 "archetype": meta.get("archetype", "decision"),
                 "open_incidents": open_count,
                 "last_signal_at": last.timestamp.isoformat() if last else None,
+                "repo_url": getattr(system, "repo_url", None),
+                "repo_ref": getattr(system, "repo_ref", None),
+                "code_status": getattr(system, "code_status", None) or "none",
             }
         )
     return {"items": items, "total": len(items)}

@@ -94,6 +94,39 @@ def test_resolve_follow_up_and_resolved(client):
     assert evidence.json().get("items")
 
 
+def test_unmeasured_improvement_stays_close_ready(client):
+    reset_simulator(client)
+    run_scenario_via_api(client, "unsupported_claim_spike", SYSTEM_ID)
+    action_id = _create_and_approve(client)
+    verify = client.post(
+        f"/api/v1/governance/actions/{action_id}/verify",
+        json={"outcome": "improvement_observed", "summary": "Operator labeled improvement."},
+    )
+    assert verify.status_code == 200
+    row = _action(client, action_id)
+    evidence = client.get(f"/api/v1/governance/evidence/{INCIDENT_ALIAS_ID}").json()
+    if row.get("closure_state") == "closed":
+        assert evidence["lifecycle"] == "Closed"
+    else:
+        assert evidence["lifecycle"] != "Closed"
+        assert row["current_stage"] == "VERIFICATION_IMPROVED"
+        assert row["closure_state"] == "close_ready"
+
+
+def test_regression_next_step_is_risk_detail(client):
+    reset_simulator(client)
+    run_scenario_via_api(client, "unsupported_claim_spike", SYSTEM_ID)
+    action_id = _create_and_approve(client)
+    client.post(
+        f"/api/v1/governance/actions/{action_id}/verify",
+        json={"outcome": "regression_detected", "summary": "Signal worsened."},
+    )
+    row = _action(client, action_id)
+    assert row["status"] != "Rollback candidate"
+    assert row["primary_destination"] == "risk_detail"
+    assert "regression" in (row["verification_status"] or "").lower()
+
+
 def test_resolve_rejects_unknown_status(client):
     reset_simulator(client)
     run_scenario_via_api(client, "unsupported_claim_spike", SYSTEM_ID)

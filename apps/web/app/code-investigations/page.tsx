@@ -1,3 +1,7 @@
-export default function CodeInvestigationsPage() {
-  return <div className="min-h-[40vh]" />;
+"use client";
+
+import { CodeInvestigationsPage } from "@/components/code/code-investigations-page";
+
+export default function Page() {
+  return <CodeInvestigationsPage />;
 }

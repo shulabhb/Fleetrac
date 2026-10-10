@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.correlation.engine import process_correlation_event
-from app.db.models import EvidenceItem, EvidenceRecord, Incident
+from app.db.models import EvidenceItem, EvidenceRecord, Incident, SignalCluster
 from app.detection.engine import DetectionMatch
 from app.governance.read_models import evidence_for_incident, owner_queue
 from app.governance.risk_snapshot import evidence_explanation
@@ -135,11 +135,16 @@ def test_second_breach_updates_same_risk(db_session):
     third = _event(span_id="span-c", trace_id="trace-c", event_id="evt-c")
     process_correlation_event(db_session, third, match=_match(metric_value=0.05))
     db_session.commit()
+    db_session.expire_all()
     inc = db_session.query(Incident).one()
     assert inc.opened_at == opened
     assert inc.latest_observed_value == 0.05
     # worst stays at peak
     assert float(inc.worst_observed_value or 0) >= 0.055
+    assert inc.occurrence_count == 3
+    cluster = db_session.query(SignalCluster).one()
+    assert len(cluster.contributing_event_ids) == 3
+    assert len(cluster.contributing_trace_ids) == 3
 
 
 def test_owner_queue_exposes_runtime_risk_fields(db_session):

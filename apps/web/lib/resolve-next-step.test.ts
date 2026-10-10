@@ -130,6 +130,18 @@ describe("resolveIncidentLifecycle", () => {
     assert.notEqual(life.nextRequiredStep, "Review follow-up");
   });
 
+  it("regression goes to Risk Detail, not rollback review", () => {
+    const life = resolveIncidentLifecycle({
+      incidentId: "inc-any-016",
+      actionId: "act_016",
+      actionStatus: "Monitoring",
+      verificationStatus: "Regression Detected"
+    });
+    assert.equal(life.currentStage, "VERIFICATION_REGRESSION");
+    assert.equal(life.primaryCtaLabel, "Review risk");
+    assert.equal(life.primaryDestination.surface, "risk_detail");
+  });
+
   it("Outcomes rollback CTA opens review, not risk drawer", () => {
     const life = resolveIncidentLifecycle({
       incidentId: "inc-sec-001",

@@ -1,9 +1,19 @@
 /** Fixed locale so server-rendered strings match the browser during hydration. */
 const DISPLAY_LOCALE = "en-US";
 
+/** API datetimes are UTC. Values without a zone were being read as local time. */
+export function parseApiTimestamp(value: string | number | Date): Date {
+  if (typeof value === "number" || value instanceof Date) return new Date(value);
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed)) {
+    return new Date(`${trimmed.replace(" ", "T")}Z`);
+  }
+  return new Date(trimmed);
+}
+
 export function formatRelativeTime(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
-  const date = new Date(value);
+  const date = parseApiTimestamp(value);
   if (Number.isNaN(date.getTime())) return "—";
   const diffMs = Date.now() - date.getTime();
   const abs = Math.abs(diffMs);
@@ -19,7 +29,7 @@ export function formatRelativeTime(value: string | number | Date | null | undefi
 
 export function formatShortDateTime(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
-  const date = new Date(value);
+  const date = parseApiTimestamp(value);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleString(DISPLAY_LOCALE, {
     month: "short",

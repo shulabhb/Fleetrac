@@ -38,6 +38,7 @@ import {
 import { routeToEvidenceLibraryIncidentRecord, routes } from "@/lib/routes";
 import { resolveIncidentLifecycle } from "@/lib/resolve-next-step";
 import { NextRequiredStepCard } from "@/components/governance/next-required-step";
+import { PlainLanguageEvidence } from "@/components/governance/plain-language-evidence";
 
 const TABS = [
   { id: "summary", label: "Summary" },
@@ -309,6 +310,12 @@ export function RiskTriageDrawer({
     actionStatus: action?.status,
     verificationStatus: action?.verification_status,
     resolutionStatus: action?.resolution_status,
+    serverStage: action?.current_stage,
+    serverLabel: action?.current_stage_label,
+    serverStep: action?.next_required_step,
+    serverCta: action?.primary_cta,
+    serverDestination: action?.primary_destination,
+    serverClosure: action?.closure_state,
     ownerTeam: row.ownerTeam ?? row.responderTeam,
     evidenceCount: evidence?.items?.length ?? row.evidenceItemsCount,
     ctaSurface: "risk_detail"
@@ -678,6 +685,25 @@ export function RiskTriageDrawer({
               aria-labelledby="risk-tab-evidence"
               className="space-y-3"
             >
+              <PlainLanguageEvidence
+                noticed={
+                  analysis?.summary ||
+                  evidence?.items?.[0]?.summary ||
+                  row.evidenceSummary ||
+                  "A control threshold was crossed on this agent."
+                }
+                whyItMatters={`${row.severityLabel || "This"} risk stays with ${row.ownerTeam || "the owner"} until someone records a decision.`}
+                compared={row.evidenceSummary || null}
+                snippet={(evidence?.items ?? [])
+                  .slice(0, 6)
+                  .map((item) => item.summary)}
+                recommendation={recommended}
+                raw={
+                  evidence?.items?.[0]
+                    ? JSON.stringify(evidence.items[0], null, 2)
+                    : null
+                }
+              />
               <p className="text-[12px] leading-snug text-slate-700">
                 {evidenceSupportSentence(evidenceCount)}
               </p>

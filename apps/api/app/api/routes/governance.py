@@ -216,6 +216,13 @@ def get_governed_actions(
     db.commit()
     rows = list_actions(db, status=status, include_history=include_history)
     db.commit()
+    from app.governance.lifecycle import lifecycle_view
+
+    incident_ids = {r.incident_id for r in rows}
+    incidents = {
+        inc.id: inc
+        for inc in db.query(Incident).filter(Incident.id.in_(incident_ids)).all()
+    } if incident_ids else {}
     return {
         "items": [
             {
@@ -246,6 +253,7 @@ def get_governed_actions(
                 if getattr(r, "resolution_recorded_at", None)
                 else None,
                 "resolution_recorded_by": getattr(r, "resolution_recorded_by", None),
+                **lifecycle_view(incidents.get(r.incident_id), r),
             }
             for r in rows
         ]
@@ -345,6 +353,76 @@ def post_resolve_action(
         else None,
         "incident_lifecycle": inc.lifecycle if inc else None,
     }
+
+
+class RepoConnectRequest(BaseModel):
+    repo_url: str
+    repo_ref: str = "main"
+
+
+@router.post("/systems/{system_id}/repository")
+def post_connect_repository(
+    system_id: str,
+    body: RepoConnectRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.db.models import System
+    from app.governance.repos import connect_public_repo
+
+    system = db.get(System, system_id)
+    if system is None:
+        raise HTTPException(status_code=404, detail="System not found")
+    try:
+        connect_public_repo(db, system, body.repo_url, body.repo_ref)
+    except ValueError as exc:
+        db.commit()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return {
+        "system_id": system.id,
+        "repo_url": system.repo_url,
+        "repo_ref": system.repo_ref,
+        "code_status": system.code_status,
+    }
+
+
+@router.get("/systems/{system_id}/code-search")
+def get_code_search(
+    system_id: str,
+    terms: str = "",
+    db: Session = Depends(get_db),
+) -> dict:
+    from app.db.models import System
+    from app.governance.repos import search_citations
+
+    system = db.get(System, system_id)
+    if system is None or (system.code_status or "") != "connected":
+        raise HTTPException(status_code=404, detail="No connected repository")
+    hits = search_citations(system_id, [part.strip() for part in terms.split(",")])
+    return {"system_id": system_id, "hits": hits}
+
+
+@router.post("/incidents/{incident_id}/analysis-draft")
+def post_analysis_draft(incident_id: str, db: Session = Depends(get_db)) -> dict:
+    from app.db.models import FleetracAnalysisRow
+    from app.intelligence.drafts import draft_explanation
+
+    row = (
+        db.query(FleetracAnalysisRow)
+        .filter(FleetracAnalysisRow.incident_id == incident_id)
+        .one_or_none()
+    )
+    template = (row.template if row else {}) or {}
+    facts = str(template.get("summary") or template.get("narrative") or "No packaged analysis yet.")
+    draft = draft_explanation(facts)
+    if row is not None and draft["source"] == "model":
+        template = dict(template)
+        template["draft_summary"] = draft["summary"]
+        template["analysis_source"] = "model"
+        template["model_id"] = draft["model_id"]
+        row.template = template
+        db.commit()
+    return {"incident_id": incident_id, **draft, "template_summary": facts}
 
 
 @router.get("/incidents/{incident_id}/assessment")

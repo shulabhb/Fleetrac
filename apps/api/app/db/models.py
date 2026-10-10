@@ -23,6 +23,9 @@ class System(Base):
     default_reviewer: Mapped[str] = mapped_column(String(128), nullable=False)
     baseline_metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     applicable_control_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    repo_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    code_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class DetectionRule(Base):
